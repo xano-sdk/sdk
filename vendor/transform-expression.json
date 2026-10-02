@@ -1,0 +1,314 @@
+{
+  "note": "Live-probed contract for `fl.transform`'s expression argument, plus the evidence behind it. `transform` takes Xano Expression Engine SOURCE, not a JavaScript body: the piped operand arrives in the POSITIONAL slot `$0` (equivalently `$$` at the top level), and `$this` is NOT bound — it resolves to null. The engine's own catalog description says otherwise and is wrong; scripts/codegen-filters.ts overrides it. Regenerate with `tsx scripts/probe-transform-expression.ts` against a sandbox — the run fails if the recorded contract and a real engine disagree.",
+  "probedAt": "2026-08-12",
+  "contract": {
+    "bound": [
+      {
+        "name": "$0",
+        "why": "the piped operand, in its positional slot"
+      },
+      {
+        "name": "$$",
+        "why": "top of the positional stack — the operand at this level"
+      },
+      {
+        "name": "$var",
+        "why": "the enclosing stack variables, by name ($var.subtotal)"
+      },
+      {
+        "name": "$input",
+        "why": "the enclosing function's inputs"
+      },
+      {
+        "name": "$env",
+        "why": "workspace environment + request settings"
+      },
+      {
+        "name": "$auth",
+        "why": "the authenticated caller"
+      }
+    ],
+    "absent": [
+      {
+        "name": "$this",
+        "why": "NOT bound — the engine catalog's description is wrong"
+      },
+      {
+        "name": "$parent",
+        "why": "NOT bound — an iterating-pipe binding, not a transform one"
+      },
+      {
+        "name": "$index",
+        "why": "NOT bound — an iterating-pipe binding"
+      },
+      {
+        "name": "$result",
+        "why": "NOT bound — a reduce binding"
+      }
+    ]
+  },
+  "agreed": true,
+  "mismatches": [],
+  "evidence": [
+    {
+      "id": "binding.$0",
+      "asks": "Does $0 resolve in a transform expression? (the piped operand, in its positional slot)",
+      "verdict": "ok",
+      "value": "5",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "binding.$$",
+      "asks": "Does $$ resolve in a transform expression? (top of the positional stack — the operand at this level)",
+      "verdict": "ok",
+      "value": "5",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "binding.$var",
+      "asks": "Does $var resolve in a transform expression? (the enclosing stack variables, by name ($var.subtotal))",
+      "verdict": "ok",
+      "value": "7",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "binding.$input",
+      "asks": "Does $input resolve in a transform expression? (the enclosing function's inputs)",
+      "verdict": "ok",
+      "value": "3",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "binding.$env",
+      "asks": "Does $env resolve in a transform expression? (workspace environment + request settings)",
+      "verdict": "ok",
+      "value": "{\"$datasource\":\"live\",\"$http_headers\":{\"Host\":\"xare-rvr8-mnnt.dev.xano.io\",\"X-Real-Ip\":\"10.0.47.21\",\"X-Forwarded-For\":\"35.236.31.242, 10.0.47.21\",\"X-Forwarded-Proto\":\"https\",\"X-Forwarded-Host\":\"xare-rvr8-mnnt.dev.xano.io\",\"Content-Length\":\"29\",\"X-Request-Id\":\"3b8b37cbaa06786c4f447f3d9b731eea\",\"X-Forwarded-Port\":\"443\",\"X-Forwarded-Scheme\":\"https\",\"X-Scheme\":\"https\",\"Authorization\":\"Bearer eyJhbGciO",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "binding.$auth",
+      "asks": "Does $auth resolve in a transform expression? (the authenticated caller)",
+      "verdict": "ok",
+      "value": "{\"dbo\":\"\",\"id\":0}",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "binding.$this",
+      "asks": "Does $this resolve in a transform expression? (NOT bound — the engine catalog's description is wrong)",
+      "verdict": "ok",
+      "value": "null",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "binding.$parent",
+      "asks": "Does $parent resolve in a transform expression? (NOT bound — an iterating-pipe binding, not a transform one)",
+      "verdict": "ok",
+      "value": "null",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "binding.$index",
+      "asks": "Does $index resolve in a transform expression? (NOT bound — an iterating-pipe binding)",
+      "verdict": "ok",
+      "value": "null",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "binding.$result",
+      "asks": "Does $result resolve in a transform expression? (NOT bound — a reduce binding)",
+      "verdict": "ok",
+      "value": "null",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "grammar.arith",
+      "asks": "Arithmetic over the operand.",
+      "verdict": "ok",
+      "value": "10"
+    },
+    {
+      "id": "grammar.arith.dollardollar",
+      "asks": "The same through $$.",
+      "verdict": "ok",
+      "value": "10"
+    },
+    {
+      "id": "grammar.literal",
+      "asks": "An expression with no operand at all.",
+      "verdict": "ok",
+      "value": "3"
+    },
+    {
+      "id": "grammar.ternary",
+      "asks": "A conditional.",
+      "verdict": "ok",
+      "value": "big"
+    },
+    {
+      "id": "grammar.concat.tilde",
+      "asks": "Concatenation with ~ (the expression-engine spelling).",
+      "verdict": "ok",
+      "value": "n=5"
+    },
+    {
+      "id": "grammar.concat.dotdot",
+      "asks": "Concatenation with .. — is it the same operator?",
+      "verdict": "exception",
+      "exception": "Not numeric."
+    },
+    {
+      "id": "grammar.concat.plus",
+      "asks": "Concatenation with + on a number.",
+      "verdict": "exception",
+      "exception": "Not numeric."
+    },
+    {
+      "id": "grammar.pipe",
+      "asks": "A FILTER inside the expression.",
+      "verdict": "ok",
+      "value": "8"
+    },
+    {
+      "id": "grammar.obj_literal",
+      "asks": "Does an object literal build an object?",
+      "verdict": "ok",
+      "value": "{\"raw\":5,\"doubled\":10}"
+    },
+    {
+      "id": "grammar.arr_literal",
+      "asks": "Does an array literal build an array?",
+      "verdict": "ok",
+      "value": "[5,10]"
+    },
+    {
+      "id": "grammar.bare_var",
+      "asks": "Is a stack variable ALSO a bare $name? (it is — so a var named `this` would shadow)",
+      "verdict": "ok",
+      "value": "7"
+    },
+    {
+      "id": "grammar.obj_pipe.bare",
+      "asks": "Object literal, UNPARENTHESIZED pipe with an argument.",
+      "verdict": "ok",
+      "value": "{\"a\":\"5\"}"
+    },
+    {
+      "id": "grammar.obj_pipe.paren",
+      "asks": "The same, parenthesized.",
+      "verdict": "ok",
+      "value": "{\"a\":\"5\",\"b\":1}"
+    },
+    {
+      "id": "grammar.obj_pipe.noarg",
+      "asks": "A pipe with NO argument, unparenthesized.",
+      "verdict": "ok",
+      "value": "{\"a\":\"5\",\"b\":1}"
+    },
+    {
+      "id": "grammar.empty",
+      "asks": "What does an empty expression produce?",
+      "verdict": "ok",
+      "value": "null"
+    },
+    {
+      "id": "grammar.null_coalesce",
+      "asks": "How does an UNBOUND name propagate?",
+      "verdict": "ok",
+      "value": "was-null"
+    },
+    {
+      "id": "js.return_this",
+      "asks": "JavaScript spelling `return $this * 2` — does it throw, or return a wrong value?",
+      "verdict": "exception",
+      "exception": "Not numeric."
+    },
+    {
+      "id": "js.return_dollar0",
+      "asks": "JavaScript spelling `return $0 * 2` — does it throw, or return a wrong value?",
+      "verdict": "exception",
+      "exception": "Not numeric."
+    },
+    {
+      "id": "js.arrow",
+      "asks": "JavaScript spelling `$this => $this * 2` — does it throw, or return a wrong value?",
+      "verdict": "ok",
+      "value": "false"
+    },
+    {
+      "id": "js.statements",
+      "asks": "JavaScript spelling `const x = $0; return x` — does it throw, or return a wrong value?",
+      "verdict": "ok",
+      "value": "const x"
+    },
+    {
+      "id": "operand.object",
+      "asks": "Object operand: does $0 carry a path?",
+      "verdict": "ok",
+      "value": "3"
+    },
+    {
+      "id": "operand.object.this",
+      "asks": "The same object operand through $this — the spelling the wrong description teaches.",
+      "verdict": "ok",
+      "value": "null"
+    },
+    {
+      "id": "operand.array",
+      "asks": "Array operand through a filter chain inside the expression.",
+      "verdict": "ok",
+      "value": "1,2,3"
+    },
+    {
+      "id": "nested.dollardollar",
+      "asks": "Inside a nested iterating pipe, does $$ rebind to the element?",
+      "verdict": "ok",
+      "value": "[2,4,6,8]"
+    },
+    {
+      "id": "nested.dollar0",
+      "asks": "…and does $0 still mean the OUTER operand there?",
+      "verdict": "exception",
+      "exception": "Not numeric."
+    },
+    {
+      "id": "chain.upstream",
+      "asks": "With a filter BEFORE it, is $0 the upstream filter's output?",
+      "verdict": "ok",
+      "value": "6"
+    },
+    {
+      "id": "chain.downstream",
+      "asks": "Does a filter AFTER transform see the transformed value?",
+      "verdict": "ok",
+      "value": "11"
+    },
+    {
+      "id": "chain.two_transforms",
+      "asks": "Two transforms in a row — does the positional stack grow, or does each start fresh?",
+      "verdict": "ok",
+      "value": "11"
+    },
+    {
+      "id": "to_expr.ambient",
+      "asks": "to_expr: does the ambient set resolve when the SOURCE is the piped value?",
+      "verdict": "ok",
+      "value": "14"
+    },
+    {
+      "id": "to_expr.dollar0",
+      "asks": "to_expr: is there a $0 operand binding at all?",
+      "verdict": "ok",
+      "value": "null"
+    }
+  ]
+}

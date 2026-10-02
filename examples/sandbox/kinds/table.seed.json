@@ -1,0 +1,4 @@
+[
+  { "sku": "SKU-101", "name": "Monitor Arm", "price": 149, "in_stock": true },
+  { "sku": "SKU-102", "name": "Desk Mat", "price": 39, "in_stock": true }
+]

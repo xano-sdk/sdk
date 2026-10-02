@@ -1,0 +1,45 @@
+{
+  "note": "Args the ENGINE accepts as absent though the upstream filter spec marks them required. Regenerate with `tsx scripts/probe-optional-path.ts` against a sandbox; `codegen:filters` applies it after distilling.",
+  "optional": {
+    "filter_empty": [
+      "path"
+    ],
+    "filter_empty_array": [
+      "path"
+    ],
+    "filter_empty_object": [
+      "path"
+    ],
+    "filter_empty_text": [
+      "path"
+    ],
+    "filter_false": [
+      "path"
+    ],
+    "filter_null": [
+      "path"
+    ],
+    "filter_zero": [
+      "path"
+    ],
+    "fsort": [
+      "path"
+    ],
+    "unique": [
+      "path"
+    ]
+  },
+  "required": [
+    "append",
+    "array_remove",
+    "get",
+    "has",
+    "index_by",
+    "prepend",
+    "set",
+    "set_conditional",
+    "set_ifnotempty",
+    "set_ifnotnull",
+    "unset"
+  ]
+}

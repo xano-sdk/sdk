@@ -1,0 +1,493 @@
+# xanosdk v1.0.0
+
+> TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
+
+Xano is a hosted backend platform: one WORKSPACE serves a managed PostgreSQL
+database, HTTP API endpoints, background tasks, realtime websocket channels, AI
+agents and MCP servers, file storage, and redis. This SDK authors that workspace in
+TypeScript — typed def objects registered on a `workspace(name)` — compiled to one
+importable bundle by `xanosdk export ./xano/index.ts`, shipped live by `xanosdk deploy`.
+
+Def modules execute at BUILD time only: `s.*` factories return data, and the engine
+runs the compiled stack per request — statements in order, a statement's `as:`
+naming a runtime variable, `response` the HTTP body. Every dynamic operand is a
+TAGGED value — `ref("x")` a stack variable, `inp("x")` an input, `auth("id")` the
+caller, `c.*` a constant — resolved at request time; JS operators over them do not
+compute (see Gotchas). Requests share no memory — state persists in tables or redis.
+
+Authorable: statement surfaces 218/218, filters 246 (246 typed).
+Not authorable here: branch, market_item, realtime_channel, run.job, run.service, tablemap — these cannot be authored and do not survive a pull; reasons in `coverage.objectKinds.unmodeled`.
+
+This file is the whole always-read surface: the mental model, the deploy contract,
+every cross-cutting gotcha, and control flow. Per-surface detail lives in the topic files listed
+below — open the one whose condition matches the task, skip the rest. For
+exhaustive per-entry detail in NEITHER — a statement's field schema with engine
+defaults, a filter's full argument list, the `storedName` mapping — do a TARGETED
+lookup in the shipped `manifest.json` (a program imports it as
+`@xano/sdk/manifest.json`, needing `with { type: "json" }` in Node ESM;
+it is ~70k tokens, so never read it whole). Its top-level keys are `name`, `version`, `description`, `coverage`, `values`, `objectKinds`, `fieldTypes`, `statements`, `filters`, `cli`, `cliGlobalFlags`. `statements` and `filters` are ARRAYS, not maps — SELECT, do not index:
+  jq '.statements[] | select(.sPath=="db.get")' manifest.json
+  jq '.filters[]    | select(.name=="json_decode")' manifest.json
+⚠ `fields` is null on the 65 `declarative: false` statements (`db.get`, …): typed wrappers whose arguments are the factory's `.d.ts` signature. Null ≠ missing.
+Select a statement on `sPath` (the `s.*` path you write), NOT `surface` (the XanoScript term): 24 of 218 differ — `var`→`set_var`, `break`→`foreach_break`, `foreach.remove`→`foreach_remove`, and every `expect.*`.
+
+## Topic files
+
+Paths are relative to this file (`node_modules/@xano/sdk/` once installed), so a
+plain file read resolves them at the version you have.
+`llms-full.txt` is everything concatenated — one fetch for a reader that cannot open files.
+
+- [Object kinds](llms/object-kinds.md): Read when deciding WHAT to build — every authorable primitive, what each is, and which factory + register method builds it. Also when `register*` will not typecheck an array built by `.flatMap()`/`.concat()`.
+- [Core def shapes](llms/kinds-core.md): Read when authoring a function, query, api group, task, workflow test, middleware, tool, or addon — and for the `response` and `expr` shapes every one of them uses.
+- [Consuming defs from a client](llms/client.md): Read when a frontend imports a def (`getPath()`/`InferResponse`) or calls the deployed backend — what the import costs, `window.XANO_HOST`, local dev, file URLs, and a Node spot-check.
+- [Toolchain modules](llms/toolchain.md): Read when `package.json` has a `"xanosdk"` block or you run `xanosdk marketplace`.
+- [Error index](llms/errors.md): Read when a request, test, build, or pull fails with a message you did not write — the string, its cause, and where the fix is.
+- [Saved unit tests, assertions, and mocks](llms/tests.md): Read when authoring a `workflowTest()` stack, when a query/function/middleware carries `tests`, when a statement needs a `mock`, or when running a deployed environment's tests.
+- [Agent and MCP def shapes](llms/kinds-agent-mcp.md): Read when defining an `agent()`, `mcpServer()`, `prompt()` or `resource()`.
+- [Knowledge def shape](llms/kinds-knowledge.md): Read when the workspace defines a `knowledge()` item for its AI agents.
+- [Realtime def shapes](llms/kinds-realtime.md): Read when the workspace defines a `realtimeServer()`, `realtimeChannel()`, or `realtimeMessage()` handler.
+- [Triggers](llms/triggers.md): Read when authoring any trigger. A trigger's `stack` is a callback rather than the plain array every other kind takes, so the shape does not carry over.
+- [Array and database statements](llms/statements-data.md): Read when the stack reads or writes rows (`s.db.*`), or transforms an array in place (`s.array.map`, `s.array.union`).
+- [Statement runtime behavior](llms/statements-runtime.md): Read when you need to know what a statement's `as:` output holds, or why a bound variable is not the shape expected.
+- [Auth, cross-object calls, and microservices](llms/statements-calls.md): Read when the stack authenticates or verifies a webhook (recipes here), calls another object (`s.function.run`, `s.api.request`, `s.tool.call`), sends email (`s.util.send_email`), or reaches a microservice.
+- [Value catalog](llms/values.md): Read when you need a literal, a reference, or a tag you have not used before — `c.*`, `ref`, `inp`, `auth`, `col`, and what each one encodes to.
+- [Column and input types](llms/fields.md): Read when declaring a table column (`f.*`) or a function/query input (`input.*`) — a type's options and methods, and the `s.precondition` error/status contract. Also `table({ seed })` rows and `use_xdo`.
+- [Filter catalog](llms/filters.md): Read when piping a value through `fl.*` — the full catalog with each filter's argument types.
+- [Lambda bodies (JavaScript)](llms/lambda.md): Read when writing a JavaScript body, or weighing whether to reach for one at all — `lam.fn`, `fl.lambda`, `fl.reduce`, `s.lambda`; each surface binds a different set of identifiers.
+- [Lock file](llms/lock.md): Read when a `xano.lock` exists or should — renaming/pruning/importing identities, seeding the lock programmatically, or asking which commands write it.
+- [Legacy paradigms and retired statements](llms/legacy.md): Read when the code was PULLED from an existing Xano instance — how a codegen'd tree reads, the shapes in it that must not be "fixed", and any `raw({ name: "mvp:…" })`, `realtimeTrigger()`, or name the catalogs do not list.
+- [Statement catalog](llms/statements-catalog.md): Read for the field signature of a specific statement — every surface, grouped by `s.*` namespace.
+
+## Quickstart
+
+Authoring is **declarative def-objects** passed to factories — there is no
+callback/chaining builder.
+
+```ts
+import { workspace, apiGroup, query, table, input, f, ref, inp, auth, s } from "@xano/sdk";
+
+const users = table({
+  name: "users",
+  auth: true, // backs authentication
+  // `id` (int PK) + `created_at` (epochms) are auto-injected — don't declare them.
+  schema: {
+    email: f.email({ required: true }),
+    name: f.text(),
+  },
+  // Indexes: { type, fields: [{ name, op? }] }. `"unique"` is shorthand for `"btree|unique"`.
+  // A DOTTED name indexes a key inside a column (`xdo.email`); only the part before the
+  // first dot is checked against the schema.
+  index: [{ type: "unique", fields: [{ name: "email" }] }],  // also: btree, hash, gin, search, gist, vector
+});
+
+const posts = table({
+  name: "posts",
+  schema: {
+    author: f.tableRef(users), // foreign key → users (NOT `ref`)
+    body: f.text({ required: true }),
+  },
+});
+
+const api = apiGroup({ name: "blog", canonical: "blog" }); // canonical → the URL token
+
+const createPost = query({
+  name: "create_post", verb: "POST", apiGroup: api, auth: users, // the auth table
+  input: { body: input.text({ required: true }) },
+  stack: [
+    s.db.add({ table: posts, row: { author: auth("id"), body: inp("body") }, as: "post" }),
+  ],
+  response: ref("post"),
+});
+
+const listPosts = query({
+  name: "list_posts", verb: "GET", apiGroup: api,
+  stack: [s.db.query({ table: posts, sort: [{ sortBy: "created_at", dir: "desc" }], as: "rows" })],
+  response: ref("rows"),
+});
+
+export default workspace("my-blog")
+  .registerTables([users, posts])
+  .registerApiGroups([api])
+  .registerQueries([createPost, listPosts]);
+```
+
+Compile: `xanosdk export ./index.ts --out bundle.json` (or `writeBundle(app, path)`
+from `@xano/sdk/node` in code). The default export must be the `Xano` registry. The entry must be an
+ES module (Xano SDK defs are ESM-only): set `"type": "module"` in the nearest
+package.json or name the entry `.mts`. `npm init -y` writes `"type": "commonjs"`,
+which fails with a "must be ES modules" error until you switch it to module.
+
+Set `canonical` on every `apiGroup`. The engine mints the URL token server-side, so
+without one a group's client paths are unresolvable until a lock exists: the bundle
+exports fine and `xanosdk routes` / `getPath()` then fail on the very queries it just
+built. An explicit `canonical` resolves them from the source alone.
+⚠ A canonical is unique across the whole INSTANCE, not per workspace — two
+workspaces cannot serve the same one, and no flag shares it. One set in code is a PIN:
+a merge refuses (exit 2) when another workspace holds it. One the lock minted is a
+preference the instance may keep or replace with a random token, and `--static` is
+refused when it does.
+
+Build warnings: `export()` prints the shapes that deploy clean and then do the wrong
+thing (a `bulk.update` zero-filling omitted columns, an `ignoreEmpty` on an empty
+operand, a `ref()` nothing binds). Each has a legitimate use, so each only warns —
+but nothing fails on a message no one reads, so in CI and in unattended agent builds
+pass `--strict` (`emitBundle(app, { strict: true })` / `app.export({ strict: true })`):
+every warning becomes a hard failure. Same bundle bytes either way.
+Before calling the work done: `npm run typecheck`, `xanosdk export <entry> --strict`,
+`xanosdk deploy <entry>`, then `xanosdk test run-all` against what deployed.
+
+Identity: object guids derive from `(type, name)` — a query's from `(api group,
+verb, name)` — so renames change identity.
+EVERY build freezes every guid + api-group/toolset canonical in a lock file
+BESIDE THE ENTRY FILE — `xano/xano.lock` for the standard scaffold,
+NOT the project root — which you COMMIT (`--no-lock` opts out; CI guard
+`--frozen-lock` fails instead of changing it).
+To rename an object: rename in code, export (stderr prints the exact fix-up), run
+`xanosdk lock rename <kind> <old> <new>`, export again — the original guid is emitted
+under the new name, so the engine renames in place instead of delete+create. Taking
+over an existing workspace: `xanosdk lock import <live-bundle.json>` first, then
+export. Pruning, programmatic seeding, and which commands write the lock:
+`llms/lock.md`.
+
+## Deploy
+
+`xanosdk init` → `xanosdk deploy` → URL. A deploy runs the same compile pipeline as
+`export` (honoring `xano.lock`), imports the result, and prints the URL.
+⚠ Every deploy is a FULL REPLACE of its destination — objects AND records.
+
+**Backends** — one grammar: `workspace` | `ephemeral[:<name>]` | `local-engine[:<name>]`
+(no credential) | `tenant:<name>` | `release:<name>` | a bundle path where a file fits. Reads
+`--from`, writes `--to`, `test --on`; positional on `deploy`/`pull`/`generate`/`tables`/
+`impersonate`. Omitted = the ephemeral or local engine this project last deployed to, never
+workspace/tenant; bare `deploy` compiles the project onto an ephemeral instead (`--local-engine`:
+an engine on this machine), and `generate`/`init --from` need one. A refusal, typed or tracked,
+names the reason and the spellings (`publish`, `release create` refuse a local engine).
+`release create --from` records a run: no bundle path, no `release:`,
+and a `tenant:` only if throwaway (`standard`/`run` refused).
+
+**Destinations** — ephemeral by default, real only when you say so:
+
+- `xanosdk deploy [source]` → a NAMED, auto-expiring ephemeral (~1h; `--expires-hours`
+  1–24), tracked in `./.xano/ephemeral.json`, so deploying again REFRESHES it at the same
+  URL; if it expired or was swept, a fresh one is created and the new URL called out.
+  ⚠ Only the BACKEND URL survives a refresh — the replace clears static hosting, so
+  `--static` publishes a NEW host every run and the previous URL stops serving
+  (not under `--keep-data`, which MERGES an env a deploy filled: rows kept, no re-seed,
+  removed objects deleted; ⚠ a rename loses values, a RETYPE reads unfit ones as null, env
+  VALUES are not applied, a table trigger refuses it — `--reset` replaces and re-seeds).
+- `xanosdk release create <name>` cuts from a running source and LANDS in your workspace
+  — the record that it came up, and the only thing `promote`/`tenant deploy` take. A
+  taken name is refused, and so is one that addresses a LOCATION instead of naming: `/`,
+  `\`, `:`, or a leading `.`. Every export derives its FILENAME from the name it is given,
+  so `release|ephemeral|workspace export` refuse those same shapes unless `--path` names
+  the file. Carries EVERY table's SCHEMA either way; `--seed[=<guids>]` adds
+  ROWS — guids from `xanosdk tables <backend>`; a redeploy KEEPS them.
+- `xanosdk release transfer <name> --to-profile <profile>` copies a release to another
+  workspace/instance by CONTENT (tar sha256): identical → reused; same name, other
+  bytes → exit 2.
+- `xanosdk promote <release>` / `xanosdk tenant deploy <tenant> <release>` land it.
+  `promote` adds a branch; ⚠ its TABLE edits hit live
+  (`--allow-shared-schema-changes`). `tenant deploy` REPLACES: DROPS tables it lacks,
+  CONVERTS retypes (`--seed`: rows).
+  `promote` refuses a taken name/pinned slug (`SDK_IDENTITY_CONFLICT`), then
+  EXITS NON-ZERO if a declared object did not arrive or a pinned slug is not served;
+  `--set-live` waits on that (previous branch serving). Extra objects: reported;
+  a check missing an input reports `unverified`, exit 0. `--json` on every release write:
+  `completed` yes|no|unknown; UNKNOWN exits 9 — run `resolveWith`, never retry blind.
+  `--expect-live <label>` (with `--set-live`) refuses if live moved; not atomic. Inspect a staged branch with
+  `workspace export --branch <label>` or `workspace diff <entry> --branch <label>`.
+  ⚠ The redis family, `s.lambda`, `s.db.direct_query`, `s.await`, `s.microservice.request`,
+  `s.zip.*`, the raw-file readers, Datadog and Webflow need an INSTANCE CAPABILITY: they
+  deploy clean and fail on the first request if the target lacks it. `export`/`deploy` list
+  what the bundle needs — compare it to the target yourself.
+- Backend SECRETS stay out of the repo: declare the NAME, value empty, in `workspaceConfig({ env })`
+  passed to `registerWorkspace()`; the VALUE lives in `xano/.env` — gitignored, kept across a
+  pull, read by every build. `--backend-env-file <path>` replaces that default (CI has
+  no `xano/.env`), `--env-var KEY=VALUE` beats both, and `xanosdk env pull` fills the file from
+  a running backend — the only command that writes `xano/.env`.
+  ⚠ A deploy REPLACES the env set: a declared name with NO value refuses the deploy rather
+  than clearing the live one — `--allow-empty-env=NAME` clears it on purpose.
+  ONE live value, no deploy: `xanosdk env set NAME` (value on stdin) / `env unset NAME`.
+  (`--static-env` is the other one — PUBLIC frontend config.)
+- A DOCUMENTATION token is a secret too, in a SECOND ignored file: source declares only the
+  gate — `documentation: { require_token: true }` on `workspaceConfig` or an `apiGroup` — and
+  the value lives in `xano/.secrets.json`, keyed by the object it gates. A literal `token`
+  FAILS the export. `xanosdk pull` writes that file and every build reads it back;
+  `xanosdk secrets fill` MINTS one per gate that has none — a gate you AUTHORED has no value
+  to pull. CI, which does not have the file, passes `--secrets-file <path>` or
+  `--doc-token "<scope>=<value>"`
+  (scope = `workspace`, or the group's NAME).
+  ⚠ OMISSION IS OPPOSITE PER SCOPE: off `workspaceConfig` the target's gate is left alone;
+  off an `apiGroup` it is CLEARED (an absent key there is written as the engine default). An
+  unsupplied gate refuses a `deploy` and fails the export for a publishing group.
+- `xanosdk deploy --to workspace|tenant:<name>` skips the release flow to merge a LOCAL
+  build in, keeping the checks that need one (`--dry-run`, `--prune`, loss warnings) and
+  leaving nothing to roll back to. Prefer the release path.
+  ⚠ Branches scope LOGIC: tables and microservices are shared by EVERY branch, so a
+  schema change reaches production on any branch — refused without
+  `--allow-shared-schema-changes` — and dropping a column destroys its data.
+  ⚠ `--replace` CLEARS BY WORKSPACE, NOT BY BRANCH: every non-live branch goes, with the
+  saved versions that would restore one — unrecoverable. Refused without
+  `--allow-branch-deletion`; `--yes` does not imply it. The default merge leaves them alone.
+- `xanosdk workspace reset-tables <entry> --table <guid>` puts NAMED tables back to their
+  compiled `table({ seed })` rows, touching no other table. Dry run unless `--write`.
+  ⚠ ROWS BEFORE LOGIC: rows are workspace-shared like schema, so they reach production when
+  applied even while the logic reading them is staged — no ordering makes a half-data change
+  atomic. Reset rows FIRST, then `promote`: new rows under old logic break only a feature
+  being removed; new logic over old rows breaks the one you are shipping.
+- `xanosdk pull` refreshes THIS project from a backend: rewrites decoded files,
+  keeps yours, lists and confirms (`--yes`).
+- `xanosdk generate <source>`: the decoded tree ONLY, no project.
+- `xanosdk status` names the env this project last deployed to, its URL and its expiry.
+
+**Frontend wiring.** `--static <dir>` (or `xanosdk publish <dir>`) injects the env's backend URL as
+`window.XANO_HOST` into EVERY html document in the build, before the app bundle runs,
+so the frontend needs no rebuild to target an env. How to read it, local dev, verifying
+the inject, and displaying a stored file: `llms/client.md`.
+⚠ A static host serves its files verbatim, so everything injected is PUBLIC — base
+URLs and publishable keys only, never secrets. Secrets go in backend env, read
+server-side via `env(name)`.
+⚠ `xanosdk preflight` uses the deploy credential unless `XANO_VALIDATE_INSTANCE` /
+`XANO_VALIDATE_TOKEN` (+ optional `XANO_VALIDATE_WORKSPACE_ID`) are set.
+
+**Full CLI surface:** `xanosdk <command> --help` — every command, flag, default and accepted
+backend; `manifest.json` carries the same in its `cli` array.
+**Style:** reach statements through the `s` namespace (`s.db.add`, `s.math.add`, …).
+The flat aliases (`dbAdd`, `setVar`, …) are identical in output; prefer `s.*`.
+
+## Gotchas
+
+Non-obvious authoring rules:
+
+### Values and references
+
+- **No callback builder.** Flat def-objects + `register*`, not
+  `workspace(w => w.table(...))`. `workspace(name)` returns a named `new Xano()`;
+  tables are `table({ schema: { col: f.text() } })`.
+- **Reference-helper picker:** `ref` = stack var (`as:` output), `inp` = input,
+  `col` = table column (in `db.query` `where`), `auth("id")` = the caller,
+  `c.*` = a constant. Pick by what you're pointing at.
+- **Foreign key is `f.tableRef(table)`, not `ref`.** `ref(name)` references a
+  stack variable (a value); `f.tableRef` is the column constructor.
+- **Tagged values are DATA — a JS template literal cannot compose them.** `${ref(...)}`
+  (or `"a" + ref(...)`) stringifies the tag object at BUILD time: ``c.text(`Hi ${ref("u.name")}`)``
+  type-checks and encodes the literal text `Hi [object Object]`, served verbatim.
+  `export()` warns; `--strict` fails. Compose at RUNTIME:
+  `withFilters(c.text("Hi "), fl.concat(ref("u.name")))`, an `obj({...})`/record member,
+  or `c.expression('"Hi, " ~ $var.u.name')`.
+- **Declare inputs with `input.<type>()`, read them with `inp("name")`.** `inp()`
+  resolves ONLY against this def's own `input` block — a value produced earlier in
+  the stack is `ref("var.field")`, not `inp("field")`. An undeclared name fails at
+  runtime with `Unable to locate input` (`export()` warns).
+- **`get_input`/`get_raw_input` read the whole payload**, not one named input
+  (args are `{ as?, encoding?, excludeMiddleware? }` — no `name`). For a single
+  input use `inp("name")`.
+- **To match every row, omit `where` — never pass a constant.** `where: c.bool(true)` is
+  not "no filter": a bare scalar literal states no condition and the engine reads the
+  resulting `context.search` as garbage, so it throws. An absent `where` is how "every
+  row" is spelled. A raw `Value` `where` stays the escape hatch for a clause built
+  elsewhere — `inp("clause")`, `ref("built_where")`, or `c.text("id > 0")`.
+
+### Tables and columns
+
+- **System columns are auto-injected.** `id` + `created_at` are prepended to
+  every table (`system: true` by default); declaring them by hand is redundant.
+  `id` is an `int` PK by default; pass `idType: "uuid"` on the table for a uuid key.
+  Both are valid targets wherever a column name is accepted — `db.query` `sort`/
+  `output`, a `db.get`/`edit`/`del` `fieldName`, etc. (the column-name type is
+  `keyof schema | "id" | "created_at"`), and both appear in `InferRow<typeof table>`.
+- **A column named `run` is reserved.** The table deploys and reads back fine, then
+  EVERY `s.db.add` into it 400s — at any column type, with or without a value — and
+  the error names the column while complaining about the VALUE. Use `run_id`. Exact,
+  case-sensitive, one name: `Run`/`runs`/`run_id` are fine. `--strict` fails on it.
+- **An input named `run` is reserved when a call passes it**: the callee gets
+  defaults or a 400. HTTP binds it fine. `--strict` fails on it.
+- **Numeric columns lose money quietly.** A normalized table's `f.decimal` reads
+  `0.12345678` back as `0.12346`; `f.int` saturates at `9223372036854775807`
+  instead of failing. Both at HTTP 200 and plausible on read, so it surfaces as
+  arithmetic that stops reconciling. Hold money as a count of the smallest unit;
+  exact bounds: `llms/fields.md`.
+- **Self-referencing tables** need the bare-name form: inside `tweets`'s own
+  schema, write `f.tableRef("tweets", { type: "int" })` — the `const tweets`
+  handle isn't assigned yet, so the handle form throws "used before declaration".
+- **Seed a table's starting rows with `table({ seed })`.** Rows typed against the
+  schema, inline (`seed: [{ name: "…" }]`) or from a file (`seedFile("./seed.json",
+  import.meta.url)`). Only `deploy` ships them, and a re-deploy re-seeds cleanly. Never
+  put secrets in `seed`. Row shape, `id` pinning, and the file rules: `llms/fields.md`.
+- **`f.password()` defaults to `access: "internal"`, so `db.get` does NOT return it.**
+  A login stack that reads `ref("u.password")` after a plain `db.get` fails at runtime
+  with `Unable to locate var: u.password` — the column is simply absent from the row.
+  Name it in the read's `output` to pull it: `s.db.get({ table: users, fieldName: "email",
+  fieldValue: inp("email"), output: ["id", "email", "password"], as: "u" })`, then
+  `s.security.check_password`. `output` OVERRIDES column visibility — it is the only way to
+  read an `internal` column, and `export()` warns when a stack reads one a `db.get` did not
+  return.
+- **Don't take a password through `input.password` on login — it double-hashes.**
+  An `f.password()` column hashes on write, and `input.password` *also* hashes the
+  submission on bind, so `s.security.check_password` compares two different hashes
+  and a correct password always fails (`ok:false` on a found row). Take the submitted
+  password as `input.text()` on both signup and login and pass the plaintext straight
+  to `check_password` (which does the comparison hash itself). `export()` warns.
+
+### Reading and writing rows
+
+- **DB reads are field-match, not `where`-expr.** `db.get`/`db.edit`/`db.del`/
+  `db.has`/`db.patch` match one field: `{ fieldName, fieldValue }` (`fieldName`
+  defaults to the PK `id`). Only `db.query` takes a `where`/`additionalWhere`
+  `expr(...)`; writes (`db.add`/`db.edit`/`db.add_or_edit`) take a `row`/`data`.
+  Signatures: `llms/statements-data.md`.
+- **Single-field only — no composite match.** These ops match exactly ONE field;
+  there is no two-field form (the engine's by-field lookup takes a single
+  predicate). For a `(a, b)` existence/fetch — e.g. dedupe a `(habit, date)`
+  check-in — use `db.query({ where: [expr(col("habit"), "=", ...), expr(col("date"), "=", ...)], as })`
+  (a `where` array is ANDed) and branch on the result, rather than pushing the
+  check to the client.
+- **Drilling into a maybe-null `db.get` result 500s — use `ref(path, { safe: true })`.**
+  `db.get` binds `null` on a no-match, but a nested `ref("owner.user_id")` raises a runtime
+  "Unable to locate var" (HTTP 500) when `owner` is null — an ownership guard throws instead
+  of failing cleanly. Two correct shapes:
+  - Guard existence first — `s.precondition({ expr: expr(ref("owner"), "!=", c.null()),
+    error_type: "notfound", error: c.text("Not found.") })` — then drill WITHOUT `safe`.
+  - Or drill null-safe inside an EXPRESSION or `obj()` operand:
+    `expr(ref("owner.user_id", { safe: true }), "=", auth("id"))` yields `null` (the guard
+    reads `false`) instead of 500ing. Works inside `obj({...})` too — no `s.set_var` hoist needed.
+  ⚠ EXPRESSION and `obj()` operands ONLY — never a `db.*` match argument. `null` is not a
+  legal `fieldValue`/`id`, so a chained get (fetch the child row, then its parent to check
+  the owner) fails with HTTP 400 `Missing param: field_value` one statement BEFORE the guard.
+  There guarding existence first is MANDATORY. `export()` warns on a safe ref in that position.
+  ⚠ That is for a base that EXISTS and may be null. If the base binds nothing at all (a typo),
+  `{ safe: true }` buries the bug as a silent `null` — `export()` warns with a did-you-mean;
+  fix the name instead.
+- **`output` selects from what the statement BINDS, and a PAGED `db.query` binds the
+  envelope.** With `metadata: true` (the DEFAULT), the roots are `items.<column>` plus the
+  counters you want kept: `output: ["itemsReceived", "curPage", "items.id", "items.title"]`.
+  A bare column list there matches no envelope key, so ALL of them are dropped and the
+  endpoint answers `[]` at HTTP 200 with no error — and a `response` reading
+  `ref("rows.items")` then dies with `Unable to locate var: rows.items`. Prefix the columns,
+  or set `metadata: false` inside `paging` to select the rows directly.
+  `export()` warns; `--strict` fails.
+
+### Stacks and calls
+
+- **Block specials nest a `body`, not a `stack`.** `s.for`/`s.foreach`/
+  `s.while`/`s.switch`/`s.try_catch`/`s.db.transaction`/`s.expect.to_throw`
+  take their sub-stack as `body` (`try`/`catch`/`finally` for `try_catch`);
+  `s.group(body)` and `s.util.post_process(body)` take it **positionally**.
+  `s.for` is **count-bounded** (`{ as, count: <Value>, body }`), not from/to. See the
+  authored signatures in `llms/statements-data.md`.
+- **`s.api.call` / `s.task.call` / `s.trigger.call` / `s.workflow_test.call` are
+  WORKFLOW-TEST ONLY.** Outside a `workflowTest({...})` stack the engine cannot reach
+  the target, so one in a query/function/task deploys clean and then answers the first
+  real request with `ERROR_FATAL: <Type> does not exist: <type>:<n>` — and not per
+  host kind, the same call fails identically from a function a query runs.
+  `export()` refuses them. `s.function.call`, `s.tool.call`, `s.middleware.call` and
+  `s.addon.call` run anywhere, as does `s.function.run` (the ordinary function
+  invocation). To share logic between endpoints, put it in a `defineFunction` and
+  `s.function.run` it from both.
+- **`expect.*` is a unit-test assertion; `s.expect.*` is a workflow-test statement.**
+  A statement's `mock` is keyed by TEST NAME; an undeclared name throws. See `llms/tests.md`.
+- **A helper returning `Statement[]` widens the stack and kills `InferResponse`.**
+  Spreading `...requireX()` where the helper is typed `Statement[]` drops the stack's TUPLE
+  type, so EVERY `ref()`/`as` in that stack — even ones after the spread — resolves to
+  `unknown` and the response types as `StackTupleWidened`. Nothing fails at the helper; it
+  surfaces where the response is consumed, often a frontend typecheck. Fix: return
+  `statements(s.a(...), s.b(...))` — its tuple survives the spread. A helper that builds
+  its array in a LOOP cannot be a tuple; declare `responseShape` on the query there.
+- **Build regex-filter patterns with `c.regex(body, flags?)`, never `c.text`.**
+  The regex filters (`regex_test`/`regex_match`/`regex_replace`/…) are PHP `preg_*`: the
+  piped value is the PATTERN and must be delimiter-wrapped, and the ARGUMENT is the subject.
+  Correct: `withFilters(c.regex(/^[a-z-]+$/i), fl.regex_test(inp("slug")))`.
+  - A bare `c.text("^…$")` is an invalid pattern that matches *nothing* for every input,
+    so a precondition on it silently rejects all values. `c.regex(body, "i")` wraps +
+    escapes it for you (a JS `RegExp` too: `c.regex(/^…$/i)`).
+  - Reversed — subject piped, pattern in the argument — reads correctly, type-checks, and
+    answers false for EVERY input, so an `if (matches) reject` guard admits what it refuses.
+  - Build time refuses both: `withFilters` throws on a bare `c.text` pattern from ANY position
+    in the chain (a normalizer in front of the regex filter is refused too; nothing upstream
+    adds the delimiters) and on a pattern found in the subject slot; `s.expect.to_match` is the
+    same PATTERN slot, refused both ways; a `ref`/`inp` pattern is passed through untouched.
+    `export()` warns on a reversed pair in stored bytes.
+  - Better still: a native typed input (`input.email`) over hand-rolled validation.
+- **An `auth()`-keyed limiter FAILS the request on any host with no caller identity —**
+  **at every tier.** `s.redis.ratelimit({ key: withFilters(c.text("rl:"), fl.concat(auth("id"))), error: c.text("…") })`
+  is the per-user form, and a public query, a task, or a function has no caller identity.
+  It does not degrade to one shared bucket: on a public endpoint the FIRST call 403s,
+  under `max`, and the host never runs. Key off `sys.remoteIp()` there. Attaching it
+  at `apiGroup({ middleware })` or the workspace tier inherits the same failure onto
+  every member endpoint. Export warns, naming the tier.
+
+### Identity, build, and deploy
+
+- **Same-name siblings collide — queries excepted: their identity carries group + verb.**
+  Guids derive from `(type, name)`, so two functions (or tables, toolsets, …) sharing
+  a name derive ONE guid and `export()` throws — give them DISTINCT names. A QUERY
+  derives from `(api group, verb, name)`, the engine's own uniqueness: `GET items` +
+  `POST items`, and `items` across two groups, coexist, and the lock keys the same
+  composed identity (`query:blog|GET|items`) — changing a query's verb or group
+  changes its identity. An explicit `guid` on a colliding pair clears the throw but
+  is NOT a lasting fix: a lock entry cannot hold two guids, so `export --lock`
+  refuses the pair (`export()` warns even unlocked); it is for pinning identity
+  across a rename, not for sharing a name.
+- **`export()` vs `emitBundle()` vs `writeBundle()`:** `export()` returns the object,
+  `emitBundle()` the JSON, `writeBundle(app, path)` writes `xanosdk export`'s file. All
+  three run the SAME build-time checks, INCLUDING seed validation of a literal `seed: [...]`
+  array (row shape, unknown column, coercion, enum membership, the all-or-nothing `id`
+  rule). A DEFERRED seed — a thunk (`() => import("./seed.json")`) or `seedFile()` — is
+  checked only by the `xanosdk export`/`deploy` CLI path. Only `deploy` ships seed rows.
+  - Entry points: the `node:fs` writers (`writeBundle`/`writeArtifact`) and lock-file I/O
+    import from `@xano/sdk/node`, NOT the browser-safe `@xano/sdk` entry (a frontend
+    imports defs from it for `getPath()`/`InferInput`). `@xano/sdk/internal` is the
+    compiler machinery, never needed to author. READING a bundle back is `@xano/sdk/bundle`
+    — a statement walker (`2.if.0` paths), a structural hash, `mvp:*` catalog, `tableRefOf`.
+- **Intra-workspace imports use `.js` specifiers** (`../tables/links.js`), not
+  extensionless — the defs compile under `moduleResolution: bundler`. Add the `.js`.
+- **Agents authenticate with env vars — never `xanosdk login`.** `login` blocks on a
+  browser consent no agent can complete. Set all three of `$XANO_INSTANCE_URL`,
+  `$XANO_WORKSPACE_ID`, `$XANO_META_TOKEN` and run `deploy`/`promote` directly: no disk, no
+  rotation, so it survives repeated runs.
+  - The triple outranks every other credential (`--config`, `$XANO_PROFILE` and
+    `$XANO_REFRESH_TOKEN` included, each named on stderr when displaced). Setting SOME of the
+    three is a hard error, so a misspelled secret cannot fall through to whatever credential
+    the runner has. An explicit `--profile` against it is a hard error too, not a displacement.
+  - On disk: `xanosdk profile add <name> --instance … --workspace-id <n>` reads the token
+    from piped stdin, else PROMPTS (a flag would reach the process list); the instance must accept it.
+    `auth.json` holds a map of named profiles, selected by `--profile <name>`. The older
+    `$XANO_REFRESH_TOKEN` + `$XANO_CLIENT_ID` pair still works but ROTATES: single-use.
+- **Event-driven objects fire on an EPHEMERAL.** A `task` (scheduled), an `mcpServer`,
+  and every trigger — `tableTrigger` included — run normally on an ephemeral env, which
+  is where `deploy` sends them. So test an event-driven design (screen-on-insert, cron
+  cleanup, MCP tool call) by deploying it and letting it run.
+
+## Statements
+
+Reachable through the `s` namespace: `s.<path>({...})`. Declarative statements
+take one typed args object (field names match the engine); every surface's field
+signature is in `llms/statements-catalog.md`. Specials (`[special]`) are
+hand-authored: control flow is below, and the rest are in the `llms/statements-*`
+topic files this doc's navigation names.
+Wrap an `input`-routed `value` field in `ignored(...)` to store it but SKIP it at
+  runtime — the engine records `<name>:ignore` and the parameter falls back to its
+  default. Not the same as an empty value, and not the same as omitting the field
+  (which stores no entry at all). Mostly seen on a pulled workspace. A field written
+  into `context` instead (the `s.math.*`/`s.text.append` mutation family) has no slot
+  for the flag and THROWS rather than dropping it.
+Fields marked `value` take a `Value` (`c.*`/`ref`/`inp`); `comparison` takes an
+`expr(...)`. A `→ as: <type>` suffix names what the statement's `as:` output var
+holds (curated, not exhaustive — absence means read the `[output]` flag and prose).
+
+### Specials — authored signatures
+
+Control flow & blocks (each nests a sub-stack; block specials name it `body`):
+
+- `s.set_var(name, value)` · `s.update_var(name, value)` · `s.return(value)` · `s.comment(text)` — positional.
+- **Every** statement takes `disabled?`/`description?` — annotations on the stack item, not args: `disabled: true` is Xano's "disable step" (kept in the stack, skipped at runtime), `description` the note beside it. Inline on object-arg factories; a trailing object on the positional ones (`s.set_var("x", v, { disabled: true })`).
+- **Statements with an `as`** also take `asFilters?` — `fl.*` filters on the RESULT as it binds, in order, same slot as `disabled`: `s.set_var("x", v, { asFilters: [fl.trim(), fl.lower()] })`. Saves a follow-up `set_var`. Throws without an `as`. The bound variable is RETYPED by the chain (`db.query` + `[fl.count()]` → `number`); filters whose result the engine declares as `any` (`get`, `set`, `json_decode`, …) fold to `unknown`.
+- `s.conditional({ when, then, elif?, else? })` — if/elif/else. `when` is a condition (`expr`/`cmp`/`and`/`or`); `elif` is an ordered `[{ when, then }]` (each an else-if branch); `then`/`else` are `Statement[]`.
+- `s.for({ as, count, body })` — **count-bounded** loop (`as` is the index), NOT from/to; `count` is a `Value`, not a bare number.
+- `s.foreach({ as, list, body })` — iterate `list`; `as` is the current item.
+- `s.while({ when, body })` — `when` is a condition (`expr`/`cmp`/`and`/`or`).
+- `s.switch({ on, cases: [{ when, body, break? }], default? })` — multi-way branch on a subject `Value` `on`; each `case`'s `when` is a literal `Value` matched against `on` (NOT a comparison — use `s.conditional` for `<`/`>`/ranges). ⚠ **Omitting `break: true` FALLS THROUGH** — the matched case also runs every LATER case body. Type-checks clean; only `export --strict` catches it.
+- `s.try_catch({ try, catch?, finally? })` — three `Statement[]` blocks.
+- `s.group(body)` / `s.util.post_process(body)` — take a `Statement[]` **positionally**.
+- `s.foreach_break()` / `s.foreach_continue()` / `s.foreach_remove()` — nullary loop control.
+- `s.expect.to_throw({ body, exception? })` — `body` is the statements expected to raise; `exception` is a `Value`, not a bare string.

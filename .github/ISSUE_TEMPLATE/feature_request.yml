@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest a capability, API, or ergonomic improvement for Xano SDK.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: >-
+        The task, not the solution — what you were building when you hit the
+        limit.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Xano SDK to do?
+      description: >-
+        If you have a shape in mind, sketch it in TypeScript — that is the
+        fastest way to agree on an API.
+      render: typescript
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How are you handling it today?
+      description: The workaround, if there is one, and where it falls short.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI (init, deploy, login, marketplace)
+        - Workspace authoring (tables, APIs, functions, tasks)
+        - Types and codegen
+        - Docs and agent grounding (llms.txt, manifest)
+        - Other / not sure
+    validations:
+      required: false

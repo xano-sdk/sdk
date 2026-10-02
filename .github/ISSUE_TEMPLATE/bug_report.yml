@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in Xano SDK behaved differently than you expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The two things that make a bug fixable fastest are
+        the exact command you ran and the exact output you got back.
+
+  - type: textarea
+    id: command
+    attributes:
+      label: What you ran
+      description: The `xanosdk` command (or the code) that triggered it.
+      render: shell
+      placeholder: npx xanosdk deploy xano/index.ts
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: >-
+        The output, error message or stack trace — paste it verbatim rather than
+        summarizing it.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: debug
+    attributes:
+      label: Debug output
+      description: >-
+        If this was a deploy, login, or anything else that talks to a server,
+        re-run it with `XANOSDK_DEBUG=1` and paste the output. That prints the raw
+        server response bodies, which is usually the whole answer. Redact any
+        token or secret first.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: "@xano/sdk version"
+      description: "`npm ls @xano/sdk`, or the version the CLI printed."
+      placeholder: 0.0.1
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: "`node --version` (Xano SDK requires Node 20 or newer)."
+      placeholder: v22.11.0
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15.1 / Ubuntu 24.04 / Windows 11
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: >-
+        A minimal workspace file that reproduces it, related issues, or what you
+        already tried.
+    validations:
+      required: false

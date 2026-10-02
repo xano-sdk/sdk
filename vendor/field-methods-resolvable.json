@@ -1,0 +1,44 @@
+{
+  "note": "Empirically runtime-resolvable field methods per type. Regenerate with `tsx scripts/probe-field-methods.ts`.",
+  "resolvable": {
+    "text": [
+      "alphaOk",
+      "digitOk",
+      "lower",
+      "max",
+      "min",
+      "ok",
+      "pattern",
+      "prevent",
+      "startsWith",
+      "trim",
+      "upper"
+    ],
+    "email": [
+      "lower",
+      "trim"
+    ],
+    "password": [
+      "max",
+      "min",
+      "minAlpha",
+      "minDigit",
+      "minLowerAlpha",
+      "minSymbol",
+      "minUpperAlpha",
+      "salt"
+    ],
+    "int": [
+      "max",
+      "min"
+    ],
+    "decimal": [
+      "max",
+      "min"
+    ],
+    "vector": [
+      "max",
+      "min"
+    ]
+  }
+}

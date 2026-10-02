@@ -1,0 +1,162 @@
+{
+  "name": "@xano/sdk",
+  "version": "1.0.0",
+  "description": "Xano SDK — your Xano backend as TypeScript. `xanosdk deploy` ships your typed workspace (and an optional static frontend) to a live, auto-expiring ephemeral environment and prints its URL. init → deploy → URL.",
+  "keywords": [
+    "xanosdk",
+    "xano",
+    "sdk",
+    "typescript",
+    "deploy",
+    "ephemeral",
+    "preview-environments",
+    "infrastructure-as-code"
+  ],
+  "homepage": "https://github.com/xanots/sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xanots/sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xanots/sdk/issues"
+  },
+  "type": "module",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "xanosdk": "dist/bin.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "typesVersions": {
+    "*": {
+      "lambda-globals": [
+        "types/lambda-globals.d.ts"
+      ]
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    },
+    "./scaffold": {
+      "types": "./dist/scaffold.d.ts",
+      "import": "./dist/scaffold.js"
+    },
+    "./codegen": {
+      "types": "./dist/codegen.d.ts",
+      "import": "./dist/codegen.js"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "import": "./dist/internal.js"
+    },
+    "./bundle": {
+      "types": "./dist/bundle.d.ts",
+      "import": "./dist/bundle.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js"
+    },
+    "./sveltekit": {
+      "types": "./dist/sveltekit.d.ts",
+      "import": "./dist/sveltekit.js"
+    },
+    "./lambda-globals": {
+      "types": "./types/lambda-globals.d.ts"
+    },
+    "./package.json": "./package.json",
+    "./manifest.json": "./manifest.json"
+  },
+  "files": [
+    "dist",
+    "types",
+    "!dist/**/*.map",
+    "manifest.json",
+    "llms.txt",
+    "llms-full.txt",
+    "llms",
+    "guides",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "codegen": "tsx scripts/codegen.ts",
+    "codegen:filters": "tsx scripts/codegen-filters.ts",
+    "codegen:query-filters": "tsx scripts/codegen-query-filters.ts",
+    "codegen:methods": "tsx scripts/codegen-field-methods.ts",
+    "codegen:sweep": "tsx scripts/codegen-sweep.ts",
+    "codegen:replay": "tsx scripts/codegen-replay.ts",
+    "codegen:imports": "tsx scripts/codegen-imports.ts",
+    "codegen:surface": "tsx scripts/codegen-surface.ts",
+    "codegen:themes": "tsx scripts/gen-shadcn-themes.ts",
+    "codegen:fonts": "tsx scripts/gen-shadcn-fonts.ts",
+    "audit:spec-drift": "tsx scripts/spec-drift.ts",
+    "audit:special-required": "tsx scripts/special-required.ts",
+    "audit:engine-drift": "bash .github/scripts/engine-drift.sh",
+    "audit:output-flag": "tsx scripts/audit-output-flag.ts",
+    "audit:decode-coverage": "tsx scripts/audit-decode-coverage.ts",
+    "audit:dts": "npm run build && tsx scripts/audit-dts.ts",
+    "manifest": "tsx scripts/manifest.ts",
+    "codes": "tsx scripts/codes.ts",
+    "changelog": "tsx scripts/changelog.ts",
+    "measure:llms": "tsx scripts/measure-llms.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e:ephemeral": "bash scripts/e2e-ephemeral.sh",
+    "e2e:local-engine": "bash scripts/e2e-local-engine.sh",
+    "lint": "eslint .",
+    "prepublishOnly": "npm run build",
+    "prepack": "node scripts/check-dist.mjs",
+    "release": "npm publish --access public",
+    "release:beta": "npm version prerelease --preid=beta -m \"chore(release): %s\" && npm publish --tag beta --access public",
+    "examples:index": "tsx scripts/gen-examples-index.ts",
+    "examples:check": "npm run examples:index && tsc --noEmit -p examples/sandbox/tsconfig.json",
+    "examples:statements": "tsx scripts/gen-examples.ts",
+    "examples:filters": "tsx scripts/gen-filters.ts",
+    "examples:gen": "tsx scripts/gen-examples.ts && tsx scripts/gen-filters.ts && tsx scripts/gen-examples-index.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "openid-client": "^6.8.4",
+    "proper-lockfile": "^4.1.2"
+  },
+  "peerDependencies": {
+    "esbuild": ">=0.21.0"
+  },
+  "peerDependenciesMeta": {
+    "esbuild": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^20.0.0",
+    "@types/proper-lockfile": "^4.1.4",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "esbuild": "^0.28.1",
+    "eslint": "^9.0.0",
+    "gpt-tokenizer": "^3.4.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.22.4",
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  // The breadth half of `npm run audit:dts`: emit declarations for the whole
+  // examples workspace against the BUILT `dist/index.d.ts`, so a statement
+  // family whose result type is declared but not exported fails here rather
+  // than in a consumer's build.
+  //
+  // `tsconfig.json` next to this one checks the same files against `src/` with
+  // `noEmit`; only the emit asks whether a consumer can NAME what it infers.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "sourceMap": false,
+    "paths": {
+      "@xano/sdk": ["../../dist/index.d.ts"],
+      "@xano/sdk/node": ["../../dist/node.d.ts"]
+    }
+  },
+  "include": ["."],
+  "exclude": ["../../dist", "../../node_modules"]
+}

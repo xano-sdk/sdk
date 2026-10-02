@@ -1,0 +1,24 @@
+{
+  "note": "How many arguments the ENGINE requires, for filters whose upstream spec understates it. Two ways the spec's `optional` flag lies: a LEADING optional in front of a required argument, which cannot be omitted positionally because the next argument slides into its slot; and a filter whose arguments are ALL marked optional that the engine nonetheless requires in full, so the declared-legal zero-argument call fails before the filter body runs. `codegen:filters` requires the first `minArgs` arguments of each filter listed here, synthesizing slots when the spec declares fewer. Regenerate with `tsx scripts/probe-filter-arity.ts` against a sandbox — it calls every filter with zero arguments and reads the required count out of the engine's own refusal.",
+  "probedAt": "2026-08-12",
+  "minArgs": {
+    "reduce": 2,
+    "array_fill": 2,
+    "encrypt": 3,
+    "decrypt": 3,
+    "crypto_jws_encode": 3,
+    "crypto_jws_decode": 3,
+    "crypto_jwe_encode": 4,
+    "crypto_jwe_decode": 4,
+    "csv_encode": 3,
+    "csv_decode": 3,
+    "csv_parse": 3,
+    "csv_create": 4,
+    "number_format": 3,
+    "array_slice": 1,
+    "array_fill_keys": 1,
+    "create_object": 1,
+    "jwe_encode": 1,
+    "jwe_decode": 1
+  }
+}

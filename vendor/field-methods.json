@@ -1,0 +1,54 @@
+{
+  "types": {
+    "decimal": {
+      "max": "int",
+      "min": "int"
+    },
+    "email": {
+      "alphaOk": "bool",
+      "digitOk": "bool",
+      "lower": "bool",
+      "max": "int",
+      "min": "int",
+      "ok": "text",
+      "pattern": "text",
+      "startsWith": "text",
+      "trim": "bool",
+      "upper": "bool"
+    },
+    "int": {
+      "max": "int",
+      "min": "int"
+    },
+    "password": {
+      "max": "int",
+      "min": "int",
+      "minAlpha": "int",
+      "minDigit": "int",
+      "minLowerAlpha": "int",
+      "minSymbol": "int",
+      "minUpperAlpha": "int",
+      "salt": "text"
+    },
+    "tableRef": {
+      "max": "int",
+      "min": "int"
+    },
+    "text": {
+      "alphaOk": "bool",
+      "digitOk": "bool",
+      "lower": "bool",
+      "max": "int",
+      "min": "int",
+      "ok": "text",
+      "pattern": "text",
+      "startsWith": "text",
+      "trim": "bool",
+      "upper": "bool"
+    },
+    "vector": {
+      "max": "int",
+      "min": "int"
+    }
+  }
+}

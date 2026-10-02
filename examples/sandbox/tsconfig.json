@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    "paths": {
+      "@xano/sdk": ["../../src/index.ts"],
+      "@xano/sdk/node": ["../../src/node.ts"]
+    }
+  },
+  "include": ["."],
+  "exclude": ["../../dist", "../../node_modules"]
+}

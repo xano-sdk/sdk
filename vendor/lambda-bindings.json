@@ -1,0 +1,1645 @@
+{
+  "note": "Live-probed lambda binding contract, per surface, plus the evidence behind it. `contract` is what the SDK enforces and documents; `evidence` is what a real engine answered. Regenerate with `tsx scripts/probe-lambda-bindings.ts` against a sandbox — the run fails if the two disagree.",
+  "probedAt": "2026-08-12",
+  "ambient": [
+    "$env",
+    "$input",
+    "$var",
+    "$auth",
+    "console",
+    "crypto"
+  ],
+  "contract": {
+    "s.lambda": [
+      "$env",
+      "$input",
+      "$var",
+      "$auth",
+      "console",
+      "crypto"
+    ],
+    "fl.lambda": [
+      "$env",
+      "$input",
+      "$var",
+      "$auth",
+      "console",
+      "crypto",
+      "$this"
+    ],
+    "map": [
+      "$env",
+      "$input",
+      "$var",
+      "$auth",
+      "console",
+      "crypto",
+      "$this",
+      "$index",
+      "$parent"
+    ],
+    "filter": [
+      "$env",
+      "$input",
+      "$var",
+      "$auth",
+      "console",
+      "crypto",
+      "$this",
+      "$index",
+      "$parent"
+    ],
+    "some": [
+      "$env",
+      "$input",
+      "$var",
+      "$auth",
+      "console",
+      "crypto",
+      "$this",
+      "$index",
+      "$parent"
+    ],
+    "every": [
+      "$env",
+      "$input",
+      "$var",
+      "$auth",
+      "console",
+      "crypto",
+      "$this",
+      "$index",
+      "$parent"
+    ],
+    "find": [
+      "$env",
+      "$input",
+      "$var",
+      "$auth",
+      "console",
+      "crypto",
+      "$this",
+      "$index",
+      "$parent"
+    ],
+    "findIndex": [
+      "$env",
+      "$input",
+      "$var",
+      "$auth",
+      "console",
+      "crypto",
+      "$this",
+      "$index",
+      "$parent"
+    ],
+    "reduce": [
+      "$env",
+      "$input",
+      "$var",
+      "$auth",
+      "console",
+      "crypto",
+      "$this",
+      "$index",
+      "$parent",
+      "$result"
+    ]
+  },
+  "agreed": true,
+  "mismatches": [],
+  "evidence": [
+    {
+      "id": "s.lambda::$env",
+      "surface": "s.lambda",
+      "asks": "Is $env bound at s.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "s.lambda::$input",
+      "surface": "s.lambda",
+      "asks": "Is $input bound at s.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "s.lambda::$var",
+      "surface": "s.lambda",
+      "asks": "Is $var bound at s.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "s.lambda::$auth",
+      "surface": "s.lambda",
+      "asks": "Is $auth bound at s.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "s.lambda::console",
+      "surface": "s.lambda",
+      "asks": "Is console bound at s.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "s.lambda::crypto",
+      "surface": "s.lambda",
+      "asks": "Is crypto bound at s.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "s.lambda::$this",
+      "surface": "s.lambda",
+      "asks": "Is $this bound at s.lambda?",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "s.lambda::$index",
+      "surface": "s.lambda",
+      "asks": "Is $index bound at s.lambda?",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "s.lambda::$parent",
+      "surface": "s.lambda",
+      "asks": "Is $parent bound at s.lambda?",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "s.lambda::$result",
+      "surface": "s.lambda",
+      "asks": "Is $result bound at s.lambda?",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "s.lambda::$acc",
+      "surface": "s.lambda",
+      "asks": "Is $acc bound at s.lambda? (the name #221 guessed)",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "fl.lambda::$env",
+      "surface": "fl.lambda",
+      "asks": "Is $env bound at fl.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "fl.lambda::$input",
+      "surface": "fl.lambda",
+      "asks": "Is $input bound at fl.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "fl.lambda::$var",
+      "surface": "fl.lambda",
+      "asks": "Is $var bound at fl.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "fl.lambda::$auth",
+      "surface": "fl.lambda",
+      "asks": "Is $auth bound at fl.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "fl.lambda::console",
+      "surface": "fl.lambda",
+      "asks": "Is console bound at fl.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "fl.lambda::crypto",
+      "surface": "fl.lambda",
+      "asks": "Is crypto bound at fl.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "fl.lambda::$this",
+      "surface": "fl.lambda",
+      "asks": "Is $this bound at fl.lambda?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "fl.lambda::$index",
+      "surface": "fl.lambda",
+      "asks": "Is $index bound at fl.lambda?",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "fl.lambda::$parent",
+      "surface": "fl.lambda",
+      "asks": "Is $parent bound at fl.lambda?",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "fl.lambda::$result",
+      "surface": "fl.lambda",
+      "asks": "Is $result bound at fl.lambda?",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "fl.lambda::$acc",
+      "surface": "fl.lambda",
+      "asks": "Is $acc bound at fl.lambda? (the name #221 guessed)",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "map::$env",
+      "surface": "map",
+      "asks": "Is $env bound at map?",
+      "verdict": "ok",
+      "value": "[true,true,true,true]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "map::$input",
+      "surface": "map",
+      "asks": "Is $input bound at map?",
+      "verdict": "ok",
+      "value": "[true,true,true,true]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "map::$var",
+      "surface": "map",
+      "asks": "Is $var bound at map?",
+      "verdict": "ok",
+      "value": "[true,true,true,true]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "map::$auth",
+      "surface": "map",
+      "asks": "Is $auth bound at map?",
+      "verdict": "ok",
+      "value": "[true,true,true,true]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "map::console",
+      "surface": "map",
+      "asks": "Is console bound at map?",
+      "verdict": "ok",
+      "value": "[true,true,true,true]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "map::crypto",
+      "surface": "map",
+      "asks": "Is crypto bound at map?",
+      "verdict": "ok",
+      "value": "[true,true,true,true]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "map::$this",
+      "surface": "map",
+      "asks": "Is $this bound at map?",
+      "verdict": "ok",
+      "value": "[true,true,true,true]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "map::$index",
+      "surface": "map",
+      "asks": "Is $index bound at map?",
+      "verdict": "ok",
+      "value": "[true,true,true,true]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "map::$parent",
+      "surface": "map",
+      "asks": "Is $parent bound at map?",
+      "verdict": "ok",
+      "value": "[true,true,true,true]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "map::$result",
+      "surface": "map",
+      "asks": "Is $result bound at map?",
+      "verdict": "ok",
+      "value": "[false,false,false,false]",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "map::$acc",
+      "surface": "map",
+      "asks": "Is $acc bound at map? (the name #221 guessed)",
+      "verdict": "ok",
+      "value": "[false,false,false,false]",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "filter::$env",
+      "surface": "filter",
+      "asks": "Is $env bound at filter?",
+      "verdict": "ok",
+      "value": "[1,2,3,4]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "filter::$input",
+      "surface": "filter",
+      "asks": "Is $input bound at filter?",
+      "verdict": "ok",
+      "value": "[1,2,3,4]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "filter::$var",
+      "surface": "filter",
+      "asks": "Is $var bound at filter?",
+      "verdict": "ok",
+      "value": "[1,2,3,4]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "filter::$auth",
+      "surface": "filter",
+      "asks": "Is $auth bound at filter?",
+      "verdict": "ok",
+      "value": "[1,2,3,4]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "filter::console",
+      "surface": "filter",
+      "asks": "Is console bound at filter?",
+      "verdict": "ok",
+      "value": "[1,2,3,4]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "filter::crypto",
+      "surface": "filter",
+      "asks": "Is crypto bound at filter?",
+      "verdict": "ok",
+      "value": "[1,2,3,4]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "filter::$this",
+      "surface": "filter",
+      "asks": "Is $this bound at filter?",
+      "verdict": "ok",
+      "value": "[1,2,3,4]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "filter::$index",
+      "surface": "filter",
+      "asks": "Is $index bound at filter?",
+      "verdict": "ok",
+      "value": "[1,2,3,4]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "filter::$parent",
+      "surface": "filter",
+      "asks": "Is $parent bound at filter?",
+      "verdict": "ok",
+      "value": "[1,2,3,4]",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "filter::$result",
+      "surface": "filter",
+      "asks": "Is $result bound at filter?",
+      "verdict": "ok",
+      "value": "[]",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "filter::$acc",
+      "surface": "filter",
+      "asks": "Is $acc bound at filter? (the name #221 guessed)",
+      "verdict": "ok",
+      "value": "[]",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "some::$env",
+      "surface": "some",
+      "asks": "Is $env bound at some?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "some::$input",
+      "surface": "some",
+      "asks": "Is $input bound at some?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "some::$var",
+      "surface": "some",
+      "asks": "Is $var bound at some?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "some::$auth",
+      "surface": "some",
+      "asks": "Is $auth bound at some?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "some::console",
+      "surface": "some",
+      "asks": "Is console bound at some?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "some::crypto",
+      "surface": "some",
+      "asks": "Is crypto bound at some?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "some::$this",
+      "surface": "some",
+      "asks": "Is $this bound at some?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "some::$index",
+      "surface": "some",
+      "asks": "Is $index bound at some?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "some::$parent",
+      "surface": "some",
+      "asks": "Is $parent bound at some?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "some::$result",
+      "surface": "some",
+      "asks": "Is $result bound at some?",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "some::$acc",
+      "surface": "some",
+      "asks": "Is $acc bound at some? (the name #221 guessed)",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "every::$env",
+      "surface": "every",
+      "asks": "Is $env bound at every?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "every::$input",
+      "surface": "every",
+      "asks": "Is $input bound at every?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "every::$var",
+      "surface": "every",
+      "asks": "Is $var bound at every?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "every::$auth",
+      "surface": "every",
+      "asks": "Is $auth bound at every?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "every::console",
+      "surface": "every",
+      "asks": "Is console bound at every?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "every::crypto",
+      "surface": "every",
+      "asks": "Is crypto bound at every?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "every::$this",
+      "surface": "every",
+      "asks": "Is $this bound at every?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "every::$index",
+      "surface": "every",
+      "asks": "Is $index bound at every?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "every::$parent",
+      "surface": "every",
+      "asks": "Is $parent bound at every?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "every::$result",
+      "surface": "every",
+      "asks": "Is $result bound at every?",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "every::$acc",
+      "surface": "every",
+      "asks": "Is $acc bound at every? (the name #221 guessed)",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "find::$env",
+      "surface": "find",
+      "asks": "Is $env bound at find?",
+      "verdict": "ok",
+      "value": "1",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "find::$input",
+      "surface": "find",
+      "asks": "Is $input bound at find?",
+      "verdict": "ok",
+      "value": "1",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "find::$var",
+      "surface": "find",
+      "asks": "Is $var bound at find?",
+      "verdict": "ok",
+      "value": "1",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "find::$auth",
+      "surface": "find",
+      "asks": "Is $auth bound at find?",
+      "verdict": "ok",
+      "value": "1",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "find::console",
+      "surface": "find",
+      "asks": "Is console bound at find?",
+      "verdict": "ok",
+      "value": "1",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "find::crypto",
+      "surface": "find",
+      "asks": "Is crypto bound at find?",
+      "verdict": "ok",
+      "value": "1",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "find::$this",
+      "surface": "find",
+      "asks": "Is $this bound at find?",
+      "verdict": "ok",
+      "value": "1",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "find::$index",
+      "surface": "find",
+      "asks": "Is $index bound at find?",
+      "verdict": "ok",
+      "value": "1",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "find::$parent",
+      "surface": "find",
+      "asks": "Is $parent bound at find?",
+      "verdict": "ok",
+      "value": "1",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "find::$result",
+      "surface": "find",
+      "asks": "Is $result bound at find?",
+      "verdict": "ok",
+      "value": "null",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "find::$acc",
+      "surface": "find",
+      "asks": "Is $acc bound at find? (the name #221 guessed)",
+      "verdict": "ok",
+      "value": "null",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "findIndex::$env",
+      "surface": "findIndex",
+      "asks": "Is $env bound at findIndex?",
+      "verdict": "ok",
+      "value": "0",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "findIndex::$input",
+      "surface": "findIndex",
+      "asks": "Is $input bound at findIndex?",
+      "verdict": "ok",
+      "value": "0",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "findIndex::$var",
+      "surface": "findIndex",
+      "asks": "Is $var bound at findIndex?",
+      "verdict": "ok",
+      "value": "0",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "findIndex::$auth",
+      "surface": "findIndex",
+      "asks": "Is $auth bound at findIndex?",
+      "verdict": "ok",
+      "value": "0",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "findIndex::console",
+      "surface": "findIndex",
+      "asks": "Is console bound at findIndex?",
+      "verdict": "ok",
+      "value": "0",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "findIndex::crypto",
+      "surface": "findIndex",
+      "asks": "Is crypto bound at findIndex?",
+      "verdict": "ok",
+      "value": "0",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "findIndex::$this",
+      "surface": "findIndex",
+      "asks": "Is $this bound at findIndex?",
+      "verdict": "ok",
+      "value": "0",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "findIndex::$index",
+      "surface": "findIndex",
+      "asks": "Is $index bound at findIndex?",
+      "verdict": "ok",
+      "value": "0",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "findIndex::$parent",
+      "surface": "findIndex",
+      "asks": "Is $parent bound at findIndex?",
+      "verdict": "ok",
+      "value": "0",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "findIndex::$result",
+      "surface": "findIndex",
+      "asks": "Is $result bound at findIndex?",
+      "verdict": "ok",
+      "value": "-1",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "findIndex::$acc",
+      "surface": "findIndex",
+      "asks": "Is $acc bound at findIndex? (the name #221 guessed)",
+      "verdict": "ok",
+      "value": "-1",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "reduce::$env",
+      "surface": "reduce",
+      "asks": "Is $env bound at reduce?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "reduce::$input",
+      "surface": "reduce",
+      "asks": "Is $input bound at reduce?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "reduce::$var",
+      "surface": "reduce",
+      "asks": "Is $var bound at reduce?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "reduce::$auth",
+      "surface": "reduce",
+      "asks": "Is $auth bound at reduce?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "reduce::console",
+      "surface": "reduce",
+      "asks": "Is console bound at reduce?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "reduce::crypto",
+      "surface": "reduce",
+      "asks": "Is crypto bound at reduce?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "reduce::$this",
+      "surface": "reduce",
+      "asks": "Is $this bound at reduce?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "reduce::$index",
+      "surface": "reduce",
+      "asks": "Is $index bound at reduce?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "reduce::$parent",
+      "surface": "reduce",
+      "asks": "Is $parent bound at reduce?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "reduce::$result",
+      "surface": "reduce",
+      "asks": "Is $result bound at reduce?",
+      "verdict": "ok",
+      "value": "true",
+      "bound": true,
+      "expected": true
+    },
+    {
+      "id": "reduce::$acc",
+      "surface": "reduce",
+      "asks": "Is $acc bound at reduce? (the name #221 guessed)",
+      "verdict": "ok",
+      "value": "false",
+      "bound": false,
+      "expected": false
+    },
+    {
+      "id": "reduce.sums",
+      "surface": "reduce",
+      "asks": "Does $result accumulate — does [1,2,3,4] reduce to 10?",
+      "verdict": "ok",
+      "value": "10"
+    },
+    {
+      "id": "reduce.$index.values",
+      "surface": "reduce",
+      "asks": "Is $index the element position (0+1+2+3 = 6)?",
+      "verdict": "ok",
+      "value": "6"
+    },
+    {
+      "id": "reduce.$parent.value",
+      "surface": "reduce",
+      "asks": "Is $parent the whole piped array?",
+      "verdict": "ok",
+      "value": "[1,2,3,4]"
+    },
+    {
+      "id": "map.$this.value",
+      "surface": "map",
+      "asks": "Is $this the element (doubling [1,2,3,4] gives [2,4,6,8])?",
+      "verdict": "ok",
+      "value": "[2,4,6,8]"
+    },
+    {
+      "id": "fl.lambda.$this.value",
+      "surface": "fl.lambda",
+      "asks": "Is $this the piped value in fl.lambda (5 * 2 = 10)?",
+      "verdict": "ok",
+      "value": "10"
+    },
+    {
+      "id": "s.lambda.$var.value",
+      "surface": "s.lambda",
+      "asks": "Does $var carry the stack variables by name?",
+      "verdict": "ok",
+      "value": "7"
+    },
+    {
+      "id": "s.lambda.$input.value",
+      "surface": "s.lambda",
+      "asks": "Does $input carry the function input?",
+      "verdict": "ok",
+      "value": "3"
+    },
+    {
+      "id": "s.lambda.bare_var",
+      "surface": "s.lambda",
+      "asks": "LOAD-BEARING: is a stack variable injected as a bare $name (or a bare name) identifier?",
+      "verdict": "ok",
+      "value": "{\"dollarName\":\"undefined\",\"bareName\":\"undefined\",\"viaVar\":7}"
+    },
+    {
+      "id": "fl.lambda.bare_var",
+      "surface": "fl.lambda",
+      "asks": "LOAD-BEARING: is a stack variable injected as a bare $name (or a bare name) identifier?",
+      "verdict": "ok",
+      "value": "{\"dollarName\":\"undefined\",\"bareName\":\"undefined\",\"viaVar\":7}"
+    },
+    {
+      "id": "map.bare_var",
+      "surface": "map",
+      "asks": "LOAD-BEARING: is a stack variable injected as a bare $name (or a bare name) identifier?",
+      "verdict": "ok",
+      "value": "[\"{\\\"dollarName\\\":\\\"undefined\\\",\\\"bareName\\\":\\\"undefined\\\",\\\"viaVar\\\":7}\",\"{\\\"dollarName\\\":\\\"undefined\\\",\\\"bareName\\\":\\\"undefined\\\",\\\"viaVar\\\":7}\",\"{\\\"dollarName\\\":\\\"undefined\\\",\\\"bareName\\\":\\\"undefined\\\",\\\"viaVar\\\":7}\",\"{\\\"dollarName\\\":\\\"undefined\\\",\\\"bareName\\\":\\\"undefined\\\",\\\"viaVar\\\":7}\"]"
+    },
+    {
+      "id": "s.lambda.unknown_dollar.typeof",
+      "surface": "s.lambda",
+      "asks": "Does `typeof $nope` throw, or report undefined?",
+      "verdict": "ok",
+      "value": "undefined"
+    },
+    {
+      "id": "fl.lambda.unknown_dollar.typeof",
+      "surface": "fl.lambda",
+      "asks": "Does `typeof $nope` throw, or report undefined?",
+      "verdict": "ok",
+      "value": "undefined"
+    },
+    {
+      "id": "s.lambda.unknown_dollar.read",
+      "surface": "s.lambda",
+      "asks": "What happens when an unbound $identifier is READ?",
+      "verdict": "ok",
+      "value": "[Line 1:Char 1] $nope is not defined"
+    },
+    {
+      "id": "fl.lambda.unknown_dollar.read",
+      "surface": "fl.lambda",
+      "asks": "What happens when an unbound $identifier is READ?",
+      "verdict": "ok",
+      "value": "[Line 1:Char 1] $nope is not defined"
+    },
+    {
+      "id": "s.lambda.top_level_import",
+      "surface": "s.lambda",
+      "asks": "Is a top-level import a syntax error?",
+      "verdict": "ok",
+      "value": "[Line 1:Char 7] Unexpected \"{\""
+    },
+    {
+      "id": "fl.lambda.top_level_import",
+      "surface": "fl.lambda",
+      "asks": "Is a top-level import a syntax error?",
+      "verdict": "ok",
+      "value": "[Line 1:Char 7] Unexpected \"{\""
+    },
+    {
+      "id": "s.lambda.top_level_export",
+      "surface": "s.lambda",
+      "asks": "Is a top-level export a syntax error?",
+      "verdict": "ok",
+      "value": "[Line 1:Char 0] Unexpected \"export\""
+    },
+    {
+      "id": "fl.lambda.top_level_export",
+      "surface": "fl.lambda",
+      "asks": "Is a top-level export a syntax error?",
+      "verdict": "ok",
+      "value": "[Line 1:Char 0] Unexpected \"export\""
+    },
+    {
+      "id": "s.lambda.dynamic_import",
+      "surface": "s.lambda",
+      "asks": "Does a literal import('node:…') resolve? (#265: instance-dependent)",
+      "verdict": "ok",
+      "value": "function"
+    },
+    {
+      "id": "fl.lambda.dynamic_import",
+      "surface": "fl.lambda",
+      "asks": "Does a literal import('node:…') resolve? (#265: instance-dependent)",
+      "verdict": "ok",
+      "value": "function"
+    },
+    {
+      "id": "s.lambda.dynamic_import.npm",
+      "surface": "s.lambda",
+      "asks": "Does a literal import('npm:…') resolve?",
+      "verdict": "ok",
+      "value": "object"
+    },
+    {
+      "id": "fl.lambda.dynamic_import.npm",
+      "surface": "fl.lambda",
+      "asks": "Does a literal import('npm:…') resolve?",
+      "verdict": "ok",
+      "value": "object"
+    },
+    {
+      "id": "s.lambda.require.literal",
+      "surface": "s.lambda",
+      "asks": "Does a literal require('…') resolve?",
+      "verdict": "ok",
+      "value": "function"
+    },
+    {
+      "id": "fl.lambda.require.literal",
+      "surface": "fl.lambda",
+      "asks": "Does a literal require('…') resolve?",
+      "verdict": "ok",
+      "value": "function"
+    },
+    {
+      "id": "s.lambda.import_unresolvable",
+      "surface": "s.lambda",
+      "asks": "DISCRIMINATOR: which layer answers a specifier that cannot exist — the bundler (build time) or the runtime (run time)?",
+      "verdict": "ok",
+      "value": "[Line 1:Char 11] Module not found \"file:///tmp/zz-no-such-module-265.js\"."
+    },
+    {
+      "id": "fl.lambda.import_unresolvable",
+      "surface": "fl.lambda",
+      "asks": "DISCRIMINATOR: which layer answers a specifier that cannot exist — the bundler (build time) or the runtime (run time)?",
+      "verdict": "ok",
+      "value": "[Line 1:Char 11] Module not found \"file:///tmp/zz-no-such-module-265.js\"."
+    },
+    {
+      "id": "s.lambda.require",
+      "surface": "s.lambda",
+      "asks": "Is require() available?",
+      "verdict": "ok",
+      "value": "function"
+    },
+    {
+      "id": "fl.lambda.require",
+      "surface": "fl.lambda",
+      "asks": "Is require() available?",
+      "verdict": "ok",
+      "value": "function"
+    },
+    {
+      "id": "s.lambda.ts_syntax.annotation",
+      "surface": "s.lambda",
+      "asks": "Does a TypeScript type annotation survive?",
+      "verdict": "ok",
+      "value": "1"
+    },
+    {
+      "id": "fl.lambda.ts_syntax.annotation",
+      "surface": "fl.lambda",
+      "asks": "Does a TypeScript type annotation survive?",
+      "verdict": "ok",
+      "value": "1"
+    },
+    {
+      "id": "s.lambda.ts_syntax.as",
+      "surface": "s.lambda",
+      "asks": "Does a TypeScript `as` cast survive?",
+      "verdict": "ok",
+      "value": "1"
+    },
+    {
+      "id": "fl.lambda.ts_syntax.as",
+      "surface": "fl.lambda",
+      "asks": "Does a TypeScript `as` cast survive?",
+      "verdict": "ok",
+      "value": "1"
+    },
+    {
+      "id": "s.lambda.ts_syntax.interface",
+      "surface": "s.lambda",
+      "asks": "Does a TypeScript interface declaration survive?",
+      "verdict": "ok",
+      "value": "1"
+    },
+    {
+      "id": "fl.lambda.ts_syntax.interface",
+      "surface": "fl.lambda",
+      "asks": "Does a TypeScript interface declaration survive?",
+      "verdict": "ok",
+      "value": "1"
+    },
+    {
+      "id": "s.lambda.await_toplevel",
+      "surface": "s.lambda",
+      "asks": "Is top-level await allowed?",
+      "verdict": "ok",
+      "value": "9"
+    },
+    {
+      "id": "fl.lambda.await_toplevel",
+      "surface": "fl.lambda",
+      "asks": "Is top-level await allowed?",
+      "verdict": "ok",
+      "value": "9"
+    },
+    {
+      "id": "s.lambda.no_return",
+      "surface": "s.lambda",
+      "asks": "What does a body with no return produce?",
+      "verdict": "ok",
+      "value": "null"
+    },
+    {
+      "id": "fl.lambda.no_return",
+      "surface": "fl.lambda",
+      "asks": "What does a body with no return produce?",
+      "verdict": "ok",
+      "value": "null"
+    },
+    {
+      "id": "s.lambda.empty_body",
+      "surface": "s.lambda",
+      "asks": "What does an empty body produce?",
+      "verdict": "exception",
+      "exception": "Param: code - Missing param: code"
+    },
+    {
+      "id": "fl.lambda.empty_body",
+      "surface": "fl.lambda",
+      "asks": "What does an empty body produce?",
+      "verdict": "ok",
+      "value": "null"
+    },
+    {
+      "id": "s.lambda.console.captured",
+      "surface": "s.lambda",
+      "asks": "Does console.log break the body?",
+      "verdict": "ok",
+      "value": "after-log"
+    },
+    {
+      "id": "fl.lambda.console.captured",
+      "surface": "fl.lambda",
+      "asks": "Does console.log break the body?",
+      "verdict": "ok",
+      "value": "after-log"
+    },
+    {
+      "id": "s.lambda.globalThis",
+      "surface": "s.lambda",
+      "asks": "Which globals are reachable?",
+      "verdict": "ok",
+      "value": "Deno,queueMicrotask,atob,btoa,createImageBitmap,caches,crypto,fetch,EventSource,reportError,structuredClone,onunhandledrejection,navigator,alert,confirm,prompt,localStorage,sessionStorage,name,close,closed,onerror,onload,onbeforeunload,onunload,__SENTRY__,aws4,axios,cryptojs,ethers,fastXmlParser,jose,require,_,rjsf,DateTime,luxon,mailparser,math,moment,dns,http,https,net,url,nodemailer,socks,promisify,uuid,zeebe,utils,azure,Buffer,clearInterval,clearTimeout,performance,process,setInterval,setTimeout,self"
+    },
+    {
+      "id": "fl.lambda.globalThis",
+      "surface": "fl.lambda",
+      "asks": "Which globals are reachable?",
+      "verdict": "ok",
+      "value": "Deno,queueMicrotask,atob,btoa,createImageBitmap,caches,crypto,fetch,EventSource,reportError,structuredClone,onunhandledrejection,navigator,alert,confirm,prompt,localStorage,sessionStorage,name,close,closed,onerror,onload,onbeforeunload,onunload,__SENTRY__,aws4,axios,cryptojs,ethers,fastXmlParser,jose,require,_,rjsf,DateTime,luxon,mailparser,math,moment,dns,http,https,net,url,nodemailer,socks,promisify,uuid,zeebe,utils,azure,Buffer,clearInterval,clearTimeout,performance,process,setInterval,setTimeout,self"
+    },
+    {
+      "id": "s.lambda.shared_text.typeof",
+      "surface": "s.lambda",
+      "asks": "One body text at both surfaces: what does `typeof $this` report?",
+      "verdict": "ok",
+      "value": "undefined",
+      "expected": "undefined"
+    },
+    {
+      "id": "fl.lambda.shared_text.typeof",
+      "surface": "fl.lambda",
+      "asks": "One body text at both surfaces: what does `typeof $this` report?",
+      "verdict": "ok",
+      "value": "number",
+      "expected": "number"
+    },
+    {
+      "id": "s.lambda.shared_text.guard",
+      "surface": "s.lambda",
+      "asks": "One body text at both surfaces: does the ordinary defensive guard answer for ITS OWN surface?",
+      "verdict": "ok",
+      "value": "false",
+      "expected": "false"
+    },
+    {
+      "id": "fl.lambda.shared_text.guard",
+      "surface": "fl.lambda",
+      "asks": "One body text at both surfaces: does the ordinary defensive guard answer for ITS OWN surface?",
+      "verdict": "ok",
+      "value": "true",
+      "expected": "true"
+    },
+    {
+      "id": "fl.transform.$this",
+      "surface": "fl.transform",
+      "asks": "Does fl.transform take an XanoScript expression over $this rather than a JS body?",
+      "verdict": "ok",
+      "value": "null"
+    },
+    {
+      "id": "fl.transform.js_body",
+      "surface": "fl.transform",
+      "asks": "Does fl.transform accept a JS lambda body at all?",
+      "verdict": "exception",
+      "exception": "Not numeric."
+    },
+    {
+      "id": "slotting.reduce.short",
+      "surface": "slotting",
+      "asks": "reduce: leading spec-optional argument omitted — does the engine accept the call?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 2 passed, at least 3 expected"
+    },
+    {
+      "id": "arity.reduce.0",
+      "surface": "arity",
+      "asks": "reduce: is a 0-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 1 passed, at least 3 expected"
+    },
+    {
+      "id": "arity.reduce.1",
+      "surface": "arity",
+      "asks": "reduce: is a 1-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 2 passed, at least 3 expected"
+    },
+    {
+      "id": "arity.reduce.2",
+      "surface": "arity",
+      "asks": "reduce: is a 2-argument call accepted?",
+      "verdict": "ok",
+      "value": "10"
+    },
+    {
+      "id": "slotting.array_fill.short",
+      "surface": "slotting",
+      "asks": "array_fill: leading spec-optional argument omitted — does the engine accept the call?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.array_fill.0",
+      "surface": "arity",
+      "asks": "array_fill: is a 0-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.array_fill.1",
+      "surface": "arity",
+      "asks": "array_fill: is a 1-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.array_fill.2",
+      "surface": "arity",
+      "asks": "array_fill: is a 2-argument call accepted?",
+      "verdict": "ok",
+      "value": "[\"x\",\"x\",\"x\"]"
+    },
+    {
+      "id": "slotting.encrypt.short",
+      "surface": "slotting",
+      "asks": "encrypt: leading spec-optional argument omitted — does the engine accept the call?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.encrypt.0",
+      "surface": "arity",
+      "asks": "encrypt: is a 0-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.encrypt.1",
+      "surface": "arity",
+      "asks": "encrypt: is a 1-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.encrypt.2",
+      "surface": "arity",
+      "asks": "encrypt: is a 2-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.encrypt.3",
+      "surface": "arity",
+      "asks": "encrypt: is a 3-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Invalid algorithm mode."
+    },
+    {
+      "id": "slotting.decrypt.short",
+      "surface": "slotting",
+      "asks": "decrypt: leading spec-optional argument omitted — does the engine accept the call?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.decrypt.0",
+      "surface": "arity",
+      "asks": "decrypt: is a 0-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.decrypt.1",
+      "surface": "arity",
+      "asks": "decrypt: is a 1-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.decrypt.2",
+      "surface": "arity",
+      "asks": "decrypt: is a 2-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments"
+    },
+    {
+      "id": "arity.decrypt.3",
+      "surface": "arity",
+      "asks": "decrypt: is a 3-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Invalid algorithm mode."
+    },
+    {
+      "id": "slotting.crypto_jws_encode.short",
+      "surface": "slotting",
+      "asks": "crypto_jws_encode: leading spec-optional argument omitted — does the engine accept the call?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 2 passed, at least 4 expected"
+    },
+    {
+      "id": "arity.crypto_jws_encode.0",
+      "surface": "arity",
+      "asks": "crypto_jws_encode: is a 0-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 1 passed, at least 4 expected"
+    },
+    {
+      "id": "arity.crypto_jws_encode.1",
+      "surface": "arity",
+      "asks": "crypto_jws_encode: is a 1-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 2 passed, at least 4 expected"
+    },
+    {
+      "id": "arity.crypto_jws_encode.2",
+      "surface": "arity",
+      "asks": "crypto_jws_encode: is a 2-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 3 passed, at least 4 expected"
+    },
+    {
+      "id": "arity.crypto_jws_encode.3",
+      "surface": "arity",
+      "asks": "crypto_jws_encode: is a 3-argument call accepted?",
+      "verdict": "ok",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJAeGFubyI6IntcInN1YlwiOlwidTFcIn0iLCJpYXQiOjE3ODY1NzU0OTUsIm5iZiI6MTc4NjU3NTQ5NX0.D7To-MVcHjvF_wRBlx9hCbKiAiUAGqd1RTwvFycF0po"
+    },
+    {
+      "id": "slotting.crypto_jws_decode.short",
+      "surface": "slotting",
+      "asks": "crypto_jws_decode: leading spec-optional argument omitted — does the engine accept the call?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 2 passed, at least 4 expected"
+    },
+    {
+      "id": "arity.crypto_jws_decode.0",
+      "surface": "arity",
+      "asks": "crypto_jws_decode: is a 0-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 1 passed, at least 4 expected"
+    },
+    {
+      "id": "arity.crypto_jws_decode.1",
+      "surface": "arity",
+      "asks": "crypto_jws_decode: is a 1-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 2 passed, at least 4 expected"
+    },
+    {
+      "id": "arity.crypto_jws_decode.2",
+      "surface": "arity",
+      "asks": "crypto_jws_decode: is a 2-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 3 passed, at least 4 expected"
+    },
+    {
+      "id": "arity.crypto_jws_decode.3",
+      "surface": "arity",
+      "asks": "crypto_jws_decode: is a 3-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Unable to load and verify the token."
+    },
+    {
+      "id": "slotting.crypto_jwe_encode.short",
+      "surface": "slotting",
+      "asks": "crypto_jwe_encode: leading spec-optional argument omitted — does the engine accept the call?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 2 passed, at least 5 expected"
+    },
+    {
+      "id": "arity.crypto_jwe_encode.0",
+      "surface": "arity",
+      "asks": "crypto_jwe_encode: is a 0-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 1 passed, at least 5 expected"
+    },
+    {
+      "id": "arity.crypto_jwe_encode.1",
+      "surface": "arity",
+      "asks": "crypto_jwe_encode: is a 1-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 2 passed, at least 5 expected"
+    },
+    {
+      "id": "arity.crypto_jwe_encode.2",
+      "surface": "arity",
+      "asks": "crypto_jwe_encode: is a 2-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 3 passed, at least 5 expected"
+    },
+    {
+      "id": "arity.crypto_jwe_encode.3",
+      "surface": "arity",
+      "asks": "crypto_jwe_encode: is a 3-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 4 passed, at least 5 expected"
+    },
+    {
+      "id": "arity.crypto_jwe_encode.4",
+      "surface": "arity",
+      "asks": "crypto_jwe_encode: is a 4-argument call accepted?",
+      "verdict": "ok",
+      "value": "eyJhbGciOiJBMTI4S1ciLCJlbmMiOiJBMTI4Q0JDLUhTMjU2IiwiemlwIjoiREVGIn0.P0QoEkniGK4p1FPWLEJ4kVQbYmvzdkWkNpgubRAe_OfAhnmjZrieIQ.lPZprgAQ0M2HDDWbTkuUqw.7sXLYSAEvvY0c37gpxiQaU3OcuqL9fjPOee16UdoHrEkuKgblS82niAkIl4v21K7Y4g__blysJXR_voOis97uA.kOMH4BIozVVPje7Wr7jA6Q"
+    },
+    {
+      "id": "slotting.crypto_jwe_decode.short",
+      "surface": "slotting",
+      "asks": "crypto_jwe_decode: leading spec-optional argument omitted — does the engine accept the call?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 2 passed, at least 5 expected"
+    },
+    {
+      "id": "arity.crypto_jwe_decode.0",
+      "surface": "arity",
+      "asks": "crypto_jwe_decode: is a 0-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 1 passed, at least 5 expected"
+    },
+    {
+      "id": "arity.crypto_jwe_decode.1",
+      "surface": "arity",
+      "asks": "crypto_jwe_decode: is a 1-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 2 passed, at least 5 expected"
+    },
+    {
+      "id": "arity.crypto_jwe_decode.2",
+      "surface": "arity",
+      "asks": "crypto_jwe_decode: is a 2-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 3 passed, at least 5 expected"
+    },
+    {
+      "id": "arity.crypto_jwe_decode.3",
+      "surface": "arity",
+      "asks": "crypto_jwe_decode: is a 3-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Too few arguments: 4 passed, at least 5 expected"
+    },
+    {
+      "id": "arity.crypto_jwe_decode.4",
+      "surface": "arity",
+      "asks": "crypto_jwe_decode: is a 4-argument call accepted?",
+      "verdict": "exception",
+      "exception": "Unsupported input"
+    },
+    {
+      "id": "slotting.reduce.null_leading",
+      "surface": "slotting",
+      "asks": "Can a null placeholder stand in for an omitted leading argument?",
+      "verdict": "exception",
+      "exception": "Param: filters.0.arg.0 - Null value detected in array."
+    }
+  ]
+}

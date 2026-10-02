@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "rootDir": ".",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": false,
+    "declaration": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "verbatimModuleSyntax": true,
+    // A test that statically imports `examples/sandbox` pulls those files into
+    // the program, and their `@xano/sdk` specifiers would otherwise
+    // self-resolve to the built `dist/` (stale, and missing non-exported types).
+    // Mirrors the mappings in `examples/sandbox/tsconfig.json` and vitest.config.ts.
+    "paths": {
+      "@xano/sdk": ["./src/index.ts"],
+      "@xano/sdk/node": ["./src/node.ts"],
+      "@xano/sdk/codegen": ["./src/codegen-entry.ts"],
+      "@xano/sdk/bundle": ["./src/bundle.ts"]
+    }
+  },
+  "include": ["src", "test"],
+  "exclude": ["dist", "node_modules", "examples"]
+}
