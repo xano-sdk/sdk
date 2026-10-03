@@ -1230,6 +1230,7 @@ function renderLambdaSection(): string[] {
     "",
     '- `lam.fn(({ $result, $this }) => $result + $this, { surface?, capture? })` — name a `surface` to check it here, or omit it and the call site checks it.',
     '- `lam.raw("return 1", { surface })` — text, same validation.',
+    '- `lam.raw(code, { surface, unchecked: true })` — sends a body that does not parse (a fixture pinning the engine\'s syntax-error answer); skips the parse check only, here and at the `s.lambda` / `fl.*` site.',
     '- `lam.file("./lambdas/total.ts")` — a default-exported function in its own module (path relative to the caller), read as text at build time. NODE ONLY: `import { lam } from "@xano/sdk/node"` (isomorphic `lam` has no `file`). Only the default export\'s BODY is sent, so a value import, a second export or a top-level helper is refused — move helpers inside; `import type` / `import { type X }` are free. `@xano/sdk/lambda-globals` types the globals below program-wide: keep modules in `xano/lambdas/` (its scaffold tsconfig loads it) or `import type {} from` it under their own tsconfig.',
     "",
     "Nothing from the enclosing scope crosses: the body is sent as TEXT, so a closed-over",

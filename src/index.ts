@@ -136,6 +136,7 @@ export type {
   LambdaBindings,
   LambdaBody,
   LambdaOptions,
+  RawLambdaOptions,
   AmbientBindings,
   IteratingBindings,
   CaptureValue,

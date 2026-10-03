@@ -100,6 +100,8 @@ const STACK = /* @__PURE__ */ (() => [
   "stack.to-throw-isolated-var",
   "statement.reserved-input-name",
   "statement.omitted-input",
+  "statement.unknown-input",
+  "db.addon-unknown-input",
   "db.bulk-update-partial-item",
   "db.internal-column-read",
   "db.query-output-mixed-roots",
@@ -126,6 +128,8 @@ const STACK = /* @__PURE__ */ (() => [
 const NO_CALLER = ["stack.auth-no-caller", "stack.auth-null-host"] as const;
 /** A saved unit test (`tests: [...]`) pointed at the live datasource. */
 const TEST_LIVE = "test.live-datasource";
+/** A saved unit test (`tests: [...]`) passing an input its object does not declare — the engine drops it. */
+const TEST_INPUT = "test.unknown-input";
 /** A toolset entry exposing a tool that reads `auth()` with no auth table, or an `id: 0` entry. */
 const TOOLSET = /* @__PURE__ */ (() =>
   [ENV, MIXED, ...VALUES, "toolset.tool-reads-auth-ungated", "toolset.tool-ref-zero"] as const)();
@@ -157,12 +161,15 @@ export const ALLOWABLE_WARNINGS = /* @__PURE__ */ (() => ({
     "middleware.post-merge-list",
     "response.unbound-return",
     "mcp.elicit-outside-mcp",
+    TEST_INPUT,
+    "cache.ttl-not-positive",
   ],
-  function: [TEST_LIVE, ...STACK, "function.reserved-input-name", "response.unbound-return"],
+  function: [TEST_LIVE, ...STACK, "function.reserved-input-name", "response.unbound-return", TEST_INPUT, "cache.ttl-not-positive"],
   task: [...STACK, ...NO_CALLER, "mcp.elicit-outside-mcp"],
   middleware: [
     TEST_LIVE,
     ...STACK,
+    TEST_INPUT,
     "middleware.input-never-bound",
     "middleware.inp-unresolvable",
     "middleware.auth-null-host",

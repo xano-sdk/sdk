@@ -2499,7 +2499,8 @@ export function checkReservedColumnNames(tables: readonly TableDef[], bag: Diagn
  * An active `cache` on a query or function whose ttl is not a positive whole
  * number. The engine stores a response only when ttl > 0, yet an active cache
  * still looks it up on every call — and costs a function its fast path — so
- * the cache holds nothing and costs every call.
+ * the cache holds nothing and costs every call. A WARNING: the engine accepts
+ * the shape, so a fixture pinning that behavior accepts it with `diagnostics.allow`.
  */
 export function checkCacheTtl(sections: Readonly<Record<string, unknown[] | undefined>>, bag: DiagnosticBag): void {
   for (const key of ["query", "function"] as const) {
@@ -2507,7 +2508,7 @@ export function checkCacheTtl(sections: Readonly<Record<string, unknown[] | unde
       const o = obj as { name?: unknown; cache?: { active?: unknown; ttl?: unknown } } | null;
       const ttl = o?.cache?.ttl;
       if (o?.cache?.active !== true || (Number.isInteger(ttl) && (ttl as number) > 0)) continue;
-      bag.error(
+      bag.warn(
         "cache.ttl-not-positive",
         `${key} "${String(o.name)}": \`cache.ttl\` is ${JSON.stringify(ttl) ?? String(ttl)} — the engine stores a response only ` +
           `for a ttl of 1 or more whole seconds, so this cache never holds anything while every call still looks it up. ` +
@@ -2740,9 +2741,10 @@ const NAMED_INPUT_CALLS: Readonly<Record<string, readonly [string, "function.id"
  *
  * The engine binds a call's inputs by the target's declared names and drops
  * every other key without a word, so a misspelt key (`wieght_kg`) leaves the
- * real input at its default. An ERROR: the binding never reaches the target,
- * whatever the author meant by it. Typed code is refused by the call's `input`
- * type already; this catches JavaScript, casts and name-addressed targets.
+ * real input at its default. A WARNING, not an error: the engine accepts the
+ * call and drops the key, so a fixture pinning that drop accepts it with
+ * `diagnostics.allow`. Typed code is refused by the call's `input` type
+ * already; this catches JavaScript, casts and name-addressed targets.
  *
  * An `input.dbLink` counts as the columns it expands into. Skipped: a target the
  * bundle does not carry, one whose dbLink table it does not carry, and an
@@ -2793,7 +2795,7 @@ export function checkUnknownCallInputs(
           const key = (entry as { name?: unknown })?.name;
           if (typeof key !== "string" || target.inputs.has(key)) continue;
           const near = nearestKey(key, declared);
-          bag.error(
+          bag.warn(
             "statement.unknown-input",
             `${owner}: \`${surface}\` of ${sdkKindName(section, {})} "${target.name}" passes \`${key}\`, which ` +
               `that ${sdkKindName(section, {})} does not declare — the engine drops it, so the target never sees the ` +
@@ -2835,7 +2837,7 @@ export function checkUnitTests(sections: Readonly<Record<string, unknown[] | und
           if (typeof key !== "string" || declared.has(key)) continue;
           const known = [...declared];
           const near = nearestKey(key, known);
-          bag.error(
+          bag.warn(
             "test.unknown-input",
             `${test}: \`input\` passes \`${key}\`, which the ${sdkKindName(payloadKey, record)} does not declare — the engine ` +
               `drops it, so the test runs without it.` +
@@ -2953,7 +2955,7 @@ export function checkAddonAttachments(
             if (declared !== null && typeof e.name === "string" && !declared.has(e.name)) {
               const known = [...declared];
               const near = nearestKey(e.name, known);
-              bag.error(
+              bag.warn(
                 "db.addon-unknown-input",
                 `${owner}: the attached ${label} is passed \`${e.name}\`, which that addon does not declare — ` +
                   `the engine drops it, so the addon runs with its input unset and grafts nothing.` +

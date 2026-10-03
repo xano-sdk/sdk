@@ -172,7 +172,7 @@ export function assertLambdaFilterArgs(name: string, args: ReadonlyArray<Value |
   if (site === undefined) return;
   const code = args[site.slot];
   if (!isInspectableBody(code) || code.value.trim() === "") return;
-  assertLambdaBody(code.value, site.surface, `fl.${name}`);
+  assertLambdaBody(code.value, site.surface, `fl.${name}`, isUncheckedBody(code));
 }
 
 /**
@@ -204,7 +204,7 @@ export function assertLambdaStatement(storedName: string, authored: Record<strin
   if (site === undefined) return;
   const code = authored[site.field];
   if (!isInspectableBody(code) || code.value.trim() === "") return;
-  assertLambdaBody(code.value, site.surface, "s.lambda");
+  assertLambdaBody(code.value, site.surface, "s.lambda", isUncheckedBody(code));
 }
 
 /**
@@ -359,6 +359,19 @@ export interface LambdaOptions<C = Record<string, never>> {
    * explicit and the second parameter of the body destructures it.
    */
   capture?: C;
+}
+
+/** Options for {@link lam.raw}: the shared ones, and the one that is only meaningful for text. */
+export interface RawLambdaOptions extends LambdaOptions<Record<string, CaptureValue>> {
+  /**
+   * Send the body even though it does not parse. For a fixture that pins what
+   * the engine answers to a syntax error — the engine accepts the statement at
+   * import and fails when it runs, so the answer is only reachable by sending
+   * it. Skips the parse check ONLY, here and at the `s.lambda` / `fl.*` site the
+   * value is dropped into: the binding, module-syntax and empty-body checks
+   * still apply. Never the fix for a body that should work.
+   */
+  unchecked?: boolean;
 }
 
 // --- body extraction ------------------------------------------------------------
@@ -899,9 +912,9 @@ function suggestion(token: string, surface: LambdaSurface): string | undefined {
  * plain `c.text(...)` body — an author who never adopts `lam.*` gets the same
  * answer at the same moment.
  */
-export function assertLambdaBody(body: string, surface: LambdaSurface, source = `${PREFIX}.fn`): void {
+export function assertLambdaBody(body: string, surface: LambdaSurface, source = `${PREFIX}.fn`, skipParse = false): void {
   try {
-    assertBody(body, surface, source);
+    assertBody(body, surface, source, skipParse);
   } catch (err) {
     // A collector is installed only while a STORED workspace is being decoded,
     // where the author is not authoring: they are reading back a body that is
@@ -937,6 +950,25 @@ export function collectLambdaBodyProblems<T>(onProblem: (problem: string) => voi
   } finally {
     collector = previous;
   }
+}
+
+/** Where the bodies authored with `lam.raw(..., { unchecked: true })` are kept — shared like {@link SYNTAX_CHECK}. */
+const UNCHECKED_BODIES = Symbol.for("xanosdk.lambda.unchecked");
+
+/**
+ * The bodies whose author opted out of the parse check. A body is plain
+ * `const:text` by the time the statement or filter guard sees it, so the
+ * opt-out rides on the value's identity rather than on a key the encoder
+ * would have to know to strip.
+ */
+function uncheckedBodies(): WeakSet<object> {
+  const slot = globalThis as Record<symbol, WeakSet<object> | undefined>;
+  return (slot[UNCHECKED_BODIES] ??= new WeakSet());
+}
+
+/** Whether `code` is a body its author declared unchecked for syntax. See {@link RawLambdaOptions.unchecked}. */
+function isUncheckedBody(code: unknown): boolean {
+  return typeof code === "object" && code !== null && uncheckedBodies().has(code);
 }
 
 /** Where {@link installLambdaSyntaxCheck} puts the parser — shared by every copy of the SDK in a process. */
@@ -980,7 +1012,7 @@ export function lambdaSyntaxError(body: string): LambdaSyntaxError | undefined {
 }
 
 /** The guard proper. See {@link assertLambdaBody}, which routes its failures. */
-function assertBody(body: string, surface: LambdaSurface, source: string): void {
+function assertBody(body: string, surface: LambdaSurface, source: string, skipParse: boolean): void {
   if (body.trim() === "") {
     throw new Error(
       `${source}: the lambda body is empty. A lambda must return a value — the engine refuses a statement with no code.`,
@@ -1034,7 +1066,7 @@ function assertBody(body: string, surface: LambdaSurface, source: string): void 
     );
   }
 
-  const syntax = lambdaSyntaxError(body);
+  const syntax = skipParse ? undefined : lambdaSyntaxError(body);
   if (syntax !== undefined) {
     throw new Error(
       `${source}: the lambda body does not parse — ${syntax.message} (body line ${syntax.line}, column ${syntax.column}: ` +
@@ -1546,6 +1578,7 @@ export function lambdaValue(
   source: string,
   fromFunction = false,
   captureReads: readonly string[] = [],
+  skipParse = false,
 ): Value {
   // The prelude first: it is what validates the keys, and a key that is not an
   // identifier deserves that message rather than one about a rename.
@@ -1567,7 +1600,7 @@ export function lambdaValue(
           `${Object.keys(LAMBDA_BINDINGS).map((k) => JSON.stringify(k)).join(", ")}.`,
       );
     }
-    assertLambdaBody(code, opts.surface, source);
+    assertLambdaBody(code, opts.surface, source, skipParse);
   }
   return c.text(code);
 }
@@ -1608,8 +1641,14 @@ function fn<S extends LambdaSurface = "reduce", C extends CaptureRecord<C> = Rec
  * build time, or lifted verbatim out of a pulled workspace. It is guarded, not
  * extracted, so the guard cannot be sidestepped by choosing this form.
  */
-function raw(code: string, opts?: LambdaOptions<Record<string, CaptureValue>>): Value {
-  return lambdaValue(code, opts, `${PREFIX}.raw`);
+function raw(code: string, opts?: RawLambdaOptions): Value {
+  const { unchecked, ...rest } = opts ?? {};
+  if (unchecked !== undefined && typeof unchecked !== "boolean") {
+    throw new Error(`${PREFIX}.raw: \`unchecked\` must be true or false — got ${JSON.stringify(unchecked)}.`);
+  }
+  const value = lambdaValue(code, rest, `${PREFIX}.raw`, false, [], unchecked === true);
+  if (unchecked === true) uncheckedBodies().add(value);
+  return value;
 }
 
 /**
