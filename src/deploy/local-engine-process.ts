@@ -705,6 +705,12 @@ export interface StopAllOutcome {
   stopped: StopOutcome[];
   /** Running engines no record on this machine claims. Listed, never touched. */
   foreign: string[];
+  /**
+   * Records, as read with the listing, that name an engine which was not
+   * running. The only rows `stop --all` may clear beyond the ones it stopped: a
+   * record written after the listing belongs to an engine started since.
+   */
+  stale: LocalEngineRecord[];
   /** What crashed engines left running, stopped — see {@link stopOrphanedEngineProcesses}. */
   orphans: OrphanSweep;
 }
@@ -723,8 +729,14 @@ export interface StopAllOutcome {
  */
 export function stopAllEngines(opts: EngineCommandOptions & Omit<OrphanSweepOptions, "env">): StopAllOutcome {
   const env = opts.env ?? process.env;
+  // Records BEFORE the listing: an engine a record names was started before the
+  // record, so it is in a listing taken after. Read the other way round, a deploy
+  // landing between the two leaves a record that names no engine the listing saw.
+  const records = listEngineRecords(env);
   const running = listEngines(opts);
-  const ours = new Set(listEngineRecords(env).map((r) => r.name));
+  const ours = new Set(records.map((r) => r.name));
+  const live = new Set(running.map((e) => e.name));
+  const stale = records.filter((r) => !live.has(r.name));
   const stopped: StopOutcome[] = [];
   const foreign: string[] = [];
   for (const engine of running) {
@@ -733,7 +745,7 @@ export function stopAllEngines(opts: EngineCommandOptions & Omit<OrphanSweepOpti
   }
   // After ours are stopped: what a crashed engine left behind is visible to no
   // enumeration, so `stop --all` is the one command that can say it cleared it.
-  return { stopped, foreign, orphans: stopOrphanedEngineProcesses(opts) };
+  return { stopped, foreign, stale, orphans: stopOrphanedEngineProcesses(opts) };
 }
 
 // ── orphans ────────────────────────────────────────────────────────────────

@@ -18,12 +18,21 @@
  * ignore: reads fall back to empty rather than throwing, exactly as the hosted
  * state does, and a stale row is reconciled away rather than trusted.
  *
+ * **Every write holds a lock.** Each writer reads the whole file, changes one
+ * entry and writes the whole file back, and many `xanosdk` processes on one
+ * machine write it at once (parallel deploys and stops from different
+ * projects). The write itself is atomic; the read-modify-write is not, so
+ * without the lock the last writer silently undid the others — a lost record,
+ * a lost completed-import marker, or a cleared record brought back by a write
+ * that read the file before the clear (xanots/sdk#568).
+ *
  * Node-only, reached by a lazy import from the command layer.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { atomicWrite } from "../util/atomic-write.js";
+import { withFileLockSync } from "../util/file-lock.js";
 import { localEngineHome } from "./local-engine-config.js";
 import { filledAt, withValidFilled, type FilledMarker } from "./keep-data.js";
 
@@ -177,9 +186,10 @@ export function setEngineRecord(
   record: LocalEngineRecord,
   env: NodeJS.ProcessEnv = process.env,
 ): void {
-  const state = readLocalEngineState(env);
-  state.engines[projectKey(dir)] = { ...record, project: projectKey(dir) };
-  writeState(state, env);
+  updateState(env, (state) => {
+    state.engines[projectKey(dir)] = { ...record, project: projectKey(dir) };
+    return { changed: true, result: undefined };
+  });
 }
 
 /**
@@ -191,21 +201,22 @@ export function setEngineRecord(
  * precedes this one.
  */
 export function markEngineFilled(dir: string, url: string, env: NodeJS.ProcessEnv = process.env): void {
-  const state = readLocalEngineState(env);
-  const record = state.engines[projectKey(dir)];
-  if (record === undefined) return;
-  state.engines[projectKey(dir)] = { ...record, filled: filledAt(url) };
-  writeState(state, env);
+  updateState(env, (state) => {
+    const record = state.engines[projectKey(dir)];
+    if (record === undefined) return { changed: false, result: undefined };
+    state.engines[projectKey(dir)] = { ...record, filled: filledAt(url) };
+    return { changed: true, result: undefined };
+  });
 }
 
 /** Drop a project's record. Returns whether there was one. */
 export function clearEngineRecord(dir: string, env: NodeJS.ProcessEnv = process.env): boolean {
-  const state = readLocalEngineState(env);
-  const key = projectKey(dir);
-  if (!(key in state.engines)) return false;
-  delete state.engines[key];
-  writeState(state, env);
-  return true;
+  return updateState(env, (state) => {
+    const key = projectKey(dir);
+    if (!(key in state.engines)) return { changed: false, result: false };
+    delete state.engines[key];
+    return { changed: true, result: true };
+  });
 }
 
 /**
@@ -220,14 +231,77 @@ export function clearEngineRecordsNamed(
   name: string,
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
-  const state = readLocalEngineState(env);
-  const cleared = Object.entries(state.engines)
-    .filter(([, record]) => record.name === name)
-    .map(([key]) => key);
-  if (cleared.length === 0) return [];
-  for (const key of cleared) delete state.engines[key];
-  writeState(state, env);
-  return cleared;
+  return updateState(env, (state) => {
+    const cleared = Object.entries(state.engines)
+      .filter(([, record]) => record.name === name)
+      .map(([key]) => key);
+    for (const key of cleared) delete state.engines[key];
+    return { changed: cleared.length > 0, result: cleared };
+  });
+}
+
+/**
+ * Drop the given records, but only where the file still holds that same record:
+ * same name, same `startedAt`. Returns the projects cleared.
+ *
+ * For a record read earlier and judged stale. A deploy that re-recorded the
+ * project since then wrote a record this must not clear, and the comparison is
+ * what tells the two apart.
+ */
+export function clearEngineRecordsStillMatching(
+  records: readonly LocalEngineRecord[],
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (records.length === 0) return [];
+  return updateState(env, (state) => {
+    const cleared: string[] = [];
+    for (const seen of records) {
+      const key = projectKey(seen.project);
+      const current = state.engines[key];
+      if (current === undefined || current.name !== seen.name || current.startedAt !== seen.startedAt) continue;
+      delete state.engines[key];
+      cleared.push(key);
+    }
+    return { changed: cleared.length > 0, result: cleared };
+  });
+}
+
+/** The lock every read-modify-write of the record file holds: `<cache root>/engines.json.lock`. */
+function localEngineStateLockPath(env: NodeJS.ProcessEnv = process.env): string {
+  return `${localEngineStatePath(env)}.lock`;
+}
+
+/**
+ * Apply `edit` to the file as one read-modify-write that no other process can
+ * interleave with. `edit` changes the state it is handed in place and says
+ * whether it changed anything; the file is written only when it did.
+ *
+ * The edit runs first on an unlocked read, and an edit that changes nothing
+ * there returns at once. That answer is as good as a locked one: every write
+ * is an atomic rename, so the unlocked read is a whole file some writer left,
+ * and "there was nothing to clear" holds at the moment it was read. What it
+ * buys is that a no-op — `local-engine stop` for an engine with no record,
+ * possibly on a machine that never ran one — creates no directory and never waits
+ * on another process's lock. Anything that changes the file re-reads it under
+ * the lock and applies the edit to what it reads there.
+ *
+ * The cache root is created owner-only BEFORE the lock is taken: the lock
+ * helper creates a missing parent with default permissions (0755 under the
+ * usual umask), which would let every user on the machine list the root.
+ */
+function updateState<T>(
+  env: NodeJS.ProcessEnv,
+  edit: (state: LocalEngineState) => { changed: boolean; result: T },
+): T {
+  const probe = edit(readLocalEngineState(env));
+  if (!probe.changed) return probe.result;
+  mkdirSync(localEngineHome(env), { recursive: true, mode: 0o700 });
+  return withFileLockSync(localEngineStateLockPath(env), () => {
+    const state = readLocalEngineState(env);
+    const outcome = edit(state);
+    if (outcome.changed) writeState(state, env);
+    return outcome.result;
+  });
 }
 
 /**

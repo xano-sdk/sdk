@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {

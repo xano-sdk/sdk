@@ -1247,24 +1247,6 @@ async function assertInstalledSdkPeer(
     }
   };
 
-  // A version built for a retired SDK package declares no `@xano/sdk` peer, so
-  // the range below has no opinion — and it imports a package this project does
-  // not have, so every command that loads the backend fails.
-  const retired = retiredSdkNamed(manifest);
-  if (retired !== undefined) {
-    const version = typeof manifest["version"] === "string" ? `@${manifest["version"]}` : "";
-    const undone = await undo();
-    throw refusal(
-      `${pkg}${version} is built for the retired \`${retired}\`, not \`@xano/sdk\` — it cannot load in this project.`,
-      undone
-        ? `It was uninstalled again, so this project is exactly as it was. Install the version built for this SDK ` +
-          `with \`xanosdk marketplace install ${pkg}\`.`
-        : `${pkg}${version} is still installed and still a dependency, so every command that loads the backend ` +
-          `fails until it is replaced. Install the version built for this SDK over it with ` +
-          `\`xanosdk marketplace install ${pkg}@latest\`.`,
-    );
-  }
-
   const sdkVersion = readVersion();
   const range = sdkPeerSkew(manifest, sdkVersion);
   if (range === null) return;
@@ -1282,19 +1264,6 @@ async function assertInstalledSdkPeer(
         `modules will refuse it until this is settled. Upgrade with ` +
         `\`${addCommandFor(dir, "@xano/sdk@latest")}\`, or run \`xanosdk marketplace remove ${pkg}\` to drop ` +
         `it and its settings together.`,
-  );
-}
-
-/** The SDK packages that were retired by a rename; a module built for one cannot load against `@xano/sdk`. */
-const RETIRED_SDK_PACKAGES = ["@xanosdk/core", "@xanosdk/sdk"] as const;
-
-/** The retired SDK package a module's manifest depends on, peers on, or optionally depends on, if any. */
-function retiredSdkNamed(manifest: Record<string, unknown>): string | undefined {
-  return RETIRED_SDK_PACKAGES.find((retired) =>
-    ["dependencies", "peerDependencies", "optionalDependencies"].some((field) => {
-      const deps = manifest[field];
-      return typeof deps === "object" && deps !== null && Object.prototype.hasOwnProperty.call(deps, retired);
-    }),
   );
 }
 

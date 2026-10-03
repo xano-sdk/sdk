@@ -103,6 +103,7 @@ import {
 import { acquireEngine, type EngineFetch } from "../deploy/local-engine-release.js";
 import {
   clearEngineRecordsNamed,
+  clearEngineRecordsStillMatching,
   listEngineRecords,
   type LocalEngineRecord,
 } from "../deploy/local-engine-state.js";
@@ -406,15 +407,16 @@ async function runStopAll(
   // records are still cleared, because they are hints to engines that by the
   // same reasoning cannot be running.
   if (entry === undefined) {
+    const records = listEngineRecords(env);
     const orphans = stopOrphanedEngineProcesses(sweepOptions(opts, env));
-    return reportStopAll({ stopped: [], foreign: [], orphans }, clearOrphanRecords(env), args);
+    return reportStopAll({ stopped: [], foreign: [], orphans }, clearEngineRecordsStillMatching(records, env), args);
   }
   const outcome = stopAllEngines({ entry, run: opts.run, ...sweepOptions(opts, env) });
-  // AFTER the stop, by construction: `stopAllEngines` cleared the record of
-  // every engine the enumeration listed as ours, and a foreign engine has no
-  // record at all — so every row still standing names an engine that is not
-  // running. Those are the orphans, and they cost no second enumeration.
-  reportStopAll(outcome, clearOrphanRecords(env), args);
+  // `stopAllEngines` cleared the record of every engine it stopped, and a
+  // foreign engine has no record. What is left to clear are the records it saw
+  // name an engine that was not running, and only if unchanged: a deploy that
+  // started an engine since the listing has written a record this must keep.
+  reportStopAll(outcome, clearEngineRecordsStillMatching(outcome.stale, env), args);
 }
 
 /** The sweep's seams, off this command's. */
@@ -445,20 +447,6 @@ export function reportOrphanSweep(orphans: OrphanSweep): void {
         `run \`xanosdk local-engine stop --all\` again in a moment.`,
     );
   }
-}
-
-/**
- * Drop every remaining record, returning the projects cleared.
- *
- * Only ever called where "remaining" already means "names an engine that is not
- * running" — see the call site, which is the thing that makes it true.
- */
-function clearOrphanRecords(env: NodeJS.ProcessEnv): string[] {
-  const cleared: string[] = [];
-  for (const name of new Set(listEngineRecords(env).map((r) => r.name))) {
-    cleared.push(...clearEngineRecordsNamed(name, env));
-  }
-  return cleared;
 }
 
 function reportStopAll(
