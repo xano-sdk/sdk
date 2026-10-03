@@ -835,10 +835,22 @@ function views(args: KindDecodeArgs): DefEntry | null {
           if (condition) {
             where = ["where", condition.expr];
           } else {
-            args.ctx.problem(
-              "verify-mismatch",
-              `table view "${view.name}" has a filter expression this decoder could not invert; the generated view would return more rows than the original`,
-            );
+            args.ctx.use(CODEGEN_MODULE, "rawWhere");
+            where = ["where", call("rawWhere", lit(view.expression))];
+            if (hasBlankOperator(view.expression)) {
+              args.ctx.problem(
+                "workspace-defect",
+                `table view "${view.name}" has a filter row with no operator — what the editor stores for a row ` +
+                  `added and never configured — and the engine cannot apply it, so the view fails wherever it is ` +
+                  `read. Carried verbatim via rawWhere(); give the row an operator or remove it upstream`,
+                "blank view filter",
+              );
+            } else {
+              args.ctx.problem(
+                "value-fallback",
+                `table view "${view.name}" has a filter expression no \`where\` condition can express; carried verbatim via rawWhere()`,
+              );
+            }
           }
         }
         return obj(
@@ -855,6 +867,20 @@ function views(args: KindDecodeArgs): DefEntry | null {
       }),
     ),
   ];
+}
+
+/**
+ * Whether a stored expression list holds a live comparison with a blank `op`.
+ * A group's own `statement` is its dead branch and is not read.
+ */
+function hasBlankOperator(nodes: unknown): boolean {
+  if (!Array.isArray(nodes)) return false;
+  return nodes.some((node) => {
+    const n = node as { type?: unknown; group?: { expression?: unknown }; statement?: { op?: unknown } } | null;
+    if (n === null || typeof n !== "object") return false;
+    if (n.type === "group") return hasBlankOperator(n.group?.expression);
+    return n.statement?.op === "";
+  });
 }
 
 // --- the twelve kinds --------------------------------------------------------

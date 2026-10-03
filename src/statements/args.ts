@@ -329,10 +329,15 @@ export function isVarName(name: string): boolean {
   return VAR_NAME.test(name);
 }
 
-export function assertNewVarName(statement: string, name: unknown, arg = "name"): void {
+/**
+ * `unchecked` is the statement's `uncheckedAs` option: a binding a pulled
+ * workspace stores under a name this rule refuses. It skips the rule only — the
+ * name must still be a non-empty string.
+ */
+export function assertNewVarName(statement: string, name: unknown, arg = "name", unchecked?: unknown): void {
   assertVarName(statement, name, arg);
   if (name === "") throw new Error(`Statement "${statement}": argument "${arg}" is empty — name the variable.`);
-  if (!VAR_NAME.test(name as string)) {
+  if (unchecked !== true && !VAR_NAME.test(name as string)) {
     throw new Error(
       `Statement "${statement}": ${JSON.stringify(name)} is not a variable name — use a letter or underscore, ` +
         `then letters, digits and underscores (e.g. "order_total").`,

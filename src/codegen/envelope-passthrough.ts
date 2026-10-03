@@ -22,6 +22,7 @@
 import type { FilterXdo, StackItemXdo } from "../types/xdo.js";
 import type { Statement } from "../statements/statement.js";
 import { hasUnreadableInput } from "../validate/normalize.js";
+import { isVarName } from "../statements/args.js";
 import { decodeFilterChain, decodeValue } from "./value.js";
 import type { DecodeContext } from "./context.js";
 import type { Value } from "../values/value.js";
@@ -161,6 +162,13 @@ export function envelopePassthrough(
     annotations.asFilters = outputFilters;
     entries.push(["asFilters", arr(chain.exprs)]);
     symbols.push(...chain.symbols);
+  }
+
+  // A binding stored under a name the variable-name rule refuses. The engine
+  // binds and reads it by that exact name, so the pull keeps it and says so.
+  if (typeof stored.as === "string" && stored.as !== "" && !isVarName(stored.as)) {
+    annotations.uncheckedAs = true;
+    entries.push(["uncheckedAs", lit(true)]);
   }
 
   // An `input[]` the engine cannot reach is dropped rather than carried: the

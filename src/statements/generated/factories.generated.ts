@@ -24,123 +24,123 @@ export const generated = {
     external: {
       mcp: {
         server_details: /** `mvp:mcp_server_details` — fields: as, url, bearer_token, connection_type */
-(a: { as?: string; url: Value; bearer_token?: Value; connection_type?: "sse" | "stream" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:mcp_server_details", a),
+(a: { as?: string; url: Value; bearer_token?: Value; connection_type?: "sse" | "stream" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:mcp_server_details", a),
         tool: {
           list: /** `mvp:mcp_list_tools` — fields: as, url, bearer_token, connection_type */
-(a: { as?: string; url: Value; bearer_token?: Value; connection_type?: "sse" | "stream" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:mcp_list_tools", a),
+(a: { as?: string; url: Value; bearer_token?: Value; connection_type?: "sse" | "stream" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:mcp_list_tools", a),
           run: /** `mvp:mcp_call_tool` — fields: as, url, bearer_token, connection_type, tool, args */
-(a: { as?: string; url: Value; bearer_token?: Value; connection_type?: "sse" | "stream" | Value; tool: Value; args?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:mcp_call_tool", a),
+(a: { as?: string; url: Value; bearer_token?: Value; connection_type?: "sse" | "stream" | Value; tool: Value; args?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:mcp_call_tool", a),
         },
       },
     },
   },
   api: {
     request: /** `mvp:api_request` — fields: as, url, method, params, headers, timeout, follow_location, verify_host, verify_peer, ca_certificate, certificate, certificate_pass, private_key, private_key_pass */
-(a: { as?: string; url: Value; method?: "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "PATCH" | Value; params?: Value; headers?: Value; timeout?: Value; follow_location?: Value; verify_host?: Value; verify_peer?: Value; ca_certificate?: Value; certificate?: Value; certificate_pass?: Value; private_key?: Value; private_key_pass?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored }): Statement => fromSpec("mvp:api_request", a),
+(a: { as?: string; url: Value; method?: "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "PATCH" | Value; params?: Value; headers?: Value; timeout?: Value; follow_location?: Value; verify_host?: Value; verify_peer?: Value; ca_certificate?: Value; certificate?: Value; certificate_pass?: Value; private_key?: Value; private_key_pass?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:api_request", a),
     stream: /** `mvp:streaming_api_response` — fields: value */
 (a: { value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:streaming_api_response", a),
   },
   array: {
     difference: /** `mvp:array_difference` — fields: as, expr, value, by */
-(a: { as?: string; expr?: Value; value?: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:array_difference", a),
+(a: { as?: string; expr?: Value; value?: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_difference", a),
     every: /** `mvp:array_every` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_every", a),
+(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_every", a),
     filter: /** `mvp:array_filter` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:array_filter", a),
+(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_filter", a),
     filter_count: /** `mvp:array_filter_count` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:array_filter_count", a),
+(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_filter_count", a),
     find: /** `mvp:array_find` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_find", a),
+(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_find", a),
     find_index: /** `mvp:array_find_index` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:array_find_index", a),
+(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_find_index", a),
     group_by: /** `mvp:array_group_by` — fields: as, expr, by */
-(a: { as?: string; expr?: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:array_group_by", a),
+(a: { as?: string; expr?: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_group_by", a),
     has: /** `mvp:array_has` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:array_has", a),
+(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_has", a),
     intersection: /** `mvp:array_intersection` — fields: as, expr, value, by */
-(a: { as?: string; expr?: Value; value?: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:array_intersection", a),
+(a: { as?: string; expr?: Value; value?: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_intersection", a),
     merge: /** `mvp:array_merge` — fields: name, value */
 (a: { name?: string; value?: Value; disabled?: boolean; description?: string; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_merge", a),
     partition: /** `mvp:array_partition` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:array_partition", a),
+(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_partition", a),
     pop: /** `mvp:array_pop` — fields: name, as */
-(a: { name?: string; as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_pop", a),
+(a: { name?: string; as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_pop", a),
     push: /** `mvp:array_push` — fields: name, value */
 (a: { name?: string; value: Value; disabled?: boolean; description?: string; output?: OutputAuthored }): Statement => fromSpec("mvp:array_push", a),
     shift: /** `mvp:array_shift` — fields: name, as */
-(a: { name?: string; as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:array_shift", a),
+(a: { name?: string; as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_shift", a),
     unshift: /** `mvp:array_unshift` — fields: name, value */
 (a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:array_unshift", a),
   },
   await: /** `mvp:async_function_await` — fields: as, ids, timeout */
-(a: { as?: string; ids?: Value; timeout?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:async_function_await", a),
+(a: { as?: string; ids?: Value; timeout?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:async_function_await", a),
   cloud: {
     algolia: {
       request: /** `mvp:algolia_request` — fields: as, application_id, api_key, url, method, payload */
-(a: { as?: string; application_id: Value; api_key: Value; url: Value; method?: "POST" | "GET" | "DELETE" | "PUT" | Value; payload: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored }): Statement => fromSpec("mvp:algolia_request", a),
+(a: { as?: string; application_id: Value; api_key: Value; url: Value; method?: "POST" | "GET" | "DELETE" | "PUT" | Value; payload: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:algolia_request", a),
     },
     aws: {
       opensearch: {
         document: /** `mvp:amazon_opensearch_document` — fields: as, auth_type, key_id, access_key, region, base_url, method, index, doc_id, doc */
-(a: { as?: string; auth_type?: "IAM" | "master" | Value; key_id: Value; access_key: Value; region: Value; base_url: Value; method?: "GET" | "POST" | "PUT" | "DELETE" | Value; index: Value; doc_id: Value; doc: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:amazon_opensearch_document", a),
+(a: { as?: string; auth_type?: "IAM" | "master" | Value; key_id: Value; access_key: Value; region: Value; base_url: Value; method?: "GET" | "POST" | "PUT" | "DELETE" | Value; index: Value; doc_id: Value; doc: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:amazon_opensearch_document", a),
         query: /** `mvp:amazon_opensearch_query` — fields: as, auth_type, key_id, access_key, region, base_url, index, payload, size, from, included_fields, return_type, expression, sort */
-(a: { as?: string; auth_type?: "IAM" | "master" | Value; key_id: Value; access_key: Value; region: Value; base_url: Value; index: Value; payload: Value; size?: Value; from?: Value; included_fields?: Value; return_type?: "search" | "count" | Value; expression?: Value; sort?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:amazon_opensearch_query", a),
+(a: { as?: string; auth_type?: "IAM" | "master" | Value; key_id: Value; access_key: Value; region: Value; base_url: Value; index: Value; payload: Value; size?: Value; from?: Value; included_fields?: Value; return_type?: "search" | "count" | Value; expression?: Value; sort?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:amazon_opensearch_query", a),
         request: /** `mvp:amazon_opensearch_request` — fields: as, auth_type, key_id, access_key, region, method, url, query */
-(a: { as?: string; auth_type?: "IAM" | "master" | Value; key_id: Value; access_key: Value; region: Value; method?: "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "PATCH" | Value; url: Value; query: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:amazon_opensearch_request", a),
+(a: { as?: string; auth_type?: "IAM" | "master" | Value; key_id: Value; access_key: Value; region: Value; method?: "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "PATCH" | Value; url: Value; query: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:amazon_opensearch_request", a),
       },
       s3: {
         delete_file: /** `mvp:amazon_s3_delete_file` — fields: as, bucket, region, key, secret, file_key */
-(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; file_key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:amazon_s3_delete_file", a),
+(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; file_key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:amazon_s3_delete_file", a),
         get_file_info: /** `mvp:amazon_s3_get_file_metadata` — fields: as, bucket, region, key, secret, file_key */
-(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; file_key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:amazon_s3_get_file_metadata", a),
+(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; file_key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:amazon_s3_get_file_metadata", a),
         list_directory: /** `mvp:amazon_s3_list_directory` — fields: as, bucket, region, key, secret, prefix, next_page_token */
-(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; prefix?: Value; next_page_token?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:amazon_s3_list_directory", a),
+(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; prefix?: Value; next_page_token?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:amazon_s3_list_directory", a),
         read_file: /** `mvp:amazon_s3_create_var_from_file_resource` — fields: as, bucket, region, key, secret, file_key */
-(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; file_key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:amazon_s3_create_var_from_file_resource", a),
+(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; file_key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:amazon_s3_create_var_from_file_resource", a),
         sign_url: /** `mvp:amazon_s3_signed_url` — fields: as, bucket, region, key, secret, file_key, ttl */
-(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; file_key: Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:amazon_s3_signed_url", a),
+(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; file_key: Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:amazon_s3_signed_url", a),
         upload_file: /** `mvp:amazon_s3_upload_file` — fields: as, bucket, region, key, secret, file_key, file, metadata, object_lock_mode, object_lock_retain_until */
-(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; file_key?: Value; file: Value; metadata?: Value; object_lock_mode?: "compliance" | "governance" | Value; object_lock_retain_until?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:amazon_s3_upload_file", a),
+(a: { as?: string; bucket: Value; region: Value; key: Value; secret: Value; file_key?: Value; file: Value; metadata?: Value; object_lock_mode?: "compliance" | "governance" | Value; object_lock_retain_until?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:amazon_s3_upload_file", a),
       },
     },
     azure: {
       storage: {
         delete_file: /** `mvp:azure_blob_storage_delete_file` — fields: as, account_name, account_key, container_name, filePath */
-(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:azure_blob_storage_delete_file", a),
+(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:azure_blob_storage_delete_file", a),
         get_file_info: /** `mvp:azure_blob_storage_get_file_metadata` — fields: as, account_name, account_key, container_name, filePath */
-(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:azure_blob_storage_get_file_metadata", a),
+(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:azure_blob_storage_get_file_metadata", a),
         list_directory: /** `mvp:azure_blob_storage_list_directory` — fields: as, account_name, account_key, container_name, path */
-(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; path?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:azure_blob_storage_list_directory", a),
+(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; path?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:azure_blob_storage_list_directory", a),
         read_file: /** `mvp:azure_blob_storage_create_var_from_file_resource` — fields: as, account_name, account_key, container_name, filePath */
-(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:azure_blob_storage_create_var_from_file_resource", a),
+(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:azure_blob_storage_create_var_from_file_resource", a),
         sign_url: /** `mvp:azure_blob_storage_signed_url` — fields: as, account_name, account_key, container_name, path, ttl */
-(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; path: Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:azure_blob_storage_signed_url", a),
+(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; path: Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:azure_blob_storage_signed_url", a),
         upload_file: /** `mvp:azure_blob_storage_upload_file` — fields: as, account_name, account_key, container_name, filePath, file, metadata */
-(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; filePath: Value; file: Value; metadata?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:azure_blob_storage_upload_file", a),
+(a: { as?: string; account_name: Value; account_key: Value; container_name: Value; filePath: Value; file: Value; metadata?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:azure_blob_storage_upload_file", a),
       },
     },
     elasticsearch: {
       document: /** `mvp:elasticsearch_document` — fields: as, auth_type, key_id, access_key, base_url, index, method, doc_id, doc */
-(a: { as?: string; auth_type?: "Basic" | "Bearer" | "API Key" | Value; key_id: Value; access_key: Value; base_url: Value; index: Value; method?: "GET" | "POST" | "PUT" | "DELETE" | Value; doc_id: Value; doc: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:elasticsearch_document", a),
+(a: { as?: string; auth_type?: "Basic" | "Bearer" | "API Key" | Value; key_id: Value; access_key: Value; base_url: Value; index: Value; method?: "GET" | "POST" | "PUT" | "DELETE" | Value; doc_id: Value; doc: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:elasticsearch_document", a),
       query: /** `mvp:elasticsearch_query` — fields: as, auth_type, key_id, access_key, base_url, index, payload, size, from, included_fields, return_type, expression, sort */
-(a: { as?: string; auth_type?: "Basic" | "Bearer" | "API Key" | Value; key_id: Value; access_key: Value; base_url: Value; index: Value; payload: Value; size?: Value; from?: Value; included_fields?: Value; return_type?: "search" | "count" | Value; expression?: Value; sort?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:elasticsearch_query", a),
+(a: { as?: string; auth_type?: "Basic" | "Bearer" | "API Key" | Value; key_id: Value; access_key: Value; base_url: Value; index: Value; payload: Value; size?: Value; from?: Value; included_fields?: Value; return_type?: "search" | "count" | Value; expression?: Value; sort?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:elasticsearch_query", a),
       request: /** `mvp:elasticsearch_request` — fields: as, auth_type, key_id, access_key, method, url, payload */
-(a: { as?: string; auth_type?: "Basic" | "Bearer" | "API Key" | Value; key_id: Value; access_key: Value; method?: "POST" | "GET" | "PUT" | "DELETE" | "PATCH" | Value; url: Value; payload: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:elasticsearch_request", a),
+(a: { as?: string; auth_type?: "Basic" | "Bearer" | "API Key" | Value; key_id: Value; access_key: Value; method?: "POST" | "GET" | "PUT" | "DELETE" | "PATCH" | Value; url: Value; payload: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:elasticsearch_request", a),
     },
     google: {
       storage: {
         delete_file: /** `mvp:google_cloud_storage_delete_file` — fields: as, service_account, bucket, filePath */
-(a: { as?: string; service_account: Value; bucket: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:google_cloud_storage_delete_file", a),
+(a: { as?: string; service_account: Value; bucket: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:google_cloud_storage_delete_file", a),
         get_file_info: /** `mvp:google_cloud_storage_get_file_metadata` — fields: as, service_account, bucket, filePath */
-(a: { as?: string; service_account: Value; bucket: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:google_cloud_storage_get_file_metadata", a),
+(a: { as?: string; service_account: Value; bucket: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:google_cloud_storage_get_file_metadata", a),
         list_directory: /** `mvp:google_cloud_storage_list_directory` — fields: as, service_account, bucket, path */
-(a: { as?: string; service_account: Value; bucket: Value; path: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:google_cloud_storage_list_directory", a),
+(a: { as?: string; service_account: Value; bucket: Value; path: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:google_cloud_storage_list_directory", a),
         read_file: /** `mvp:google_cloud_storage_create_var_from_file_resource` — fields: as, service_account, bucket, filePath */
-(a: { as?: string; service_account: Value; bucket: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:google_cloud_storage_create_var_from_file_resource", a),
+(a: { as?: string; service_account: Value; bucket: Value; filePath: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:google_cloud_storage_create_var_from_file_resource", a),
         sign_url: /** `mvp:google_cloud_storage_signed_url` — fields: as, service_account, bucket, filePath, method, ttl */
-(a: { as?: string; service_account: Value; bucket: Value; filePath: Value; method?: "GET" | "POST" | Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:google_cloud_storage_signed_url", a),
+(a: { as?: string; service_account: Value; bucket: Value; filePath: Value; method?: "GET" | "POST" | Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:google_cloud_storage_signed_url", a),
         upload_file: /** `mvp:google_cloud_storage_upload_file` — fields: as, service_account, bucket, filePath, file, metadata */
-(a: { as?: string; service_account: Value; bucket: Value; filePath: Value; file: Value; metadata?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:google_cloud_storage_upload_file", a),
+(a: { as?: string; service_account: Value; bucket: Value; filePath: Value; file: Value; metadata?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:google_cloud_storage_upload_file", a),
       },
     },
   },
@@ -203,7 +203,7 @@ export const generated = {
 (a: { expr?: Value; value?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_start_with", a),
   },
   lambda: /** `mvp:lambda` — fields: as, code, timeout */
-(a: { as?: string; code: Value | LambdaBody<"s.lambda">; timeout?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:lambda", a),
+(a: { as?: string; code: Value | LambdaBody<"s.lambda">; timeout?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:lambda", a),
   math: {
     add: /** `mvp:math_add` — fields: name, value */
 (a: { name?: string; value: Value; disabled?: boolean; description?: string; output?: OutputAuthored }): Statement => fromSpec("mvp:math_add", a),
@@ -227,134 +227,134 @@ export const generated = {
   mcp: {
     oauth: {
       complete: /** `mvp:mcp_oauth_complete` — fields: as, request, decision, unsafe_user_id */
-(a: { as?: string; request: Value; decision: "approve" | "deny" | Value; unsafe_user_id?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:mcp_oauth_complete", a),
+(a: { as?: string; request: Value; decision: "approve" | "deny" | Value; unsafe_user_id?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:mcp_oauth_complete", a),
       request: /** `mvp:mcp_oauth_request` — fields: as, request */
-(a: { as?: string; request: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:mcp_oauth_request", a),
+(a: { as?: string; request: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:mcp_oauth_request", a),
       revoke: /** `mvp:mcp_oauth_revoke` — fields: as, mcp_server, user_id, grant_id, all */
-(a: { as?: string; mcp_server: Value; user_id?: Value; grant_id?: Value; all?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:mcp_oauth_revoke", a),
+(a: { as?: string; mcp_server: Value; user_id?: Value; grant_id?: Value; all?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:mcp_oauth_revoke", a),
     },
     progress: /** `mvp:mcp_progress` — fields: progress, total, message */
 (a: { progress: Value; total?: Value; message?: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:mcp_progress", a),
   },
   microservice: {
     request: /** `mvp:microservice_request` — fields: as, host, path, method, params, headers, timeout, follow_location */
-(a: { as?: string; host: Value; path: Value; method?: "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "PATCH" | Value; params?: Value; headers: Value; timeout?: Value; follow_location?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:microservice_request", a),
+(a: { as?: string; host: Value; path: Value; method?: "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "PATCH" | Value; params?: Value; headers: Value; timeout?: Value; follow_location?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:microservice_request", a),
   },
   object: {
     entries: /** `mvp:object_entries` — fields: as, value */
-(a: { as?: string; value?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:object_entries", a),
+(a: { as?: string; value?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:object_entries", a),
     keys: /** `mvp:object_keys` — fields: as, value */
-(a: { as?: string; value?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:object_keys", a),
+(a: { as?: string; value?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:object_keys", a),
     values: /** `mvp:object_values` — fields: as, value */
-(a: { as?: string; value?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:object_values", a),
+(a: { as?: string; value?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:object_values", a),
   },
   precondition: /** `mvp:precondition` — fields: expr, error_type, error, payload */
 (a: { expr?: Condition; error_type?: string; error?: Value; payload?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:precondition", a),
   realtime: {
     get_session: /** `mvp:get_session` — fields: as */
-(a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:get_session", a),
+(a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:get_session", a),
   },
   redis: {
     count: /** `mvp:redis_countlist` — fields: as, key */
-(a: { as?: string; key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_countlist", a),
+(a: { as?: string; key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_countlist", a),
     decr: /** `mvp:redis_decr` — fields: as, key, by */
-(a: { as?: string; key: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_decr", a),
+(a: { as?: string; key: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_decr", a),
     del: /** `mvp:redis_del` — fields: key */
 (a: { key: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:redis_del", a),
     get: /** `mvp:redis_get` — fields: as, key */
-(a: { as?: string; key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_get", a),
+(a: { as?: string; key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_get", a),
     has: /** `mvp:redis_has` — fields: as, key */
-(a: { as?: string; key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_has", a),
+(a: { as?: string; key: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_has", a),
     incr: /** `mvp:redis_incr` — fields: as, key, by */
-(a: { as?: string; key: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_incr", a),
+(a: { as?: string; key: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_incr", a),
     keys: /** `mvp:redis_keys` — fields: as, search */
-(a: { as?: string; search: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_keys", a),
+(a: { as?: string; search: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_keys", a),
     pop: /** `mvp:redis_poplist` — fields: as, key, count */
-(a: { as?: string; key: Value; count?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_poplist", a),
+(a: { as?: string; key: Value; count?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_poplist", a),
     push: /** `mvp:redis_pushlist` — fields: as, key, value */
-(a: { as?: string; key: Value; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_pushlist", a),
+(a: { as?: string; key: Value; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_pushlist", a),
     range: /** `mvp:redis_rangelist` — fields: as, key, start, stop */
-(a: { as?: string; key: Value; start?: Value; stop?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_rangelist", a),
+(a: { as?: string; key: Value; start?: Value; stop?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_rangelist", a),
     ratelimit: /** `mvp:redis_ratelimit` — fields: as, key, max, ttl, error */
-(a: { as?: string; key: Value; max?: Value; ttl?: Value; error?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_ratelimit", a),
+(a: { as?: string; key: Value; max?: Value; ttl?: Value; error?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_ratelimit", a),
     remove: /** `mvp:redis_remove_list` — fields: as, key, value, count */
-(a: { as?: string; key: Value; value: Value; count?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_remove_list", a),
+(a: { as?: string; key: Value; value: Value; count?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_remove_list", a),
     set: /** `mvp:redis_set` — fields: as, key, data, ttl, create_only */
-(a: { as?: string; key: Value; data: Value; ttl?: Value; create_only?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_set", a),
+(a: { as?: string; key: Value; data: Value; ttl?: Value; create_only?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_set", a),
     shift: /** `mvp:redis_shiftlist` — fields: as, key, count */
-(a: { as?: string; key: Value; count?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_shiftlist", a),
+(a: { as?: string; key: Value; count?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_shiftlist", a),
     unshift: /** `mvp:redis_unshiftlist` — fields: as, key, value */
-(a: { as?: string; key: Value; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:redis_unshiftlist", a),
+(a: { as?: string; key: Value; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:redis_unshiftlist", a),
   },
   security: {
     check_password: /** `mvp:check_pass` — fields: as, text_password, hash_password */
-(a: { as?: string; text_password: Value; hash_password: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored }): Statement => fromSpec("mvp:check_pass", a),
+(a: { as?: string; text_password: Value; hash_password: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:check_pass", a),
     create_curve_key: /** `mvp:crypto_create_ec_key` — fields: as, curve, format */
-(a: { as?: string; curve?: "P-256" | "P-384" | "P-521" | Value; format?: "object" | "base64" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:crypto_create_ec_key", a),
+(a: { as?: string; curve?: "P-256" | "P-384" | "P-521" | Value; format?: "object" | "base64" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:crypto_create_ec_key", a),
     create_password: /** `mvp:generate_pass` — fields: as, character_count, require_lowercase, require_uppercase, require_digit, require_symbol, symbol_whitelist */
-(a: { as?: string; character_count?: Value; require_lowercase?: Value; require_uppercase?: Value; require_digit?: Value; require_symbol?: Value; symbol_whitelist?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:generate_pass", a),
+(a: { as?: string; character_count?: Value; require_lowercase?: Value; require_uppercase?: Value; require_digit?: Value; require_symbol?: Value; symbol_whitelist?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:generate_pass", a),
     create_rsa_key: /** `mvp:crypto_create_rsa_key` — fields: as, bits, format */
-(a: { as?: string; bits?: Value; format?: "object" | "base64" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:crypto_create_rsa_key", a),
+(a: { as?: string; bits?: Value; format?: "object" | "base64" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:crypto_create_rsa_key", a),
     create_secret_key: /** `mvp:crypto_create_octet_key` — fields: as, bits, format */
-(a: { as?: string; bits?: Value; format?: "object" | "base64" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:crypto_create_octet_key", a),
+(a: { as?: string; bits?: Value; format?: "object" | "base64" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:crypto_create_octet_key", a),
     create_uuid: /** `mvp:uuid4` — fields: as */
-(a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:uuid4", a),
+(a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:uuid4", a),
     decrypt: /** `mvp:crypto_decrypt` — fields: as, data, algorithm, key, iv */
-(a: { as?: string; data: Value; algorithm?: "aes-128-cbc" | "aes-192-cbc" | "aes-256-cbc" | "aes-128-gcm" | "aes-192-gcm" | "aes-256-gcm" | Value; key: Value; iv: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:crypto_decrypt", a),
+(a: { as?: string; data: Value; algorithm?: "aes-128-cbc" | "aes-192-cbc" | "aes-256-cbc" | "aes-128-gcm" | "aes-192-gcm" | "aes-256-gcm" | Value; key: Value; iv: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:crypto_decrypt", a),
     encrypt: /** `mvp:crypto_encrypt` — fields: as, data, algorithm, key, iv */
-(a: { as?: string; data: Value; algorithm?: "aes-128-cbc" | "aes-192-cbc" | "aes-256-cbc" | "aes-128-gcm" | "aes-192-gcm" | "aes-256-gcm" | Value; key: Value; iv: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:crypto_encrypt", a),
+(a: { as?: string; data: Value; algorithm?: "aes-128-cbc" | "aes-192-cbc" | "aes-256-cbc" | "aes-128-gcm" | "aes-192-gcm" | "aes-256-gcm" | Value; key: Value; iv: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:crypto_encrypt", a),
     jwe_decode: /** `mvp:crypto_jwe_decode2` — fields: as, token, key, check_claims, key_algorithm, content_algorithm, timeDrift */
-(a: { as?: string; token: Value; key: Value; check_claims?: Value; key_algorithm?: "A128KW" | "A192KW" | "A256KW" | "A128GCMKW" | "A192GCMKW" | "A256GCMKW" | "ECDH-ES+A128KW" | "ECDH-ES+A192KW" | "ECDH-ES+A256KW" | Value; content_algorithm?: "A128GCM" | "A192GCM" | "A256GCM" | "A128CBC-HS256" | "A192CBC-HS384" | "A256CBC-HS512" | Value; timeDrift?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:crypto_jwe_decode2", a),
+(a: { as?: string; token: Value; key: Value; check_claims?: Value; key_algorithm?: "A128KW" | "A192KW" | "A256KW" | "A128GCMKW" | "A192GCMKW" | "A256GCMKW" | "ECDH-ES+A128KW" | "ECDH-ES+A192KW" | "ECDH-ES+A256KW" | Value; content_algorithm?: "A128GCM" | "A192GCM" | "A256GCM" | "A128CBC-HS256" | "A192CBC-HS384" | "A256CBC-HS512" | Value; timeDrift?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:crypto_jwe_decode2", a),
     jwe_encode: /** `mvp:crypto_jwe_encode3` — fields: as, headers, claims, key, key_algorithm, content_algorithm, ttl */
-(a: { as?: string; headers?: Value; claims?: Value; key: Value; key_algorithm?: "A128KW" | "A192KW" | "A256KW" | "A128GCMKW" | "A192GCMKW" | "A256GCMKW" | "ECDH-ES+A128KW" | "ECDH-ES+A192KW" | "ECDH-ES+A256KW" | Value; content_algorithm?: "A128GCM" | "A192GCM" | "A256GCM" | "A128CBC-HS256" | "A192CBC-HS384" | "A256CBC-HS512" | Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:crypto_jwe_encode3", a),
+(a: { as?: string; headers?: Value; claims?: Value; key: Value; key_algorithm?: "A128KW" | "A192KW" | "A256KW" | "A128GCMKW" | "A192GCMKW" | "A256GCMKW" | "ECDH-ES+A128KW" | "ECDH-ES+A192KW" | "ECDH-ES+A256KW" | Value; content_algorithm?: "A128GCM" | "A192GCM" | "A256GCM" | "A128CBC-HS256" | "A192CBC-HS384" | "A256CBC-HS512" | Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:crypto_jwe_encode3", a),
     jws_decode: /** `mvp:crypto_jws_decode2` — fields: as, token, key, check_claims, signature_algorithm, timeDrift */
-(a: { as?: string; token: Value; key: Value; check_claims?: Value; signature_algorithm?: "PS256" | "PS384" | "PS512" | "RS256" | "RS384" | "RS512" | "HS256" | "HS384" | "HS512" | "ES256" | "ES384" | "ES512" | Value; timeDrift?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:crypto_jws_decode2", a),
+(a: { as?: string; token: Value; key: Value; check_claims?: Value; signature_algorithm?: "PS256" | "PS384" | "PS512" | "RS256" | "RS384" | "RS512" | "HS256" | "HS384" | "HS512" | "ES256" | "ES384" | "ES512" | Value; timeDrift?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:crypto_jws_decode2", a),
     jws_encode: /** `mvp:crypto_jws_encode2` — fields: as, headers, claims, key, signature_algorithm, ttl */
-(a: { as?: string; headers?: Value; claims?: Value; key: Value; signature_algorithm?: "PS256" | "PS384" | "PS512" | "RS256" | "RS384" | "RS512" | "HS256" | "HS384" | "HS512" | "ES256" | "ES384" | "ES512" | Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:crypto_jws_encode2", a),
+(a: { as?: string; headers?: Value; claims?: Value; key: Value; signature_algorithm?: "PS256" | "PS384" | "PS512" | "RS256" | "RS384" | "RS512" | "HS256" | "HS384" | "HS512" | "ES256" | "ES384" | "ES512" | Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:crypto_jws_encode2", a),
     random_bytes: /** `mvp:random_bytes` — fields: as, length */
-(a: { as?: string; length?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:random_bytes", a),
+(a: { as?: string; length?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:random_bytes", a),
     random_number: /** `mvp:rand` — fields: as, min, max */
-(a: { as?: string; min?: Value; max?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:rand", a),
+(a: { as?: string; min?: Value; max?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:rand", a),
   },
   storage: {
     create_attachment: /** `mvp:create_attachment` — fields: as, value, access, filename, include_meta, type */
-(a: { as?: string; value: Value; access?: string; filename?: Value; include_meta?: boolean; type?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:create_attachment", a),
+(a: { as?: string; value: Value; access?: string; filename?: Value; include_meta?: boolean; type?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:create_attachment", a),
     create_audio: /** `mvp:create_audio` — fields: as, value, access, filename */
-(a: { as?: string; value: Value; access?: string; filename?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored }): Statement => fromSpec("mvp:create_audio", a),
+(a: { as?: string; value: Value; access?: string; filename?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:create_audio", a),
     create_file_resource: /** `mvp:create_file_resource` — fields: as, filename, filedata */
-(a: { as?: string; filename: Value; filedata: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored }): Statement => fromSpec("mvp:create_file_resource", a),
+(a: { as?: string; filename: Value; filedata: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:create_file_resource", a),
     create_image: /** `mvp:create_image` — fields: as, value, access, filename */
-(a: { as?: string; value: Value; access?: string; filename?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored }): Statement => fromSpec("mvp:create_image", a),
+(a: { as?: string; value: Value; access?: string; filename?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:create_image", a),
     create_video: /** `mvp:create_video` — fields: as, value, access, filename */
-(a: { as?: string; value: Value; access?: string; filename?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored }): Statement => fromSpec("mvp:create_video", a),
+(a: { as?: string; value: Value; access?: string; filename?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:create_video", a),
     delete_file: /** `mvp:delete_file` — fields: pathname */
 (a: { pathname: Value; disabled?: boolean; description?: string; output?: OutputAuthored }): Statement => fromSpec("mvp:delete_file", a),
     read_file_resource: /** `mvp:create_var_from_file_resource` — fields: as, value */
-(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:create_var_from_file_resource", a),
+(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:create_var_from_file_resource", a),
     sign_private_url: /** `mvp:vault_sign_url` — fields: as, pathname, ttl */
-(a: { as?: string; pathname: Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:vault_sign_url", a),
+(a: { as?: string; pathname: Value; ttl?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:vault_sign_url", a),
   },
   stream: {
     from_csv: /** `mvp:csv_stream` — fields: as, value, separator, enclosure, escape_char */
-(a: { as?: string; value: Value; separator?: Value; enclosure?: Value; escape_char?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; output?: OutputAuthored }): Statement => fromSpec("mvp:csv_stream", a),
+(a: { as?: string; value: Value; separator?: Value; enclosure?: Value; escape_char?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:csv_stream", a),
     from_jsonl: /** `mvp:jsonl_stream` — fields: as, value */
-(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:jsonl_stream", a),
+(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:jsonl_stream", a),
     from_request: /** `mvp:streaming_api_request` — fields: as, url, method, params, headers, timeout, follow_location, verify_host, verify_peer, ca_certificate, certificate, certificate_pass, private_key, private_key_pass */
-(a: { as?: string; url: Value; method?: Value; params?: Value; headers?: Value; timeout?: Value; follow_location?: Value; verify_host?: Value; verify_peer?: Value; ca_certificate?: Value; certificate?: Value; certificate_pass?: Value; private_key?: Value; private_key_pass?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:streaming_api_request", a),
+(a: { as?: string; url: Value; method?: Value; params?: Value; headers?: Value; timeout?: Value; follow_location?: Value; verify_host?: Value; verify_peer?: Value; ca_certificate?: Value; certificate?: Value; certificate_pass?: Value; private_key?: Value; private_key_pass?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:streaming_api_request", a),
   },
   text: {
     append: /** `mvp:text_append` — fields: name, value */
 (a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_append", a),
     contains: /** `mvp:text_contains` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:text_contains", a),
+(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_contains", a),
     ends_with: /** `mvp:text_ends_with` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:text_ends_with", a),
+(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_ends_with", a),
     icontains: /** `mvp:text_icontains` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:text_icontains", a),
+(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_icontains", a),
     iends_with: /** `mvp:text_iends_with` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:text_iends_with", a),
+(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_iends_with", a),
     istarts_with: /** `mvp:text_istarts_with` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:text_istarts_with", a),
+(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_istarts_with", a),
     ltrim: /** `mvp:text_ltrim` — fields: name, value */
 (a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_ltrim", a),
     prepend: /** `mvp:text_prepend` — fields: name, value */
@@ -362,7 +362,7 @@ export const generated = {
     rtrim: /** `mvp:text_rtrim` — fields: name, value */
 (a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_rtrim", a),
     starts_with: /** `mvp:text_starts_with` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:text_starts_with", a),
+(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_starts_with", a),
     trim: /** `mvp:text_trim` — fields: name, value */
 (a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_trim", a),
   },
@@ -370,38 +370,38 @@ export const generated = {
 (a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:throw_error", a),
   util: {
     geo_distance: /** `mvp:calculate_geo_distance` — fields: as, latitude_1, longitude_1, latitude_2, longitude_2 */
-(a: { as?: string; latitude_1: Value; longitude_1: Value; latitude_2: Value; longitude_2: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:calculate_geo_distance", a),
+(a: { as?: string; latitude_1: Value; longitude_1: Value; latitude_2: Value; longitude_2: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:calculate_geo_distance", a),
     get_all_input: /** `mvp:get_all_input` — fields: as */
-(a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:get_all_input", a),
+(a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:get_all_input", a),
     get_env: /** `mvp:get_env` — fields: as */
-(a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:get_env", a),
+(a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:get_env", a),
     get_vars: /** `mvp:get_vars` — fields: as */
-(a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:get_vars", a),
+(a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:get_vars", a),
     ip_lookup: /** `mvp:ipaddress_lookup` — fields: as, value */
-(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:ipaddress_lookup", a),
+(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:ipaddress_lookup", a),
     send_email: /** `mvp:send_email` — fields: as, api_key, service_provider, subject, message, to, bcc, cc, from, reply_to, scheduled_at */
-(a: { as?: string; api_key?: Value; service_provider?: "resend" | "xano" | Value; subject?: Value; message?: Value; to?: Value; bcc?: Value; cc?: Value; from?: Value; reply_to?: Value; scheduled_at?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] } = {}): Statement => fromSpec("mvp:send_email", a),
+(a: { as?: string; api_key?: Value; service_provider?: "resend" | "xano" | Value; subject?: Value; message?: Value; to?: Value; bcc?: Value; cc?: Value; from?: Value; reply_to?: Value; scheduled_at?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:send_email", a),
     set_header: /** `mvp:setheader` — fields: value, duplicates */
 (a: { value: Value; duplicates?: string; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:setheader", a),
     sleep: /** `mvp:sleep` — fields: value */
 (a: { value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:sleep", a),
     template_engine: /** `mvp:template_string` — fields: as, value */
-(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:template_string", a),
+(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:template_string", a),
   },
   webflow: {
     request: /** `mvp:connect_webflow_api_request` — fields: as, path, method, params, headers, timeout, follow_location, verify_host, verify_peer, ca_certificate, certificate, certificate_pass, private_key, private_key_pass */
-(a: { as?: string; path: Value; method?: Value; params?: Value; headers?: Value; timeout?: Value; follow_location?: Value; verify_host?: Value; verify_peer?: Value; ca_certificate?: Value; certificate?: Value; certificate_pass?: Value; private_key?: Value; private_key_pass?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:connect_webflow_api_request", a),
+(a: { as?: string; path: Value; method?: Value; params?: Value; headers?: Value; timeout?: Value; follow_location?: Value; verify_host?: Value; verify_peer?: Value; ca_certificate?: Value; certificate?: Value; certificate_pass?: Value; private_key?: Value; private_key_pass?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:connect_webflow_api_request", a),
   },
   zip: {
     add_to_archive: /** `mvp:zip_add_file_resource` — fields: file, filename, zip, password, password_encryption. Omitted `password`/`password_encryption` is written empty (what the engine needs); `null` writes no key — only a pulled older statement wants that */
 (a: { file: Value; filename: Value; zip: Value; password?: Value | null; password_encryption?: Value | null; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:zip_add_file_resource", a),
     create_archive: /** `mvp:zip_create_file_resource` — fields: as, filename, password, password_encryption */
-(a: { as?: string; filename: Value; password?: Value; password_encryption?: "standard" | "AES-128" | "AES-192" | "AES-256" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:zip_create_file_resource", a),
+(a: { as?: string; filename: Value; password?: Value; password_encryption?: "standard" | "AES-128" | "AES-192" | "AES-256" | Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:zip_create_file_resource", a),
     delete_from_archive: /** `mvp:zip_delete_file_resource` — fields: filename, zip, password. Omitted `password` is written empty (what the engine needs); `null` writes no key — only a pulled older statement wants that */
 (a: { filename: Value; zip: Value; password?: Value | null; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:zip_delete_file_resource", a),
     extract: /** `mvp:zip_extract_file_resource` — fields: as, zip, password. Omitted `password` is written empty (what the engine needs); `null` writes no key — only a pulled older statement wants that */
-(a: { as?: string; zip: Value; password?: Value | null; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:zip_extract_file_resource", a),
+(a: { as?: string; zip: Value; password?: Value | null; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:zip_extract_file_resource", a),
     view_contents: /** `mvp:zip_view_contents` — fields: as, zip, password. Omitted `password` is written empty (what the engine needs); `null` writes no key — only a pulled older statement wants that */
-(a: { as?: string; zip: Value; password?: Value | null; disabled?: boolean; description?: string; asFilters?: FilterXdo[] }): Statement => fromSpec("mvp:zip_view_contents", a),
+(a: { as?: string; zip: Value; password?: Value | null; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:zip_view_contents", a),
   },
 };

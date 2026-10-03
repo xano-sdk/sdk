@@ -335,6 +335,12 @@ function verifySection(
       omissions.push({ payloadKey: key, name, reason: policy.reason, detail: policy.detail });
       continue;
     }
+    // Compared once more UNDER its key, as the whole-section comparison saw it.
+    // Several of `normalize()`'s equivalences are keyed on the member name — a
+    // `history` map's MCP pairs at their default are one state with the pairs
+    // absent — and a bare value has lost that name. Checked after the omission
+    // table, so a key it declares is still reported as omitted.
+    if (deepEqual(normalize({ [name]: left }), normalize({ [name]: right }))) continue;
     // Only a key present on BOTH sides has paths to name; a one-sided key is
     // reported whole, exactly like a one-sided object.
     const paths =

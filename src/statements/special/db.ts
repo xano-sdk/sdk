@@ -188,8 +188,18 @@ type GraftOf<H> = H extends { addon: AddonDef<infer G> }
  * (under the alias), so they add no parent-visible keys.
  */
 type AddonFields<A> = A extends readonly [infer H, ...infer Rest]
-  ? (H extends { as: infer S extends string } ? { [K in AddonAlias<S>]: GraftOf<H> } : object) &
+  ? (H extends { envelope: true }
+      ? object
+      : H extends { as: infer S extends string }
+        ? { [K in AddonAlias<S>]: GraftOf<H> }
+        : object) &
       AddonFields<Rest>
+  : object;
+
+/** The keys `envelope: true` addons graft onto a query's paging envelope (see {@link AddonSpec.envelope}). */
+type EnvelopeAddonFields<A> = A extends readonly [infer H, ...infer Rest]
+  ? (H extends { envelope: true; as: infer S extends string } ? { [K in AddonAlias<S>]: GraftOf<H> } : object) &
+      EnvelopeAddonFields<Rest>
   : object;
 
 /**
@@ -400,7 +410,10 @@ type DbTableRef<T extends ObjectRef = ObjectRef> = T | null;
  * as a text literal and the request fails with `ParseError: Invalid value for
  * param:"…"` naming the OTHER operand. Both spellings are checked at export.
  */
-export interface DbBind {
+export type DbBind = DbTableBind | DbExpandBind;
+
+/** A {@link DbBind} that joins a table. */
+export interface DbTableBind {
   /**
    * The table to join, or `null` when unbound — see {@link DbTableRef} for the
    * contract, which is the same one the query's own `table` holds. ⚠ Do not
@@ -408,8 +421,36 @@ export interface DbBind {
    * instead of taking the whole statement to `raw()`.
    */
   table: DbTableRef;
+  expand?: never;
   /** SQL alias for the joined table — defaults to the table name. Two binds to the same table need distinct aliases. */
   as?: string;
+  /** Join kind (default `"inner"`). */
+  join?: DbJoin;
+  /** Join condition — same `where`/`cmp`/`and`/`or` surface as the query. */
+  where?: DbWhere;
+}
+
+/**
+ * A {@link DbBind} that expands a LIST column of a table already in the query
+ * into one joined row per element, addressable by dotted path under `as`:
+ *
+ * ```ts
+ * s.db.query({
+ *   table: blog, tableAlias: "blog",
+ *   bind: [{ expand: "blog.categories", as: "blog_categories" }],
+ *   where: cmp(col("blog_categories.category_id"), "=", inp("category_id")),
+ * })
+ * ```
+ *
+ * `expand` is `<alias>.<column>` — the query's `tableAlias` or a joined table's
+ * `as`, then a list column of it. A column that is not a list fails the query.
+ */
+export interface DbExpandBind {
+  /** The list column to expand, as `<alias>.<column>`. */
+  expand: string;
+  table?: never;
+  /** The alias each element is addressed under. Required. */
+  as: string;
   /** Join kind (default `"inner"`). */
   join?: DbJoin;
   /** Join condition — same `where`/`cmp`/`and`/`or` surface as the query. */
@@ -434,7 +475,12 @@ type QueryResult<Row, A, P, RT extends DbReturnType, E = readonly [], AG = unkno
           : RT extends "stream"
             ? R[]
             : HasPagingEnvelope<P> extends true
-              ? PickEnvelope<PagingEnvelope<R[], PagingTotals<P>>, Cols>
+              ? PickEnvelope<
+                  [keyof EnvelopeAddonFields<A>] extends [never]
+                    ? PagingEnvelope<R[], PagingTotals<P>>
+                    : Prettify<PagingEnvelope<R[], PagingTotals<P>> & EnvelopeAddonFields<A>>,
+                  Cols
+                >
               : R[]
         : never;
 
@@ -608,10 +654,10 @@ const EVAL_ITEM: ListItemRule = {
 /** The keys of a {@link DbEval} entry and of a {@link DbPaging} block. */
 const EVAL_KEYS = ["name", "as", "filters"];
 const PAGING_KEYS = ["page", "per_page", "offset", "totals", "metadata", "enabled", "search", "sort"];
-/** A `bind` entry: a join `{ table, as?, join?, where? }`. */
+/** A `bind` entry: a join `{ table, as?, join?, where? }` or an expansion `{ expand, as, join?, where? }`. */
 const BIND_ITEM: ListItemRule = {
-  test: (v) => isRecordArg(v) && "table" in v,
-  want: "a join ({ table, as?, join?, where? })",
+  test: (v) => isRecordArg(v) && ("table" in v || "expand" in v),
+  want: "a join ({ table, as?, join?, where? }) or a list expansion ({ expand, as, join?, where? })",
 };
 /** An entry of an array-form `where`: a comparison, a group, or a tagged value. */
 const WHERE_ITEM: ListItemRule = {
@@ -712,6 +758,8 @@ function assertNoAddonShadow(table: ObjectRef, addons?: readonly AddonSpec[]): v
   if (typeof table === "string" || !("schema" in table)) return;
   const cols = new Set(tableColumns(table as TableDef).map((col) => col.name));
   for (const spec of addons) {
+    // An envelope graft lands beside `items`, never on a row.
+    if (spec.envelope === true) continue;
     const as = spec.as;
     const dot = as.lastIndexOf(".");
     const alias = dot === -1 ? as : as.slice(dot + 1);
@@ -845,7 +893,7 @@ const BULK_BY_CONDITION =
   "(or `s.db.increment({ table, where, … })` to add to a numeric column) to change the rows matching a condition";
 
 /** The keys a bulk write declares — every other key would be dropped on emit. */
-const BULK_WRITE_KEYS = ["disabled", "description", "mock", "asFilters", "tableAlias", "table", "items", "as"];
+const BULK_WRITE_KEYS = ["disabled", "description", "mock", "asFilters", "uncheckedAs", "tableAlias", "table", "items", "as"];
 
 /**
  * Refuse an argument a bulk write does not declare. A `where` gets its own
@@ -873,7 +921,7 @@ function assertNoWhere(label: string, args: unknown, alternative: string): void 
   );
 }
 
-const DB_GET_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, table: 1, fieldName: 1, fieldValue: 1, lock: 1, output: 1, addon: 1, as: 1 } satisfies Record<keyof DbGetArgs, 1>);
+const DB_GET_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, table: 1, fieldName: 1, fieldValue: 1, lock: 1, output: 1, addon: 1, as: 1 } satisfies Record<keyof DbGetArgs, 1>);
 
 /** `db.get <table>` — fetch a single record by a field match (`mvp:dbo_getby`).
  * Returns a {@link DbResult} branded with `as` + the (optionally narrowed) row
@@ -932,7 +980,7 @@ export interface DbDelArgs<T extends ObjectRef = ObjectRef> extends StatementOpt
   as?: string;
 }
 
-const DB_DEL_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, table: 1, fieldName: 1, fieldValue: 1, as: 1 } satisfies Record<keyof DbDelArgs, 1>);
+const DB_DEL_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, table: 1, fieldName: 1, fieldValue: 1, as: 1 } satisfies Record<keyof DbDelArgs, 1>);
 
 /**
  * `db.del <table>` — delete a single record by a field match (`mvp:dbo_delby`);
@@ -979,7 +1027,7 @@ export interface DbHasArgs<T extends ObjectRef = ObjectRef, As extends string = 
   as?: As;
 }
 
-const DB_HAS_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, table: 1, fieldName: 1, fieldValue: 1, as: 1 } satisfies Record<keyof DbHasArgs, 1>);
+const DB_HAS_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, table: 1, fieldName: 1, fieldValue: 1, as: 1 } satisfies Record<keyof DbHasArgs, 1>);
 
 /** `db.has <table>` — test whether a record exists by a field match (`mvp:dbo_hasby`).
  * Binds a **boolean** (the engine's `__self: bool` output), so it's branded with
@@ -1042,7 +1090,7 @@ export interface DbPatchArgs<
   as?: As;
 }
 
-const DB_PATCH_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, table: 1, fieldName: 1, fieldValue: 1, data: 1, output: 1, addon: 1, as: 1 } satisfies Record<keyof DbPatchArgs, 1>);
+const DB_PATCH_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, table: 1, fieldName: 1, fieldValue: 1, data: 1, output: 1, addon: 1, as: 1 } satisfies Record<keyof DbPatchArgs, 1>);
 
 /** `db.patch <table>` — partial-update a record by a field match (`mvp:dbo_patch`).
  * Binds the **full post-patch row**, so it's branded with `as` +
@@ -1090,7 +1138,7 @@ export interface DbTruncateArgs extends StatementOptions {
   as?: string;
 }
 
-const DB_TRUNCATE_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, table: 1, reset: 1, as: 1 } satisfies Record<keyof DbTruncateArgs, 1>);
+const DB_TRUNCATE_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, table: 1, reset: 1, as: 1 } satisfies Record<keyof DbTruncateArgs, 1>);
 
 /** `db.truncate <table>` — empty a table (`mvp:dbo_truncate`). */
 export function dbTruncate(args: DbTruncateArgs): Statement {
@@ -1467,7 +1515,7 @@ export interface DbAddArgs<
   as?: As;
 }
 
-const DB_ADD_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, enforceHiddenFields: 1, table: 1, data: 1, row: 1, output: 1, addon: 1, as: 1 } satisfies Record<keyof DbAddArgs, 1>);
+const DB_ADD_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, enforceHiddenFields: 1, table: 1, data: 1, row: 1, output: 1, addon: 1, as: 1 } satisfies Record<keyof DbAddArgs, 1>);
 
 /** `db.add <table>` — insert a record (`mvp:dbo_add`). Binds the **full inserted
  * row** (including the auto-assigned `id`/`created_at`), so it's branded with
@@ -1558,7 +1606,7 @@ export interface DbEditArgs<
   as?: As;
 }
 
-const DB_EDIT_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, enforceHiddenFields: 1, table: 1, fieldName: 1, fieldValue: 1, data: 1, row: 1, output: 1, addon: 1, as: 1 } satisfies Record<keyof DbEditArgs, 1>);
+const DB_EDIT_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, enforceHiddenFields: 1, table: 1, fieldName: 1, fieldValue: 1, data: 1, row: 1, output: 1, addon: 1, as: 1 } satisfies Record<keyof DbEditArgs, 1>);
 
 /** `db.edit <table>` — update a record matched by a field (`mvp:dbo_editby`).
  * Binds the **full post-mutation row** (the freshly-written values), so it's
@@ -1647,7 +1695,7 @@ export interface DbAddOrEditArgs<T extends ObjectRef = ObjectRef, As extends str
   tableAlias?: string;
 }
 
-const DB_ADD_OR_EDIT_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, enforceHiddenFields: 1, table: 1, fieldName: 1, fieldValue: 1, data: 1, row: 1, as: 1 } satisfies Record<keyof DbAddOrEditArgs, 1>);
+const DB_ADD_OR_EDIT_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, enforceHiddenFields: 1, table: 1, fieldName: 1, fieldValue: 1, data: 1, row: 1, as: 1 } satisfies Record<keyof DbAddOrEditArgs, 1>);
 
 /** `db.add_or_edit <table>` — upsert a record by a field match (`mvp:dbo_addoreditby`).
  * Binds the **full upserted row** (`$inst->toArray()`, the edit-or-insert result),
@@ -1693,7 +1741,7 @@ export interface DbSchemaArgs extends StatementOptions {
   as?: string;
 }
 
-const DB_SCHEMA_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, table: 1, path: 1, as: 1 } satisfies Record<keyof DbSchemaArgs, 1>);
+const DB_SCHEMA_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, table: 1, path: 1, as: 1 } satisfies Record<keyof DbSchemaArgs, 1>);
 
 /** `db.schema <table>` — read a table's schema (`mvp:dbo_get_schema`). */
 export function dbSchema(args: DbSchemaArgs): Statement {
@@ -1753,7 +1801,7 @@ export interface DbDirectQueryArgs extends StatementOptions {
   as?: string;
 }
 
-const DB_DIRECT_QUERY_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, sql: 1, responseType: 1, args: 1, parser: 1, as: 1 } satisfies Record<keyof DbDirectQueryArgs, 1>);
+const DB_DIRECT_QUERY_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, sql: 1, responseType: 1, args: 1, parser: 1, as: 1 } satisfies Record<keyof DbDirectQueryArgs, 1>);
 
 /**
  * `db.direct_query` (`mvp:dbo_direct_query`) — execute raw SQL against the
@@ -2112,7 +2160,7 @@ function assertBulkDeleteScope(search: unknown, allRows: true | undefined): void
   );
 }
 
-const DB_BULK_DELETE_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, table: 1, where: 1, allRows: 1, as: 1 } satisfies Record<keyof DbBulkDeleteArgs, 1>);
+const DB_BULK_DELETE_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, table: 1, where: 1, allRows: 1, as: 1 } satisfies Record<keyof DbBulkDeleteArgs, 1>);
 
 /**
  * `db.bulk.delete <table>` — delete many rows by a search (`mvp:dbo_bulkdelete`).
@@ -2322,7 +2370,7 @@ function incrementAmount(value: number | Value): Value {
   return coerceScalar(value);
 }
 
-const DB_INCREMENT_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, table: 1, where: 1, fieldName: 1, value: 1, returnType: 1, output: 1, addon: 1, as: 1 } satisfies Record<keyof DbIncrementArgs, 1>);
+const DB_INCREMENT_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, table: 1, where: 1, fieldName: 1, value: 1, returnType: 1, output: 1, addon: 1, as: 1 } satisfies Record<keyof DbIncrementArgs, 1>);
 
 /**
  * `db.increment <table>` — add a number to one numeric column on every row the
@@ -2567,6 +2615,7 @@ function encodeBind(binds?: readonly DbBind[]): unknown[] | undefined {
   if (!binds?.length) return undefined;
   const seen = new Set<string>();
   return binds.map((b) => {
+    if (b.expand !== undefined) return encodeExpandBind(b, seen);
     // An UNBOUND join has no table name to default its alias from, and the
     // stored bytes show the alias outliving the table (`{as:"userJoin", id:""}`)
     // — it is the user's own label, not a function of the target. So `as` is
@@ -2597,6 +2646,34 @@ function encodeBind(binds?: readonly DbBind[]): unknown[] | undefined {
     if (search !== undefined) entry.search = search;
     return entry;
   });
+}
+
+/**
+ * Encode a {@link DbExpandBind}: the stored `dbo.id` is the `<alias>.<column>`
+ * path itself, which is how the engine tells an expansion from a table join.
+ */
+function encodeExpandBind(b: DbExpandBind, seen: Set<string>): Record<string, unknown> {
+  const where = `db.query bind { expand: ${JSON.stringify(b.expand)} }`;
+  if ((b as { table?: unknown }).table !== undefined) {
+    throw new Error(`${where}: \`expand\` and \`table\` are exclusive — a bind either joins a table or expands a list column.`);
+  }
+  if (typeof b.expand !== "string" || !/^[^.]+\.[^.]/.test(b.expand)) {
+    throw new Error(
+      `${where}: \`expand\` is \`<alias>.<column>\` — the query's \`tableAlias\` (or a joined table's \`as\`), ` +
+        `then a list column of it, e.g. "blog.categories".`,
+    );
+  }
+  if (typeof b.as !== "string" || b.as === "") {
+    throw new Error(`${where}: an expansion needs an \`as\` alias to address its elements by — the engine refuses one without.`);
+  }
+  if (seen.has(b.as)) {
+    throw new Error(`db.query bind: duplicate join alias "${b.as}" — every join and expansion needs its own \`as\`.`);
+  }
+  seen.add(b.as);
+  const entry: Record<string, unknown> = { dbo: { as: b.as, id: b.expand }, join: b.join ?? "inner" };
+  const search = encodeSearch(b.where, undefined, `Statement "s.db.query": bind "${b.as}"`);
+  if (search !== undefined) entry.search = search;
+  return entry;
 }
 
 /**
@@ -2947,11 +3024,13 @@ export interface DbQueryArgs<
  */
 /** Every `s.db.query` argument, held to {@link DbQueryArgs} at compile time. */
 const DB_QUERY_KEYS = Object.keys({
-  disabled: 1, description: 1, mock: 1, asFilters: 1, tableAlias: 1, table: 1, returnType: 1, where: 1,
+  disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, tableAlias: 1, table: 1, returnType: 1, where: 1,
   additionalWhere: 1, bind: 1, sort: 1, lock: 1, paging: 1, external: 1, distinct: 1, eval: 1, aggregate: 1,
   output: 1, addon: 1, as: 1,
 } satisfies Record<keyof DbQueryArgs, 1>);
-const DB_BIND_KEYS = Object.keys({ table: 1, as: 1, join: 1, where: 1 } satisfies Record<keyof DbBind, 1>);
+const DB_BIND_KEYS = Object.keys(
+  { table: 1, expand: 1, as: 1, join: 1, where: 1 } satisfies Record<keyof DbTableBind | keyof DbExpandBind, 1>,
+);
 
 export function dbQuery<
   T extends ObjectRef,
@@ -3240,7 +3319,7 @@ export interface DbExternalQueryArgs extends StatementOptions {
  */
 // @TODO(byte-verify): only postgres captured; the other 4 external engines share
 //   the format and stay modeled-by-analogy.
-const DB_EXTERNAL_QUERY_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, engine: 1, sql: 1, connectionString: 1, responseType: 1, args: 1, parser: 1, as: 1 } satisfies Record<keyof DbExternalQueryArgs, 1>);
+const DB_EXTERNAL_QUERY_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1, engine: 1, sql: 1, connectionString: 1, responseType: 1, args: 1, parser: 1, as: 1 } satisfies Record<keyof DbExternalQueryArgs, 1>);
 
 export function dbExternalQuery(args: DbExternalQueryArgs): Statement {
   args = argsOrEmpty(args);

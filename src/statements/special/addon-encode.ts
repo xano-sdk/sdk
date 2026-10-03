@@ -68,6 +68,14 @@ export interface AddonSpec<Graft = unknown> {
   output?: readonly string[];
   /** Nested addons (recursive). */
   children?: AddonSpec[];
+  /**
+   * Graft onto the paging ENVELOPE (beside `items`, once per response) instead
+   * of onto each row. Only for a top-level addon on a `db.query` that returns
+   * the paging envelope; `as` is then relative to the envelope and gets no
+   * `items[]` prefix. For an addon that reads no row column — e.g. the caller's
+   * own record via `auth("id")`.
+   */
+  envelope?: boolean;
 }
 
 /** The stored/export form of one attached addon. */
@@ -158,8 +166,17 @@ function encodeOne(
     throw new Error("addon: `children` cannot reference an ancestor addon spec (cycle detected).");
   }
   const { offset, as } = splitAs(spec.as);
+  if (spec.envelope !== undefined && typeof spec.envelope !== "boolean") {
+    throw new Error(`addon "${spec.as}": \`envelope\` must be true or false — got ${JSON.stringify(spec.envelope)}.`);
+  }
+  if (spec.envelope === true && envelopeOffset === undefined) {
+    throw new Error(
+      `addon "${spec.as}": \`envelope: true\` grafts onto a db.query's paging envelope, and this attachment ` +
+        "has none — only a top-level addon on a list query with paging (and metadata) on does. Drop `envelope`.",
+    );
+  }
   const finalOffset =
-    envelopeOffset !== undefined ? withEnvelopeOffset(offset, envelopeOffset) : offset;
+    envelopeOffset !== undefined && spec.envelope !== true ? withEnvelopeOffset(offset, envelopeOffset) : offset;
   const stored: StoredAddon = {
     // An unbound attachment stores a blank id — the same "no target" the engine
     // writes, and the same spelling `table: null` / `fn: null` already use.

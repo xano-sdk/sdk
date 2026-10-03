@@ -336,6 +336,8 @@ export type {
   DbAggregate,
   DbAggregatePaging,
   DbBind,
+  DbTableBind,
+  DbExpandBind,
   DbJoin,
   DbExternal,
   DbExternalPermissions,

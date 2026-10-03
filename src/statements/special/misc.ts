@@ -129,7 +129,7 @@ function assertArrayMapTransform(t: unknown): void {
   }
 }
 
-const ARRAY_MAP_KEYS = /* @__PURE__ */ Object.keys({ source: 1, as: 1, transform: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ArrayMapArgs>, 1>);
+const ARRAY_MAP_KEYS = /* @__PURE__ */ Object.keys({ source: 1, as: 1, transform: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ArrayMapArgs>, 1>);
 
 /**
  * `array.map <source>` — map each element through an expression (`mvp:array_map`).
@@ -237,7 +237,7 @@ export interface ArrayUnionArgs extends StatementOptions {
   transform?: Value;
 }
 
-const ARRAY_UNION_KEYS = /* @__PURE__ */ Object.keys({ source: 1, with: 1, as: 1, transform: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ArrayUnionArgs>, 1>);
+const ARRAY_UNION_KEYS = /* @__PURE__ */ Object.keys({ source: 1, with: 1, as: 1, transform: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ArrayUnionArgs>, 1>);
 
 /**
  * `array.union <source>` — set-union of arrays (`mvp:array_union`).
@@ -294,7 +294,7 @@ export interface GetRawInputArgs extends StatementOptions {
   excludeMiddleware?: Value;
 }
 
-const GET_RAW_INPUT_KEYS = /* @__PURE__ */ Object.keys({ as: 1, encoding: 1, excludeMiddleware: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<GetRawInputArgs>, 1>);
+const GET_RAW_INPUT_KEYS = /* @__PURE__ */ Object.keys({ as: 1, encoding: 1, excludeMiddleware: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<GetRawInputArgs>, 1>);
 
 /**
  * `util.get_raw_input` / `util.get_input` — capture the raw request body
@@ -576,7 +576,7 @@ export interface CreateAuthTokenArgs<As extends string = string> extends Stateme
   as?: As;
 }
 
-const CREATE_AUTH_TOKEN_KEYS = /* @__PURE__ */ Object.keys({ table: 1, id: 1, extras: 1, expiration: 1, as: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<CreateAuthTokenArgs>, 1>);
+const CREATE_AUTH_TOKEN_KEYS = /* @__PURE__ */ Object.keys({ table: 1, id: 1, extras: 1, expiration: 1, as: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<CreateAuthTokenArgs>, 1>);
 
 /**
  * `security.create_auth_token { … }` — mint an auth token (`mvp:create_auth`).

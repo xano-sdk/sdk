@@ -41,7 +41,7 @@ export interface ForArgs extends StatementOptions {
   body: Statement[];
 }
 
-const FOR_KEYS = /* @__PURE__ */ Object.keys({ as: 1, count: 1, body: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ForArgs>, 1>);
+const FOR_KEYS = /* @__PURE__ */ Object.keys({ as: 1, count: 1, body: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ForArgs>, 1>);
 
 /** `for (as in 0..count) { body }` — count-bounded loop. */
 export function forLoop<const B extends readonly Statement[] = Statement[]>(
@@ -55,7 +55,7 @@ export function forLoop(args: ForArgs): Statement {
   // it serializes away entirely and the body's `ref("i")` resolves to nothing —
   // a loop that deploys clean and reads an unset variable on every iteration.
   assertArg("s.for", "as", args.as);
-  assertNewVarName("s.for", args.as, "as");
+  assertNewVarName("s.for", args.as, "as", args.uncheckedAs);
   assertValueArg("s.for", "count", args.count);
   assertStatements("s.for", "body", args.body);
   return annotate({
@@ -73,7 +73,7 @@ export interface ForeachArgs extends StatementOptions {
   body: Statement[];
 }
 
-const FOREACH_KEYS = /* @__PURE__ */ Object.keys({ as: 1, list: 1, body: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ForeachArgs>, 1>);
+const FOREACH_KEYS = /* @__PURE__ */ Object.keys({ as: 1, list: 1, body: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ForeachArgs>, 1>);
 
 /** `foreach (as of list) { body }` — list iteration. */
 export function foreachLoop<const B extends readonly Statement[] = Statement[]>(
@@ -86,7 +86,7 @@ export function foreachLoop(args: ForeachArgs): Statement {
   // Same as `for` above: `as` names the current item and reaches `context.as`
   // unread.
   assertArg("s.foreach", "as", args.as);
-  assertNewVarName("s.foreach", args.as, "as");
+  assertNewVarName("s.foreach", args.as, "as", args.uncheckedAs);
   assertValueArg("s.foreach", "list", args.list);
   assertStatements("s.foreach", "body", args.body);
   return annotate({

@@ -98,10 +98,13 @@ const STACK = /* @__PURE__ */ (() => [
   "stack.password-input-double-hash",
   "stack.zip-password-absent",
   "stack.to-throw-isolated-var",
+  "stack.loop-control-outside-loop",
   "statement.reserved-input-name",
   "statement.omitted-input",
   "statement.unknown-input",
   "db.addon-unknown-input",
+  "db.addon-unknown-column",
+  "db.addon-duplicate-alias",
   "db.bulk-update-partial-item",
   "db.internal-column-read",
   "db.query-output-mixed-roots",
@@ -153,6 +156,7 @@ const TOOLSET = /* @__PURE__ */ (() =>
 export const ALLOWABLE_WARNINGS = /* @__PURE__ */ (() => ({
   query: [
     "query.path-segment-candidate",
+    "query.route-shadowed",
     TEST_LIVE,
     ...STACK,
     ...NO_CALLER,
@@ -207,6 +211,7 @@ export const ALLOWABLE_WARNINGS = /* @__PURE__ */ (() => ({
     "table.view-unknown-column",
     "table.reserved-column-name",
     "field.vector-not-nullable",
+    "table.column-default-unfit",
   ],
   addon: [...VALUES, "search.request-only-filter", "db.filter-operand-invalid"],
   knowledge: [
@@ -217,7 +222,7 @@ export const ALLOWABLE_WARNINGS = /* @__PURE__ */ (() => ({
     "knowledge.refs-symlink-skipped",
   ],
   // The workspace config's allow accepts a code on EVERY def, so it offers only
-  // the two whose subject is the workspace's own declaration.
+  // the ones whose subject is the workspace's own declaration.
   workspace: [ENV, DOCS_PUBLIC],
 }) as const satisfies Readonly<Record<string, readonly string[]>>)();
 

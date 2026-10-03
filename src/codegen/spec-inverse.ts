@@ -36,6 +36,7 @@ import { applyUnauthoredEnvelope, envelopePassthrough } from "./envelope-passthr
 import { declineHere, recordProveAbort, recordProveDecline } from "./prove-diff.js";
 import { decodeCondition } from "./expression.js";
 import { decodeValue } from "./value.js";
+import { LAMBDA_STATEMENTS, lam, lambdaBodySyntaxProblem } from "../values/lambda.js";
 
 /**
  * Statement fields whose value is a regex PATTERN rather than ordinary text,
@@ -343,6 +344,38 @@ export function decodeFromSpec(ctx: DecodeContext, stored: StackItemXdo): Expr |
       );
     }
   }
+  // A lambda body that is not a function body — module syntax, or one that does
+  // not parse. The engine stores it and fails it at run time, so the tree carries
+  // it as `lam.raw(…, { unchecked: true })`, which builds, and the pull reports it.
+  let usesLam = false;
+  const lambdaSite = Object.hasOwn(LAMBDA_STATEMENTS, spec.name) ? LAMBDA_STATEMENTS[spec.name] : undefined;
+  if (lambdaSite !== undefined) {
+    const at = recovered.findIndex((entry) => entry.field === lambdaSite.field);
+    const body = at === -1 ? undefined : (recovered[at]!.runtime as Partial<TaggedValue> | null);
+    if (
+      body?.tag !== undefined &&
+      body.tag.startsWith("const") &&
+      typeof body.value === "string" &&
+      (body.filters ?? []).length === 0 &&
+      body.value.trim() !== ""
+    ) {
+      const problem = lambdaBodySyntaxProblem(body.value);
+      if (problem !== undefined) {
+        ctx.problem(
+          "workspace-defect",
+          `this workspace stores a lambda whose body cannot work as written: ${problem} ` +
+            "Decoded as `lam.raw(…, { unchecked: true })` so the tree builds; it fails the same way when it runs.",
+          "lambda body",
+        );
+        recovered[at] = {
+          ...recovered[at]!,
+          runtime: lam.raw(body.value, { unchecked: true }),
+          expr: call("lam.raw", lit(body.value), obj([["unchecked", lit(true)]])),
+        };
+        usesLam = true;
+      }
+    }
+  }
   // A field the engine reads unconditionally, stored with no key: the statement
   // answers `Missing param` on every request. It decodes to the `null` that
   // reproduces it, and the pull says so rather than carrying it silently.
@@ -415,6 +448,7 @@ export function decodeFromSpec(ctx: DecodeContext, stored: StackItemXdo): Expr |
       }
 
       ctx.use(SDK_MODULE, "s");
+      if (usesLam) ctx.use(SDK_MODULE, "lam");
       // A recovered `asFilters` chain emits `fl.*` calls. Registered only on the
       // winning candidate, so a declined attempt cannot leave an unused import.
       for (const symbol of passthrough.symbols) ctx.use(SDK_MODULE, symbol);

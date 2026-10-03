@@ -101,7 +101,7 @@ export function setVar<
 ): Statement & AsShapeBrand<As, ApplyFilters<ConstShape<V>, Fs>>;
 export function setVar(as: string, value: Value, a?: StatementOptions): Statement;
 export function setVar(as: string, value: Value, a?: StatementOptions): Statement {
-  assertNewVarName("s.set_var", as);
+  assertNewVarName("s.set_var", as, "name", a?.uncheckedAs);
   assertValueArg("s.set_var", "value", value);
   assertKnownKeys(`Statement "s.set_var": options`, a, OPTION_KEYS);
   return annotate(

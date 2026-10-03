@@ -13,9 +13,11 @@ import type { RowFromFieldMap, Prettify, BrandOpts, BrandType, ValueOf, ProtoKey
 import type { HostedFile } from "../fields/hosted-file.js";
 import { encodeComparison } from "../statements/conditional.js";
 import type { Condition } from "../statements/conditional.js";
+import { RAW_WHERE, isRawWhere, type RawWhere } from "./raw-where.js";
 import { registerKind } from "./kind.js";
 import type { ObjectKind } from "./kind.js";
 import type { DiagnosticsFor } from "../workspace/diagnostics.js";
+import { emitDiagnostic } from "../workspace/diagnostics.js";
 import { encodeTags } from "./common.js";
 import { brandDef } from "./def-brand.js";
 
@@ -212,8 +214,12 @@ export interface ViewDef {
   hide?: string[];
   /** Free-text search query → stored `q`. */
   q?: string;
-  /** Filter expression (reuses the conditional comparison shape). */
-  where?: Condition;
+  /**
+   * Filter expression (reuses the conditional comparison shape). A pulled view
+   * whose stored filter no `Condition` can express carries it through
+   * `rawWhere()` from `@xano/sdk/codegen` instead.
+   */
+  where?: Condition | RawWhere;
   /** Sort order, applied in array order. */
   sort?: Array<{ name: string; order: "asc" | "desc" }>;
 }
@@ -640,10 +646,11 @@ function toColumns(schema: SchemaDef): ColumnDef[] {
  */
 function systemColumns(idType: TableDef["idType"] = "int"): ColumnDef[] {
   return [
-    // A uuid primary key persists NO `default` key — the engine stores it that
-    // way because the value is engine-generated. An `int` key and an ordinary
-    // (non-key) uuid column both carry `default: ""`, so this is specific to the
-    // uuid key. See {@link FieldOptions.noDefault}.
+    // A uuid primary key persists NO `default` key — the value is
+    // engine-generated. An `int` key and an ordinary (non-key) uuid column both
+    // carry `default: ""`, so this is specific to the uuid key; a declared key
+    // can state `default: ""` instead (see `primaryKeyColumn`). See
+    // {@link FieldOptions.noDefault}.
     // `nullable` is pinned on both, not left to the per-type default: a uuid
     // column is nullable by default (see COLUMN_NULLABLE_BY_DEFAULT), but a PRIMARY KEY
     // never is, and every captured `id`/`created_at` stores `nullable: false`.
@@ -687,7 +694,17 @@ function primaryKeyColumn(table: string | undefined, col: ColumnDef): ColumnDef 
         `(\`idType: "uuid"\` picks a uuid key).`,
     );
   }
-  return { ...col, ...systemColumns(col.type)[0] };
+  const key = systemColumns(col.type)[0]!;
+  // A uuid key stated with an explicit `default` keeps it. Both stored spellings
+  // of the key are real: some workspaces store no `default` and others store
+  // `default: ""` (every uuid key in the corpus sweep). The engine discards a
+  // required column's default either way, so `noDefault` is only the key's
+  // spelling when the author does not state one.
+  if (col.type === "uuid" && col.default !== undefined) {
+    const { noDefault: _omitted, ...stated } = key;
+    return { ...col, ...stated };
+  }
+  return { ...col, ...key };
 }
 
 /**
@@ -845,7 +862,11 @@ export function encodeView(def: ViewDef): ViewXdo {
     id: def.id,
     name: def.name,
     q: def.q ?? "",
-    expression: def.where ? encodeComparison(def.where).expression : [],
+    expression: isRawWhere(def.where)
+      ? (structuredClone(def.where[RAW_WHERE]) as ExprNode[])
+      : def.where
+        ? encodeComparison(def.where).expression
+        : [],
     sort: (def.sort ?? []).map((s) => ({ name: s.name, order: s.order })),
   };
 }
@@ -1065,6 +1086,11 @@ const GIN_OPS: Readonly<Record<string, (list: boolean) => boolean>> = {
  * a timestamp or date), so `f.int({ default: "abc" })` exports cleanly and
  * fails the table at deploy with a raw SQL error. An empty or null default is
  * the type's zero and always fits.
+ *
+ * On a JSON-storage table the same default deploys and is stored — it fails
+ * only the inserts that leave the column unset — so there it is a WARNING
+ * (`table.column-default-unfit`) a def accepts with `diagnostics.allow`, and a
+ * pulled table that carries one still builds.
  */
 function assertColumnDefaultFits(tableName: string, col: ColumnDef, useXdo: boolean): void {
   const value: unknown = col.default;
@@ -1111,10 +1137,11 @@ function assertColumnDefaultFits(tableName: string, col: ColumnDef, useXdo: bool
     : family === "date"
       ? "a JSON-storage table deploys, then every insert that leaves the column unset is refused or stores a rolled-over day"
       : "a JSON-storage table deploys, then every insert that leaves the column unset is refused";
-  throw new Error(
+  const message =
     `table "${tableName}", column "${col.name}" (${authoredFieldType(col.type)}): \`default\` ${shown} does not fit — ` +
-      `${consequence}. Use ${want}.`,
-  );
+    `${consequence}. Use ${want}.`;
+  if (!useXdo) throw new Error(message);
+  emitDiagnostic({ severity: "warning", code: "table.column-default-unfit", message });
 }
 
 /**

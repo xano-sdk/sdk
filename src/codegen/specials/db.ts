@@ -428,10 +428,23 @@ function decodeAddonSpec(
 function decodeAddons(
   a: SpecialArgs,
   stored: StackItemXdo,
+  pagedEnvelope = false,
 ): { expr: Expr; runtime: unknown[] } | null {
   const list = (stored as { addon?: unknown }).addon;
   if (!Array.isArray(list) || list.length === 0) return null;
-  const decoded = list.map((spec) => decodeAddonSpec(a, spec));
+  const decoded = list.map((spec) => {
+    const one = decodeAddonSpec(a, spec);
+    // On a query that returns the paging envelope, a top-level attachment whose
+    // offset is not under `items[]` grafts onto the envelope itself — the engine
+    // applies the stored path as written. `envelope: true` says so; without it
+    // the encoder would move the graft onto every row.
+    const offset = (spec as { offset?: unknown } | null)?.offset;
+    if (one === null || !pagedEnvelope || (typeof offset === "string" && offset.startsWith("items"))) return one;
+    return {
+      expr: one.expr.kind === "object" ? obj([...one.expr.entries, ["envelope", lit(true)]]) : one.expr,
+      runtime: { ...(one.runtime as Record<string, unknown>), envelope: true },
+    };
+  });
   if (decoded.some((d) => d === null)) return null;
   return { expr: arr(decoded.map((d) => d!.expr)), runtime: decoded.map((d) => d!.runtime) };
 }
@@ -594,6 +607,19 @@ function dboOp(shape: DboOpShape): SpecialDecoder {
     let cursor = 0;
 
     if (shape.lookup) {
+      // The lookup value is a REQUIRED argument: with no entry to pass it, the
+      // engine answers `Missing param: field_value` on every run. A stored
+      // statement in that state is broken where it lives, and `raw()` is its
+      // faithful reading — filed as a workspace defect, not a decoder gap.
+      const lookupValue = entriesIn.find((e) => e.name === "field_value");
+      if (lookupValue === undefined || lookupValue.ignore) {
+        return declineHere(
+          `${lookupValue === undefined ? "stores no `field_value` entry" : "flags its `field_value` entry `ignore`, so the engine never passes it"}` +
+            ` — the value it looks the row up by is a required argument, so the engine answers ` +
+            "`Missing param: field_value` on every run",
+          "workspace-defect",
+        );
+      }
       const fieldName = entriesIn[cursor++];
       const fieldValue = entriesIn[cursor++];
       if (fieldName?.name !== "field_name" || fieldValue?.name !== "field_value")
@@ -615,6 +641,19 @@ function dboOp(shape: DboOpShape): SpecialDecoder {
       if (found?.name !== spec.entry) {
         // An optional entry the engine omitted: skip it without consuming a slot.
         if (spec.optional) continue;
+        // `db.patch` with no `item`: the engine treats the payload as empty, so
+        // it looks the row up and saves it unchanged. Every other stored entry
+        // names an input the statement does not declare, which it never reads.
+        if (shape.path === "db.patch" && spec.entry === "item") {
+          const unread = entriesIn.slice(cursor).filter((e) => !e.ignore).map((e) => `\`${e.name}\``);
+          return declineHere(
+            "stores no `item`, so it writes nothing: the engine looks the row up and saves it unchanged" +
+              (unread.length > 0
+                ? `. Its other entries (${unread.join(", ")}) are not inputs this statement declares, so the engine never reads them`
+                : ""),
+            "workspace-defect",
+          );
+        }
         return declineHere(`${shape.path}: input[] is missing required "${spec.entry}"`);
       }
       cursor += 1;
@@ -987,7 +1026,10 @@ const dbBulkDelete: SpecialDecoder = (a) => {
   // `Missing param: search` — so decline and let it round-trip as raw() rather
   // than silently rewrite it.
   if (isUnauthored("search", context.search)) {
-    return declineHere("db.bulk.delete: context.search is absent (the engine rejects this shape)");
+    return declineHere(
+      "stores no `search` — the engine answers `Missing param: search` on every run, so it deletes nothing",
+      "workspace-defect",
+    );
   }
   const where = decodeWhere(a, context.search, "db.bulk.delete search");
   if (!where) return null;
@@ -1130,7 +1172,7 @@ function decodeWhere(
   stored: unknown,
   site: string,
 ): { expr: Expr; runtime: unknown } | null {
-  const condition = decodeCondition(a.ctx, stored);
+  const condition = decodeCondition(a.ctx, stored, { sqlWhere: true });
   if (condition) return { expr: condition.expr, runtime: condition.runtime };
   const value = toValue(stored);
   if (!value)
@@ -1196,7 +1238,14 @@ const dbQuery: SpecialDecoder = (a) => {
     ? unboundTableArg(a, "db.query")
     : tableArg(a, String(storedId));
   const entries: Array<[string, Expr]> = [["table", table.expr]];
-  const runtime: Record<string, unknown> = { table: table.runtime };
+  // A table reached by symbol is its def in the generated file, and the factory
+  // checks column paths only against a def that carries columns — so the proof
+  // carries them too, or a stored path those checks refuse would prove here and
+  // throw when the pulled tree loads.
+  const schema = table.runtime === null ? undefined : a.refs.lookup(table.runtime.guid)?.schema;
+  const runtime: Record<string, unknown> = {
+    table: table.expr.kind === "id" && Array.isArray(schema) ? { ...table.runtime, schema } : table.runtime,
+  };
   const alias = aliasEntry(context);
   if (alias) {
     entries.push(alias.entry);
@@ -1237,6 +1286,33 @@ const dbQuery: SpecialDecoder = (a) => {
       const bindAlias = getPath(stored, "dbo.as");
       if (typeof bindGuid !== "string")
         return declineHere("db.query: a context.bind[] join has no dbo.id");
+      // A dotted id is not a table: it is the `<alias>.<column>` path of a list
+      // column the engine expands into one joined row per element. No guid
+      // carries a `.`, so the two cannot be confused.
+      if (bindGuid.includes(".")) {
+        if (typeof bindAlias !== "string" || bindAlias === "")
+          return declineHere("db.query: a context.bind[] list expansion has no dbo.as");
+        const cells: Array<[string, Expr]> = [
+          ["expand", lit(bindGuid)],
+          ["as", lit(bindAlias)],
+        ];
+        const entry: Record<string, unknown> = { expand: bindGuid, as: bindAlias };
+        const join = (stored as { join?: unknown }).join;
+        if (typeof join === "string" && join !== "inner") {
+          cells.push(["join", lit(join)]);
+          entry.join = join;
+        }
+        const search = (stored as { search?: unknown }).search;
+        if (!isUnauthored("search", search)) {
+          const where = decodeWhere(a, search, "db.query bind[] expansion");
+          if (!where) return null;
+          cells.push(["where", where.expr]);
+          entry.where = where.runtime;
+        }
+        bindExprs.push(obj(cells));
+        bindRuntime.push(entry);
+        continue;
+      }
       // A join to an UNBOUND table — the join's table was deleted, and the
       // engine clears the id rather than recording a tombstone. `DbBind.table`
       // models this as `null` on the same contract the query's own `table`
@@ -1320,7 +1396,7 @@ const dbQuery: SpecialDecoder = (a) => {
     sortBlock = getPath(ret, "stream.sort");
     distinct = getPath(ret, "stream.distinct");
     const block = (getPath(ret, "stream.paging") ?? {}) as Record<string, unknown>;
-    if (typeof block.enabled === "boolean") storedEnabled = block.enabled;
+    storedEnabled = block.enabled === true;
     const paging = decodePaging(a, block, simple, [
       ["page", 1],
       ["per_page", 25],
@@ -1334,7 +1410,7 @@ const dbQuery: SpecialDecoder = (a) => {
     sortBlock = getPath(ret, "list.sort");
     distinct = getPath(ret, "list.distinct");
     const block = (getPath(ret, "list.paging") ?? {}) as Record<string, unknown>;
-    if (typeof block.enabled === "boolean") storedEnabled = block.enabled;
+    storedEnabled = block.enabled === true;
     const paging = decodePaging(a, block, simple, [
       ["page", 1],
       ["per_page", 25],
@@ -1370,6 +1446,11 @@ const dbQuery: SpecialDecoder = (a) => {
   // off. Emitting it unconditionally would be noise on every query; not emitting it
   // at all is what cost ~158 statements their readability, since the same
   // derivation also decides where addons graft (`items[]`).
+  //
+  // An ABSENT gate is an off one: the engine reads a missing paging block, or a
+  // block with no `enabled`, as paging disabled — so a query storing a bare
+  // `{type: "list"}` beside an `external` blob (which the encoder would switch
+  // the gate on for) decodes with `enabled: false`.
   if (storedEnabled !== undefined) {
     const derived =
       pagingRuntime.page !== undefined ||
@@ -1433,7 +1514,9 @@ const dbQuery: SpecialDecoder = (a) => {
     entries.push(["output", outputArg(a, cols, table.runtime?.guid)]);
     runtime.output = cols;
   }
-  const addons = decodeAddons(a, a.stored);
+  const listPaging = getPath(ret, "list.paging") as { enabled?: unknown; metadata?: unknown } | undefined;
+  const pagedEnvelope = returnType === "list" && listPaging?.enabled === true && listPaging.metadata !== false;
+  const addons = decodeAddons(a, a.stored, pagedEnvelope);
   if (addons) {
     entries.push(["addon", addons.expr]);
     runtime.addon = addons.runtime;

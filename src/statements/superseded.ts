@@ -1,5 +1,5 @@
 /**
- * Statement versions the platform has retired.
+ * Statements, and statement versions, the platform has retired.
  *
  * A handful of statements are VERSIONED by suffix — `…_encode`, `…_encode2`,
  * `…_encode3`. Only the highest number is offered when you add a statement; the
@@ -30,6 +30,13 @@ export const SUPERSEDED_STATEMENTS: ReadonlyMap<string, string> = new Map([
   ["mvp:crypto_jws_encode", "mvp:crypto_jws_encode2"],
   // Retired outright — an old third-party log connector with no successor.
   ["mvp:connect_ncscale_send_log", ""],
+  // Retired statements outside any versioned family. The engine still runs a
+  // stored one, but neither has a XanoScript spelling and the builder no longer
+  // offers either. `mvp:guid` has no replacement: `security.create_uuid` is a
+  // different generator producing different values, so naming it would invite
+  // a swap that changes what callers' data contains.
+  ["mvp:dbo_get", "mvp:dbo_getby"],
+  ["mvp:guid", ""],
 ]);
 
 /**

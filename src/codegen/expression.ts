@@ -88,6 +88,12 @@ export function decodeConditionOrEmpty(
  */
 export interface DecodeConditionOpts {
   readonly runtimeSurface?: boolean;
+  /**
+   * A db statement's `where` — a condition compiled into SQL, where a leading
+   * `or` is inert the same way it is on the runtime surface (see
+   * `decodeCondition`).
+   */
+  readonly sqlWhere?: boolean;
 }
 
 /** Decode one comparison node. */
@@ -280,11 +286,15 @@ export function decodeCondition(
   // that case never reads it); and the engine's own renderer, which emits no
   // separator before the first row.
   //
-  // A db SEARCH keeps the decline. That condition becomes a SQL WHERE clause
-  // built beside clauses the engine adds itself, where a leading `or` is not
-  // known to be inert — and a decline that names the shape beats a fallback
-  // whose only clue is a byte diff.
-  if (nodes[0]?.or === true && !opts?.runtimeSurface)
+  // A db statement's `where` is inert the same way. The engine's SQL builder
+  // drops the boolean before the FIRST clause of every WHERE / ON list it
+  // compiles, and the stored search is the first clause of its list — the
+  // query's own filter is applied before any clause the engine adds, which it
+  // adds ANDed and grouped, and a join's filter is the whole of its ON list.
+  //
+  // Every other surface keeps the decline: a decline that names the shape beats
+  // a fallback whose only clue is a byte diff.
+  if (nodes[0]?.or === true && !opts?.runtimeSurface && !opts?.sqlWhere)
     return ctx.declined(
       "the condition's first sibling carries an `or` flag, which joins it to nothing — " +
         "there is no preceding term for it to OR with, and no authored form says it",

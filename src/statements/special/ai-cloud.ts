@@ -106,7 +106,7 @@ export interface AiAgentRunArgs<As extends string = "", A extends ObjectRef = Ob
   resultShape?: R;
 }
 
-const AI_AGENT_RUN_KEYS = /* @__PURE__ */ Object.keys({ agent: 1, as: 1, args: 1, allowToolExecution: 1, version: 1, runtime: 1, resultShape: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<AiAgentRunArgs>, 1>);
+const AI_AGENT_RUN_KEYS = /* @__PURE__ */ Object.keys({ agent: 1, as: 1, args: 1, allowToolExecution: 1, version: 1, runtime: 1, resultShape: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<AiAgentRunArgs>, 1>);
 
 /**
  * `ai.agent.run <agent>` — invoke an AI agent (`mvp:call_agent`). Stored shape
@@ -181,7 +181,7 @@ export interface CloudJobArgs extends StatementOptions {
   await?: Value;
 }
 
-const CLOUD_JOB_KEYS = /* @__PURE__ */ Object.keys({ as: 1, image: 1, command: 1, args: 1, secret: 1, template: 1, await: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<CloudJobArgs>, 1>);
+const CLOUD_JOB_KEYS = /* @__PURE__ */ Object.keys({ as: 1, image: 1, command: 1, args: 1, secret: 1, template: 1, await: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<CloudJobArgs>, 1>);
 
 /**
  * `cloud.job { … }` — launch a containerized cloud job (`mvp:cloud_job`). Stored
@@ -219,7 +219,7 @@ export interface CloudJobAwaitArgs extends StatementOptions {
   timeout: Value;
 }
 
-const CLOUD_JOB_AWAIT_KEYS = /* @__PURE__ */ Object.keys({ as: 1, ids: 1, timeout: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<CloudJobAwaitArgs>, 1>);
+const CLOUD_JOB_AWAIT_KEYS = /* @__PURE__ */ Object.keys({ as: 1, ids: 1, timeout: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<CloudJobAwaitArgs>, 1>);
 
 /**
  * `cloud.job.await { … }` — wait for cloud jobs to finish (`mvp:cloud_job_await`).
@@ -247,7 +247,7 @@ export interface CloudJobStatusArgs extends StatementOptions {
   id: Value;
 }
 
-const CLOUD_JOB_STATUS_KEYS = /* @__PURE__ */ Object.keys({ as: 1, id: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<CloudJobStatusArgs>, 1>);
+const CLOUD_JOB_STATUS_KEYS = /* @__PURE__ */ Object.keys({ as: 1, id: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<CloudJobStatusArgs>, 1>);
 
 /**
  * `cloud.job.status { … }` — read a cloud job's status (`mvp:cloud_job_status`).

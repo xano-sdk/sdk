@@ -257,7 +257,7 @@ export function specLabel(spec: StatementSpec): string {
 }
 
 /** The step annotations every spec-driven statement reads besides its own fields. */
-const SPEC_ENVELOPE_KEYS = ["disabled", "description", "mock", "asFilters", "output"] as const;
+const SPEC_ENVELOPE_KEYS = ["disabled", "description", "mock", "asFilters", "uncheckedAs", "output"] as const;
 
 /** Encode authored inputs into a `Statement` using a spec's field rules. */
 export function encodeFromSpec(spec: StatementSpec, authored: Authored): Statement {
@@ -405,6 +405,7 @@ export function encodeFromSpec(spec: StatementSpec, authored: Authored): Stateme
     description: authored.description as string | undefined,
     asFilters,
     mock: authored.mock as MockMap | undefined,
+    uncheckedAs: authored.uncheckedAs as boolean | undefined,
   });
   if (env?.settingsRegistry) stmt.settings_registry = [];
   if (spec.output) {

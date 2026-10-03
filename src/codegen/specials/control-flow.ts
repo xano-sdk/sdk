@@ -13,6 +13,7 @@ import { arr, lit, obj, type Expr } from "../print.js";
 import { decodeValue } from "../value.js";
 import { decodeConditionOrEmpty } from "../expression.js";
 import { filledContext } from "../../validate/normalize.js";
+import { isVarName } from "../../statements/args.js";
 import { envelopePassthrough } from "../envelope-passthrough.js";
 import { declineHere, getPath, prove, type SpecialArgs, type SpecialDecoder } from "./prove.js";
 
@@ -224,16 +225,20 @@ function loopDecoder(path: string, storedField: string, defField: string): Speci
     if (typeof as !== "string") return declineHere(`${path}: context.as is not a string`);
     if (!value) return declineHere(`${path}: context.${storedField} is not a tagged value`);
     const body = a.decodeStack(context.run);
+    // A loop variable stored under a name the variable-name rule refuses: the
+    // engine binds it by that exact name, so it is carried with `uncheckedAs`.
+    const unchecked = as !== "" && !isVarName(as);
     return prove(
       a.ctx,
       a.stored,
       path,
-      [{ as, [defField]: value, body: body.statements }],
+      [{ as, [defField]: value, body: body.statements, ...(unchecked ? { uncheckedAs: true } : {}) }],
       [
         obj([
           ["as", lit(as)],
           [defField, decodeValue(a.ctx, value)],
           ["body", arr(body.exprs)],
+          ...(unchecked ? [["uncheckedAs", lit(true)] as [string, Expr]] : []),
         ]),
       ],
     );

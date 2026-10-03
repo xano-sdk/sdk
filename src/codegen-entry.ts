@@ -17,3 +17,5 @@ export { rawField } from "./fields/raw-field.js";
 export type { RawFieldEnvelope } from "./fields/raw-field.js";
 export { rawResponse } from "./responses/raw-response.js";
 export type { RawResponseEnvelope } from "./responses/raw-response.js";
+export { rawWhere } from "./kinds/raw-where.js";
+export type { RawWhere } from "./kinds/raw-where.js";

@@ -230,7 +230,7 @@ const MICROSERVICE_DEFAULTS = {
   follow_location: true,
 } as const;
 
-const MICROSERVICE_KEYS = /* @__PURE__ */ Object.keys({ as: 1, host: 1, port: 1, path: 1, method: 1, params: 1, headers: 1, timeout: 1, follow_location: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<MicroserviceArgs>, 1>);
+const MICROSERVICE_KEYS = /* @__PURE__ */ Object.keys({ as: 1, host: 1, port: 1, path: 1, method: 1, params: 1, headers: 1, timeout: 1, follow_location: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<MicroserviceArgs>, 1>);
 
 /**
  * `microservice.request` — call an in-cluster microservice

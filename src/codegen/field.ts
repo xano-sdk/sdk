@@ -22,7 +22,7 @@ import type { FieldContext, FieldCustomization, FieldOptions, MethodSpec, Nested
 // directly regroups the build's chunks so that `import { fl }` drags the CLI in
 // (test/bundle-floor.test.ts).
 export { authoredFieldType } from "../fields/field.js";
-import { CATALOG_BY_TYPE, COLUMN_CONTEXT, INPUT_CONTEXT, defaultNullable, encodeField, parseMethod } from "../fields/field.js";
+import { CATALOG_BY_TYPE, COLUMN_CONTEXT, INPUT_CONTEXT, authoredFieldType, defaultNullable, encodeField, parseMethod } from "../fields/field.js";
 import { f } from "../fields/catalog.js";
 import { FIELD_METHODS } from "../fields/generated/field-methods.generated.js";
 import type { FieldDescriptor } from "../fields/catalog.js";
@@ -199,8 +199,48 @@ const ENUMERATED_METHODS: ReadonlySet<string> = new Set(
   Object.values(FIELD_METHODS).flatMap((methods) => Object.keys(methods)),
 );
 
-/** Recover authoring `methods` from the stored list, or null when not expressible. */
-function recoverMethods(stored: readonly MethodXdo[]): MethodSpec[] | null {
+/**
+ * The method names the constructor a stored field decodes to types its
+ * `methods` against — the field type's own union, narrowed again to the
+ * `tableRef` union when the field is a table reference, and empty for a
+ * `dbLink` input (whose options take no method names).
+ *
+ * The shorthand only compiles against this set, so a name outside it has to take
+ * the explicit `{ name, arg }` form even though some OTHER type enumerates it.
+ * The corpus carries such names: a `trim` left on an int, bool, date, uuid,
+ * image, epochms and object column after its type was changed in the editor.
+ */
+export function ownMethodNames(stored: FieldXdo, context: FieldContext): ReadonlySet<string> {
+  if (context === INPUT_CONTEXT && linkedTableOf(stored) !== null) return new Set();
+  const own = Object.keys(FIELD_METHODS[stored.type] ?? {});
+  const ref = tableRefOf(stored) !== null ? FIELD_METHODS.tableRef ?? {} : null;
+  return new Set(ref === null ? own : own.filter((name) => Object.hasOwn(ref, name)));
+}
+
+/**
+ * The stored method names a field carries that its type does not take — every
+ * enabled method outside {@link ownMethodNames} except the `@` reference
+ * annotation, which is not a method.
+ */
+export function foreignMethodNames(stored: FieldXdo, context: FieldContext): string[] {
+  const own = ownMethodNames(stored, context);
+  const names = (stored.methods ?? [])
+    .filter((method) => method.name !== "@" && (method.disabled ?? false) === false)
+    .map((method) => method.name)
+    .filter((name) => !own.has(name));
+  return [...new Set(names)];
+}
+
+/**
+ * Recover authoring `methods` from the stored list, or null when not expressible.
+ *
+ * `shorthand` is the set of names the colon shorthand may be used for — every
+ * enumerated name by default, or a field's {@link ownMethodNames}.
+ */
+function recoverMethods(
+  stored: readonly MethodXdo[],
+  shorthand: ReadonlySet<string> = ENUMERATED_METHODS,
+): MethodSpec[] | null {
   const out: MethodSpec[] = [];
   for (const method of stored) {
     // `encodeMethods` always writes `disabled: false`; a disabled method has no
@@ -214,8 +254,8 @@ function recoverMethods(stored: readonly MethodXdo[]): MethodSpec[] | null {
     // It is only emitted when re-parsing it yields the stored args exactly, so
     // an arg that cannot survive the trip (an embedded `:`, a string that looks
     // like a number) falls back to the explicit form rather than drifting.
-    const shorthand = ENUMERATED_METHODS.has(method.name) ? colonForm(method.name, args) : null;
-    out.push(shorthand ?? { name: method.name, arg: [...args] });
+    const short = shorthand.has(method.name) ? colonForm(method.name, args) : null;
+    out.push(short ?? (args.length > 0 ? { name: method.name, arg: [...args] } : { name: method.name }));
   }
   return out;
 }
@@ -324,7 +364,7 @@ export function recoverOptions(
     options.description = stored.description;
   }
 
-  const methods = recoverMethods(stored.methods ?? []);
+  const methods = recoverMethods(stored.methods ?? [], ownMethodNames(stored, context));
   if (methods === null) return null;
   if (methods.length > 0) options.methods = methods;
 
@@ -393,6 +433,7 @@ export function decodeField(
   stored: FieldXdo,
   surface: FieldSurface,
   resolve: ResolveOptions = {},
+  primaryKey = false,
 ): DecodedField {
   const context = surface === "input" ? INPUT_CONTEXT : COLUMN_CONTEXT;
 
@@ -431,6 +472,18 @@ export function decodeField(
   }
 
   const options = recoverOptions(stored, context);
+  // A table's uuid key encodes with no `default` unless it states one, so the
+  // `default: ""` that recovery elides as the field's own default has to be
+  // stated back for the key to re-encode it. Real workspaces store both.
+  if (
+    primaryKey &&
+    options !== null &&
+    stored.type === "uuid" &&
+    Object.hasOwn(stored, "default") &&
+    options.default === undefined
+  ) {
+    options.default = "";
+  }
 
   // Keys no authoring option can reach — `override`, `is_settings_registry` —
   // would be silently rewritten by any `f.*`/`input.*`/descriptor form.
@@ -481,6 +534,36 @@ export function decodeField(
   const reEncoded = encodeField(stored.name, stored.type, options, context);
   if (!sameField(reEncoded, stored)) {
     return literalBecause(`re-encoding the recovered options ${describeDiff(reEncoded, stored)}`);
+  }
+
+  const kind = surface === "input" ? "input" : "column";
+  const typeName = stored.type === "obj" ? "object" : authoredFieldType(stored.type);
+  const foreign = foreignMethodNames(stored, context);
+  if (foreign.length > 0) {
+    const names = foreign.map((name) => `\`${name}\``).join(", ");
+    const one = foreign.length === 1;
+    ctx.problem(
+      "workspace-defect",
+      `${kind} "${stored.name}" (${typeName}) stores the method${one ? "" : "s"} ${names}, which the \`${typeName}\` ` +
+        `type does not take — most likely left over from an earlier type. ` +
+        `Decoded in the explicit \`{ name, arg }\` form so the tree compiles and re-deploys the same bytes; ` +
+        `remove ${one ? "it" : "them"} upstream`,
+      "foreign method",
+    );
+  }
+
+  // Nested `children` are read only on an object or json field; on any other
+  // type they are leftovers from an earlier type, and that type's constructor
+  // has no `children` option. The descriptor literal carries them as stored.
+  if (stored.type !== "obj" && stored.type !== "json" && storedChildren(stored).length > 0) {
+    ctx.problem(
+      "workspace-defect",
+      `${kind} "${stored.name}" (${typeName}) stores nested children, which only an object or json ${kind} reads — ` +
+        `most likely left over from an earlier type. Emitted as a descriptor literal so the tree compiles and ` +
+        `re-deploys the same bytes; remove them upstream`,
+      "stale children",
+    );
+    return descriptorLiteral();
   }
 
   const ns = ctx.use(SDK_MODULE, surface);
@@ -687,15 +770,21 @@ export function decodeFieldMap(
   fields: readonly FieldXdo[],
   surface: FieldSurface,
   resolve: ResolveOptions = {},
+  table = false,
 ): Expr {
   return obj(
     fields.map((field) => [
       field.name,
       ctx.at(`${surface === "input" ? "input" : "schema"}.${field.name}`, () =>
-        decodeField(ctx, refs, field, surface, resolve).expr,
+        decodeField(ctx, refs, field, surface, resolve, table && isPrimaryKey(field)).expr,
       ),
     ]),
   );
+}
+
+/** A table's top-level `id` column, which the table encoder treats as its primary key. */
+function isPrimaryKey(field: FieldXdo): boolean {
+  return field.name === "id";
 }
 
 /** A key a JS object enumerates before every string key, whatever order it was written in. */
@@ -713,12 +802,14 @@ export function decodeTableSchema(
   resolve: ResolveOptions = {},
 ): Expr {
   if (!fields.some((field) => ARRAY_INDEX_KEY.test(field.name) && Number(field.name) < 2 ** 32 - 1)) {
-    return decodeFieldMap(ctx, refs, fields, "f", resolve);
+    return decodeFieldMap(ctx, refs, fields, "f", resolve, true);
   }
   return arr(
     fields.map((field) =>
       spread(
-        ctx.at(`schema.${field.name}`, () => decodeField(ctx, refs, field, "f", resolve).expr),
+        ctx.at(`schema.${field.name}`, () =>
+          decodeField(ctx, refs, field, "f", resolve, isPrimaryKey(field)).expr,
+        ),
         [["name", lit(field.name)]],
       ),
     ),

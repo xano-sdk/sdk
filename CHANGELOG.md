@@ -8,6 +8,30 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.2 — Fixtures can pin accepted hazards
+
+_2026-10-03_ · [release notes](https://github.com/xanots/sdk/releases/tag/v1.0.2)
+
+This patch release lets a def deliberately author three shapes the engine accepts but 1.0 refused outright: an active cache with `ttl: 0`, a call passing an input its target does not declare, and a lambda body that does not parse. Each is still flagged by default, and `export --strict` still fails on it, but a fixture that pins the engine's behavior for that input can now say so.
+
+- `cache.ttl` of 0 is a warning a def can accept
+- Passing an input the target does not declare is a warning a def can accept
+- `lam.raw(code, { unchecked: true })` sends a body that does not parse
+
+---
+
+## 1.0.1 — Safer local-engine records
+
+_2026-10-03_ · [release notes](https://github.com/xanots/sdk/releases/tag/v1.0.1)
+
+This patch release makes the local engine's record file safe under concurrent use and removes the SDK's handling of its retired package names. If you run several local-engine deploys or stops at once, they no longer undo each other's bookkeeping.
+
+- Concurrent local-engine deploys and stops no longer lose each other's records
+- `local-engine stop --all` keeps the record of an engine a concurrent deploy just started
+- The SDK no longer handles its retired package names
+
+---
+
 ## 1.0.0 — Xano SDK, the new name
 
 _2026-10-02_ · [release notes](https://github.com/xanots/sdk/releases/tag/v1.0.0)

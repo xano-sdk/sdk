@@ -1,8 +1,9 @@
 /**
  * `rawResponse()` — the response-level verbatim passthrough.
  *
- * The fourth and last escape hatch, alongside `raw()` for statements,
- * `rawValue()` for values, and `rawField()` for fields. Together they mean a
+ * One of the escape hatches, alongside `raw()` for statements, `rawValue()`
+ * for values, `rawField()` for fields and `rawWhere()` for view filters.
+ * Together they mean a
  * pulled workspace never loses data on the way into TypeScript: whatever the
  * engine stored comes back out unchanged, whether or not this SDK models it.
  *

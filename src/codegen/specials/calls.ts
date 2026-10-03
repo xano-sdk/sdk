@@ -8,7 +8,8 @@
  * {@link functionRunDecoder} for why that went away).
  */
 import type { TaggedValue } from "../../types/xdo.js";
-import { call, lit, obj, type Expr } from "../print.js";
+import { call, lit, obj, untypedKey, type Expr } from "../print.js";
+import { callableInputNames } from "../../workspace/guards.js";
 import { SDK_MODULE } from "../context.js";
 import { ignored } from "../../values/ignored.js";
 import { isBoundNumericId, isReferenceId, isUnboundId, microserviceHost, resolveReference } from "../ref-index.js";
@@ -38,26 +39,69 @@ function toValue(raw: unknown): TaggedValue | null {
   };
 }
 
+/**
+ * The input names the call's target declares, when the bundle carries the
+ * target and they are knowable — `null` otherwise (see `callableInputNames`).
+ */
+function targetInputs(a: SpecialArgs, guid: string | undefined): Set<string> | null {
+  const target = guid === undefined ? undefined : a.refs.lookup(guid);
+  if (target?.input === undefined) return null;
+  const tableColumns = new Map<string, string[]>();
+  for (const o of a.refs.all()) {
+    if (o.payloadKey !== "dbo" || !Array.isArray(o.schema)) continue;
+    tableColumns.set(
+      o.guid,
+      o.schema.flatMap((c) => (typeof (c as { name?: unknown })?.name === "string" ? [(c as { name: string }).name] : [])),
+    );
+  }
+  return callableInputNames({ input: target.input }, target.payloadKey, tableColumns);
+}
+
 /** The `input[]` bindings a call carries, as a `{name: Value}` record. */
-function callInput(a: SpecialArgs): { expr: Expr; runtime: Record<string, unknown> } | null {
+function callInput(
+  a: SpecialArgs,
+  surface: string,
+  guid?: string,
+): { expr: Expr; runtime: Record<string, unknown> } | null {
   const entries = Array.isArray(a.stored.input) ? a.stored.input : [];
   const source: Array<[string, Expr]> = [];
   const runtime: Record<string, unknown> = {};
+  const declared = entries.length > 0 ? targetInputs(a, guid) : null;
+  const stale: string[] = [];
   for (const entry of entries) {
-    const name = (entry as { name?: unknown }).name;
+    const stored = (entry as { name?: unknown }).name;
     const value = toValue(entry);
-    if (typeof name !== "string" || !value)
+    if (typeof stored !== "string" || !value)
       return declineHere("call input[]: entry is not a named tagged value");
+    // A key the target no longer declares: the engine drops it, and the typed
+    // `input` refuses it. Written `["key" as never]` — the same bytes, a tree
+    // that compiles — and reported below.
+    const undeclared = declared !== null && !declared.has(stored);
+    if (undeclared) stale.push(stored);
+    const name = undeclared ? untypedKey(stored) : stored;
     // A stored `ignore: true` binding keeps its value and is skipped at
     // runtime; `ignored()` re-encodes the flag.
     if ((entry as { ignore?: unknown }).ignore === true) {
       a.ctx.use(SDK_MODULE, "ignored");
       source.push([name, call("ignored", decodeValue(a.ctx, value))]);
-      runtime[name] = ignored(value);
+      runtime[stored] = ignored(value);
       continue;
     }
     source.push([name, decodeValue(a.ctx, value)]);
-    runtime[name] = value;
+    runtime[stored] = value;
+  }
+  if (stale.length > 0) {
+    const target = a.refs.lookup(guid!);
+    const declaredList = [...declared!].map((d) => `\`${d}\``);
+    a.ctx.problem(
+      "workspace-defect",
+      `\`${surface}\` passes ${stale.map((k) => `\`${k}\``).join(", ")} to ${target?.kind ?? "its target"} ` +
+        `"${target?.name ?? ""}", which does not declare ${stale.length === 1 ? "it" : "them"} — the engine drops ` +
+        `${stale.length === 1 ? "the key" : "those keys"}, so the target never sees the value` +
+        (declaredList.length > 0 ? ` (it declares ${declaredList.join(", ")})` : " (it declares no inputs)") +
+        `. Decoded as \`["…" as never]\` so the tree compiles; drop ${stale.length === 1 ? "it" : "them"}, or declare ` +
+        `the input on the target.`,
+    );
   }
   return { expr: obj(source), runtime };
 }
@@ -131,7 +175,7 @@ function callDecoder(shape: CallShape): SpecialDecoder {
     }
 
     if (shape.takesInput !== false) {
-      const input = callInput(a);
+      const input = callInput(a, `s.${shape.path}`, unbound ? undefined : guid);
       if (!input) return null;
       if (Object.keys(input.runtime).length > 0) {
         entries.push(["input", input.expr]);

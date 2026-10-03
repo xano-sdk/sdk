@@ -206,7 +206,7 @@ export interface FunctionRunArgs<
   runtime?: R;
 }
 
-const FUNCTION_RUN_KEYS = /* @__PURE__ */ Object.keys({ fn: 1, as: 1, input: 1, runtime: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<FunctionRunArgs>, 1>);
+const FUNCTION_RUN_KEYS = /* @__PURE__ */ Object.keys({ fn: 1, as: 1, input: 1, runtime: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<FunctionRunArgs>, 1>);
 
 /**
  * `function.run <fn>` — run another function inline.
@@ -260,7 +260,7 @@ export interface FunctionCallArgs<Fn extends ObjectRef = ObjectRef, As extends s
   input?: CallInputFor<Fn>;
 }
 
-const FUNCTION_CALL_KEYS = /* @__PURE__ */ Object.keys({ fn: 1, as: 1, input: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<FunctionCallArgs>, 1>);
+const FUNCTION_CALL_KEYS = /* @__PURE__ */ Object.keys({ fn: 1, as: 1, input: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<FunctionCallArgs>, 1>);
 
 /**
  * `function.call <fn>` — invoke a function as a workspace run.
@@ -396,7 +396,7 @@ function asDelivered(headers: ApiCallArgs["headers"]): ApiCallArgs["headers"] {
   return delivered;
 }
 
-const API_CALL_KEYS = /* @__PURE__ */ Object.keys({ api: 1, query: 1, as: 1, input: 1, headers: 1, auth: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ApiCallArgs>, 1>);
+const API_CALL_KEYS = /* @__PURE__ */ Object.keys({ api: 1, query: 1, as: 1, input: 1, headers: 1, auth: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ApiCallArgs>, 1>);
 
 /**
  * `api.call <endpoint>` — invoke an API endpoint as a workspace run. The stored
@@ -460,7 +460,7 @@ export interface TaskCallArgs extends StatementOptions {
   as?: string;
 }
 
-const TASK_CALL_KEYS = /* @__PURE__ */ Object.keys({ task: 1, as: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<TaskCallArgs>, 1>);
+const TASK_CALL_KEYS = /* @__PURE__ */ Object.keys({ task: 1, as: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<TaskCallArgs>, 1>);
 
 /** `task.call <task>` — invoke a task as a workspace run (no input). */
 export function taskCall(args: TaskCallArgs): Statement {
@@ -482,7 +482,7 @@ export interface ToolCallArgs<Tool extends ObjectRef = ObjectRef, As extends str
   input?: CallInputFor<Tool, true>;
 }
 
-const TOOL_CALL_KEYS = /* @__PURE__ */ Object.keys({ tool: 1, as: 1, input: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ToolCallArgs>, 1>);
+const TOOL_CALL_KEYS = /* @__PURE__ */ Object.keys({ tool: 1, as: 1, input: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ToolCallArgs>, 1>);
 
 /**
  * `tool.call <tool>` — invoke a tool as a workspace run. Branded with the
@@ -512,7 +512,7 @@ export interface TriggerCallArgs extends StatementOptions {
   input?: CallInput;
 }
 
-const TRIGGER_CALL_KEYS = /* @__PURE__ */ Object.keys({ trigger: 1, as: 1, input: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<TriggerCallArgs>, 1>);
+const TRIGGER_CALL_KEYS = /* @__PURE__ */ Object.keys({ trigger: 1, as: 1, input: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<TriggerCallArgs>, 1>);
 
 /** `trigger.call <trigger>` — invoke a trigger as a workspace run. */
 export function triggerCall(args: TriggerCallArgs): Statement {
@@ -533,7 +533,7 @@ export interface MiddlewareCallArgs extends StatementOptions {
   input?: CallInput;
 }
 
-const MIDDLEWARE_CALL_KEYS = /* @__PURE__ */ Object.keys({ middleware: 1, as: 1, input: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<MiddlewareCallArgs>, 1>);
+const MIDDLEWARE_CALL_KEYS = /* @__PURE__ */ Object.keys({ middleware: 1, as: 1, input: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<MiddlewareCallArgs>, 1>);
 
 /** `middleware.call <middleware>` — invoke middleware as a workspace run. */
 export function middlewareCall(args: MiddlewareCallArgs): Statement {
@@ -554,7 +554,7 @@ export interface AddonCallArgs extends StatementOptions {
   input?: CallInput;
 }
 
-const ADDON_CALL_KEYS = /* @__PURE__ */ Object.keys({ addon: 1, as: 1, input: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<AddonCallArgs>, 1>);
+const ADDON_CALL_KEYS = /* @__PURE__ */ Object.keys({ addon: 1, as: 1, input: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<AddonCallArgs>, 1>);
 
 /** `addon.call <addon>` — invoke an addon as a workspace run. */
 export function addonCall(args: AddonCallArgs): Statement {
@@ -646,7 +646,7 @@ function refuseDerivedIdentity(statement: string, args: object): void {
   );
 }
 
-const ACTION_CALL_KEYS = /* @__PURE__ */ Object.keys({ actionId: 1, as: 1, input: 1, registry: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ActionCallArgs>, 1>);
+const ACTION_CALL_KEYS = /* @__PURE__ */ Object.keys({ actionId: 1, as: 1, input: 1, registry: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ActionCallArgs>, 1>);
 
 /**
  * `action.call` — invoke an installed action (`mvp:action`).
@@ -682,7 +682,7 @@ export interface ActionPackageCallArgs extends StatementOptions {
   registry?: CallInput;
 }
 
-const ACTION_PACKAGE_CALL_KEYS = /* @__PURE__ */ Object.keys({ traceId: 1, versionId: 1, slug: 1, as: 1, input: 1, registry: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ActionPackageCallArgs>, 1>);
+const ACTION_PACKAGE_CALL_KEYS = /* @__PURE__ */ Object.keys({ traceId: 1, versionId: 1, slug: 1, as: 1, input: 1, registry: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ActionPackageCallArgs>, 1>);
 
 /**
  * `action.package.call` — invoke an action inside an installed package
@@ -721,7 +721,7 @@ export interface WorkflowTestCallArgs extends StatementOptions {
   datasource?: string;
 }
 
-const WORKFLOW_TEST_CALL_KEYS = /* @__PURE__ */ Object.keys({ workflowTest: 1, as: 1, datasource: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<WorkflowTestCallArgs>, 1>);
+const WORKFLOW_TEST_CALL_KEYS = /* @__PURE__ */ Object.keys({ workflowTest: 1, as: 1, datasource: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<WorkflowTestCallArgs>, 1>);
 
 /**
  * `workflow_test.call <test>` — run a workflow test

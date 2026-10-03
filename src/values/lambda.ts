@@ -364,12 +364,14 @@ export interface LambdaOptions<C = Record<string, never>> {
 /** Options for {@link lam.raw}: the shared ones, and the one that is only meaningful for text. */
 export interface RawLambdaOptions extends LambdaOptions<Record<string, CaptureValue>> {
   /**
-   * Send the body even though it does not parse. For a fixture that pins what
-   * the engine answers to a syntax error — the engine accepts the statement at
-   * import and fails when it runs, so the answer is only reachable by sending
-   * it. Skips the parse check ONLY, here and at the `s.lambda` / `fl.*` site the
-   * value is dropped into: the binding, module-syntax and empty-body checks
-   * still apply. Never the fix for a body that should work.
+   * Send the body even though it is not a function body — it does not parse,
+   * or it declares module syntax (a top-level `import`/`export`). For a fixture
+   * that pins what the engine answers to a syntax error, or a pulled workspace
+   * that stores such a body — the engine accepts the statement at import and
+   * fails when it runs, so the answer is only reachable by sending it. Skips
+   * those two syntax checks ONLY, here and at the `s.lambda` / `fl.*` site the
+   * value is dropped into: the binding and empty-body checks still apply.
+   * Never the fix for a body that should work.
    */
   unchecked?: boolean;
 }
@@ -1048,32 +1050,47 @@ function assertBody(body: string, surface: LambdaSurface, source: string, skipPa
 
   assertNoBundlerHelpers(mask, source);
 
+  // A body that is not a function body — module syntax, or one that does not
+  // parse. The engine stores it and fails when it runs; `unchecked` sends it anyway.
+  if (!skipParse) {
+    const problem = lambdaBodySyntaxProblem(body, source);
+    if (problem !== undefined) throw new Error(problem);
+  }
+}
+
+/**
+ * Why `body` cannot run as a lambda body for SYNTAX reasons — a top-level
+ * `import`/`export`, or a parse error — or `undefined` when it is syntactically
+ * a function body. These are the checks `lam.raw(..., { unchecked: true })`
+ * skips: the engine accepts such a statement at import and fails it at run time.
+ */
+export function lambdaBodySyntaxProblem(body: string, source = "s.lambda"): string | undefined {
   // `import(` / `import.meta` are the dynamic forms and stay legal — they run on
   // some instances (see LAMBDA_MODULE_GLOBALS) and this is not the place to
   // refuse working code; a bare `import`/`export` keyword in statement position
   // is the module-only syntax the engine rejects outright, everywhere.
+  const mask = maskNonCode(decodeIdentifierEscapes(body));
   const moduleSyntax = /(^|[;{}\n])\s*(import|export)\b(?![\s]*[.(])/.exec(mask);
   if (moduleSyntax) {
     const kw = moduleSyntax[2];
-    throw new Error(
+    return (
       `${source}: a top-level \`${kw}\` is a syntax error in a lambda body — the body is a function body, not a ` +
-        `module, so it must \`return\` its value and cannot declare module syntax. Reach a dependency through the ` +
-        `PRELOADED globals, which need no specifier: ${LAMBDA_MODULE_GLOBALS.join(", ")} (plus ` +
-        `${LAMBDA_GLOBALS.join(" / ")}, fetch, Buffer, TextEncoder). A dynamic \`import("...")\` or ` +
-        `\`require("...")\` with a literal specifier is NOT portable: on an instance that bundles the body before ` +
-        `running it, every literal specifier is resolved ahead of time and none of them exist, so the call comes ` +
-        `back as the text \`Could not resolve "..."\` with HTTP 200.`,
+      `module, so it must \`return\` its value and cannot declare module syntax. Reach a dependency through the ` +
+      `PRELOADED globals, which need no specifier: ${LAMBDA_MODULE_GLOBALS.join(", ")} (plus ` +
+      `${LAMBDA_GLOBALS.join(" / ")}, fetch, Buffer, TextEncoder). A dynamic \`import("...")\` or ` +
+      `\`require("...")\` with a literal specifier is NOT portable: on an instance that bundles the body before ` +
+      `running it, every literal specifier is resolved ahead of time and none of them exist, so the call comes ` +
+      `back as the text \`Could not resolve "..."\` with HTTP 200.`
     );
   }
-
-  const syntax = skipParse ? undefined : lambdaSyntaxError(body);
+  const syntax = lambdaSyntaxError(body);
   if (syntax !== undefined) {
-    throw new Error(
+    return (
       `${source}: the lambda body does not parse — ${syntax.message} (body line ${syntax.line}, column ${syntax.column}: ` +
-        `\`${syntax.lineText.trim()}\`). A body that does not parse cannot run.`,
+      `\`${syntax.lineText.trim()}\`). A body that does not parse cannot run.`
     );
-
   }
+  return undefined;
 }
 
 /**

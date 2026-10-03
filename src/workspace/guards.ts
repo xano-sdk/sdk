@@ -2642,6 +2642,21 @@ function sdkSubject(payloadKey: string, obj: Record<string, unknown>): string {
 const RAW_REQUEST_HOSTS: ReadonlySet<string> = new Set(["query", "tool", "prompt"]);
 
 /**
+ * The input names a call into `record` (a stored object of payload `section`)
+ * binds — what {@link checkUnknownCallInputs} checks a call's keys against.
+ * `null` when any key reaches it: a `dbLink` to a table `tableColumns` does not
+ * carry, or a raw-request host that declares no inputs.
+ */
+export function callableInputNames(
+  record: Record<string, unknown>,
+  section: string,
+  tableColumns: ReadonlyMap<string, readonly string[]>,
+): Set<string> | null {
+  const inputs = declaredInputNames(record, tableColumns);
+  return inputs !== null && inputs.size === 0 && RAW_REQUEST_HOSTS.has(section) ? null : inputs;
+}
+
+/**
  * An `s.function.run` that leaves out an input its CALLER can fill.
  *
  * The engine binds an input the call omits from the calling def's own input
@@ -2854,14 +2869,20 @@ export function checkUnitTests(sections: Readonly<Record<string, unknown[] | und
   }
 }
 
-/** Two sibling attachments grafting under one `as`: the later overwrites the earlier on every row. */
+/**
+ * Two sibling attachments grafting under one `as`: the later overwrites the
+ * earlier on every row. An attachment naming no addon (`id` 0 or blank) is
+ * skipped — the engine runs nothing for it, so it grafts nothing to overwrite.
+ * A WARNING: the engine stores and runs the pair, so a def that means it
+ * accepts it with `diagnostics.allow`.
+ */
 function checkAddonAliases(owner: string, attached: readonly unknown[], subject: object, bag: DiagnosticBag): void {
   const seen = new Set<string>();
   for (const spec of attached) {
-    const as = (spec as { as?: unknown } | null)?.as;
-    if (typeof as !== "string" || as === "") continue;
+    const { as, id } = (spec ?? {}) as { as?: unknown; id?: unknown };
+    if (typeof as !== "string" || as === "" || id === 0 || id === "" || id === undefined || id === null) continue;
     if (seen.has(as)) {
-      bag.error(
+      bag.warn(
         "db.addon-duplicate-alias",
         `${owner}: two attached addons graft as "${as}" — the later overwrites the earlier on every row. Give each its own \`as\`.`,
         subject,
@@ -2897,7 +2918,9 @@ export function checkAddonOutput(sections: Readonly<Record<string, unknown[] | u
  *
  * The engine binds an attachment's inputs by the addon's declared names and
  * reads `out()` off each parent row, so either typo grafts the addon with its
- * input unset — a silent `null` on every row. An ERROR, with the near miss.
+ * input unset — a silent `null` on every row. Both are WARNINGS, with the near
+ * miss: the engine stores and runs the binding, so a def that means it — or a
+ * pulled one whose table lost the column — accepts it with `diagnostics.allow`.
  *
  * A top-level attachment reads the statement's table; a nested one (`children`)
  * reads its parent addon's. `out()` is not checked where the parent row carries
@@ -2971,7 +2994,7 @@ export function checkAddonAttachments(
               const base = inputBase(e.value);
               if (columns.includes(base)) continue;
               const near = nearestKey(base, columns);
-              bag.error(
+              bag.warn(
                 "db.addon-unknown-column",
                 `${owner}: the attached ${label} binds \`out("${e.value}")\`, but the rows it reads have no ` +
                   `\`${base}\` column — the binding is null on every row, so the addon grafts nothing.` +
@@ -4456,19 +4479,21 @@ function segmentOverlap(a: SegmentNfa, b: SegmentNfa): string | undefined {
  * `x/runs/{id}` (a text `id`) created before `x/runs/trend` answers
  * `GET /x/runs/trend` itself, and the literal route is unreachable.
  *
- * Refused rather than reordered: creation order is `registerQueries` order only
- * on a fresh deploy. A merge (`release`, `deploy --keep-data`) updates existing
- * routes in place, so a route that is already deployed stays ahead of a sibling
- * added later whatever order the bundle carries. No emit order is safe; only
- * disjoint paths are.
+ * Not reordered: creation order is `registerQueries` order only on a fresh
+ * deploy. A merge (`release`, `deploy --keep-data`) updates existing routes in
+ * place, so a route that is already deployed stays ahead of a sibling added
+ * later whatever order the bundle carries. No emit order is safe; only disjoint
+ * paths are.
  *
- * One diagnostic per colliding pair.
+ * A WARNING: the engine stores and serves both routes, and making them disjoint
+ * renames a route clients already call — so a pair that is live accepts it with
+ * `diagnostics.allow` on either query. One diagnostic per colliding pair.
  */
 export function checkRouteShadowing(
   sections: Readonly<Record<string, unknown[] | undefined>>,
   bag: DiagnosticBag,
 ): void {
-  type Route = { name: string; verb: string; segments: SegmentNfa[] };
+  type Route = { name: string; verb: string; segments: SegmentNfa[]; record: object };
   const appNames = appNamesByGuid(sections["app"]);
   const byGroupVerb = new Map<string, Route[]>();
   for (const obj of sections["query"] ?? []) {
@@ -4503,6 +4528,7 @@ export function checkRouteShadowing(
       name: query.name,
       verb,
       segments: query.name.split("/").map((segment) => compileSegment(segment, narrowed)),
+      record: obj,
     });
     byGroupVerb.set(key, routes);
   }
@@ -4523,8 +4549,7 @@ export function checkRouteShadowing(
         if (witness.length !== a.segments.length) continue;
         const path = `/${witness.join("/")}`;
         const disjoint = disjointRouteExample(a.name, b.name);
-        bag.error(
-          "query.route-shadowed",
+        const message = () =>
           `queries "${a.name}" and "${b.name}" (${a.verb}, same api group) can both match ` +
             `\`${a.verb} ${path}\`. Xano serves the FIRST route that matches in creation order — a ` +
             `literal route gets no precedence over a \`{param}\` one — so one of them silently ` +
@@ -4533,8 +4558,9 @@ export function checkRouteShadowing(
             `reordering does not fix it. Make the paths disjoint: move the param route under its ` +
             `own segment${disjoint === undefined ? "" : ` (\`"${disjoint}"\`)`}, rename the literal, or — when the param is ` +
             `numeric — declare it \`input.int({ required: true })\`: only a REQUIRED int or ` +
-            `decimal segment is narrowed to digits; an optional one matches any text.`,
-        );
+            `decimal segment is narrowed to digits; an optional one matches any text.`;
+        if (bag.isAccepted("query.route-shadowed", message, a.record)) continue;
+        bag.warn("query.route-shadowed", message(), b.record);
       }
     }
   }
@@ -5744,6 +5770,11 @@ export function checkSwitchFallthrough(
   }
 }
 
+/**
+ * `s.foreach_break` / `s.foreach_continue` with no enclosing loop. A WARNING:
+ * the engine stores and runs the statement, with no defined effect — so a
+ * pulled workspace that carries one still builds, and says so.
+ */
 export function checkLoopControl(
   sections: Readonly<Record<string, unknown[] | undefined>>,
   bag: DiagnosticBag,
@@ -5755,7 +5786,7 @@ export function checkLoopControl(
       // The SDK's kind name (`table`, `workflowTest`) — the author wrote
       // `table()`, not the bundle's `dbo` payload key.
       const owner = `${sdkKindName(payloadKey, obj as { type?: unknown })} "${typeof name === "string" ? name : "?"}"`;
-      walkLoopDepth(obj, 0, owner, bag);
+      walkLoopDepth(obj, 0, owner, bag, obj);
     }
   }
 }
@@ -5770,7 +5801,7 @@ export function checkLoopControl(
  * the diagnostics are reported in discovery order, and reversing siblings would
  * silently reorder an author's error list.
  */
-function walkLoopDepth(root: unknown, rootDepth: number, owner: string, bag: DiagnosticBag): void {
+function walkLoopDepth(root: unknown, rootDepth: number, owner: string, bag: DiagnosticBag, subject: object): void {
   const stack: { node: unknown; depth: number }[] = [{ node: root, depth: rootDepth }];
   while (stack.length > 0) {
     const { node, depth } = stack.pop()!;
@@ -5790,13 +5821,14 @@ function walkLoopDepth(root: unknown, rootDepth: number, owner: string, bag: Dia
 
     if (!disabled && statement !== undefined && LOOP_CONTROL_STATEMENTS.has(statement) && depth === 0) {
       const spelling = LOOP_CONTROL_STATEMENTS.get(statement)!;
-      bag.error(
+      bag.warn(
         "stack.loop-control-outside-loop",
         `${owner} runs \`${spelling}\` outside any loop. Loop control is only defined inside the ` +
           `body of \`s.foreach\`, \`s.for\` or \`s.while\` — with no loop to ${LOOP_CONTROL_EFFECT.get(statement) ?? "act on"}, ` +
           `what it does is undefined rather than a no-op, and nothing reports it at deploy or at ` +
           `request time. Move it into a loop body, or delete it. (A conditional or group ` +
           `INSIDE a loop is still inside the loop; this fires only when no loop encloses it at all.)`,
+        subject,
       );
     }
 

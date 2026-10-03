@@ -36,10 +36,11 @@ export interface FieldOptions {
    * Persist **no `default` key at all** for this field, rather than the empty
    * `default: ""` every other field carries.
    *
-   * Set on a table's `uuid` PRIMARY KEY, which is the one column the engine
-   * stores this way — its value is engine-generated, so there is nothing for a
-   * default to mean, and absent vs empty are different stored bytes. Applied
-   * automatically by `idType: "uuid"`; you rarely set it by hand.
+   * Set on a table's `uuid` PRIMARY KEY, the one column stored this way — its
+   * value is engine-generated, so there is nothing for a default to mean, and
+   * absent vs empty are different stored bytes. Applied automatically to a uuid
+   * `id` (declared or via `idType: "uuid"`) unless it states `default: ""`,
+   * the other spelling real workspaces store for the same key.
    *
    * NOT a property of `uuid` in general: an ordinary (non-key) `uuid` column
    * does carry `default: ""`. Mutually exclusive with {@link default}.

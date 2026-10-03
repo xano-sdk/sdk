@@ -104,6 +104,19 @@ export function decodeStatement(
     }
   }
 
+  // A `name` stored beside a db statement's table binding `id`. The statement
+  // reads `dbo.id` alone, so `normalize` drops the member on both sides; the
+  // typed form does not write it back, and the pull says so.
+  const dboName = (stored.context as { dbo?: { name?: unknown } } | null | undefined)?.dbo?.name;
+  if (!isRawFallback(decoded) && stored.name.startsWith("mvp:dbo_") && dboName !== undefined) {
+    ctx.problem(
+      "expected-omission",
+      `${stored.name} stores a \`name\` (${JSON.stringify(dboName)}) beside its table binding's id. The ` +
+        "statement resolves its table by id and nothing reads the name, so it is not carried into the " +
+        "tree, and a deploy from this tree will not write it back",
+    );
+  }
+
   return decoded;
 }
 
@@ -202,6 +215,9 @@ function dispatch(
   // reproduce. Six such rows in the survey corpus read as fidelity gaps.
   if (note?.category === "unconfigured-stub") {
     ctx.problem("unconfigured-stub", `${label} ${why}`);
+  } else if (note?.category === "workspace-defect") {
+    // Broken where it lives: the decode is faithful, the defect is upstream.
+    ctx.problem("workspace-defect", `${label} ${why}. Carried verbatim via raw()`);
   } else {
     ctx.problem(
       "raw-fallback",

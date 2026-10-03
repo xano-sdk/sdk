@@ -8,7 +8,7 @@
  *
  * - **A corpus instance.** The decoder is driven from the stored form and has to
  *   re-encode it exactly, so a real workspace holding the statement proves it,
- *   usually many times over. This covers 123 of the 153 generated specs.
+ *   usually many times over. This covers most of the generated specs.
  * - **A captured fixture.** One persisted object, vendored and pinned.
  * - **A live round trip.** Deploy the statement, read the workspace back, diff.
  *   This is what {@link PROBE_CONFIRMED} records, and it is the answer for a
@@ -27,15 +27,15 @@
  *
  * `npx tsx scripts/probe-unconfirmed-shapes.ts` deploys these to a throwaway
  * ephemeral, exports the workspace back, and diffs each object against what was
- * authored. All 30 matched on 2026-08-24; that script carries the measured
- * output and the argument set behind it.
+ * authored. Every one of them matched; that script carries the measured output
+ * and the argument set behind it.
  *
  * This set exists to keep the CORPUS audit honest rather than to ship anything.
  * A sweep sees zero instances of every name here and will keep seeing zero until
  * an author writes one, so without this record `audit:decode-coverage` would
- * report all 30 as missing evidence at every run, forever. Read it as the same
- * kind of thing as `ADJUDICATED_ORDER` in the drift audit: a suppression that
- * carries its reason.
+ * report each of them as missing evidence at every run, forever. Read it as the
+ * same kind of thing as `ADJUDICATED_ORDER` in the drift audit: a suppression
+ * that carries its reason.
  *
  * **A live round trip proves the SHAPE that was authored**, exactly as a fixture
  * does. A field the probe left absent is still unexercised — widen the probe
@@ -58,6 +58,13 @@ export const PROBE_CONFIRMED: ReadonlySet<string> = new Set([
   "mvp:mcp_list_tools",
   "mvp:mcp_server_details",
   "mvp:get_session",
+  // The MCP server's own statements: the progress notification a tool body
+  // sends and the hosted sign-in trio a login page's stack runs. Newer than
+  // every workspace the corpus exports, so none stores one yet.
+  "mvp:mcp_oauth_complete",
+  "mvp:mcp_oauth_request",
+  "mvp:mcp_oauth_revoke",
+  "mvp:mcp_progress",
   // The assertion family. Test objects export like any other and the corpus
   // holds six of them, but all six are EMPTY — so this was an authoring gap
   // upstream, not a gap in what an export carries.
@@ -84,11 +91,11 @@ export const PROBE_CONFIRMED: ReadonlySet<string> = new Set([
 /**
  * Statements with no byte-level evidence of any kind behind them.
  *
- * Empty today: the 30 that were here are in {@link PROBE_CONFIRMED}, and the
- * other 123 are covered by the corpus. What refills it is a statement the
- * platform ADDS — codegen generates a spec for it from the engine's schema, and
- * until someone deploys or captures one, the emitted shape is a reading of the
- * declaration and nothing more.
+ * Empty today: every generated spec the corpus does not cover is in
+ * {@link PROBE_CONFIRMED}. What refills it is a statement the platform ADDS —
+ * codegen generates a spec for it from the engine's schema, and until someone
+ * deploys or captures one, the emitted shape is a reading of the declaration
+ * and nothing more.
  *
  * Keyed by stored `mvp:` name. When non-empty, the manifest publishes these as
  * `s.` paths under `coverage.statements.unconfirmed` — as `s.` paths, because an

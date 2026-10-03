@@ -30,6 +30,8 @@ export interface IndexedObject {
   readonly schema?: unknown;
   /** A microservice's declared `servicePort`s, for re-linking a request's `host`. */
   readonly ports?: readonly string[];
+  /** A callable object's stored `input[]`, for checking the keys a call passes it. */
+  readonly input?: unknown;
 }
 
 /**
@@ -107,6 +109,7 @@ export class RefIndex {
           position,
           ...(payloadKey === "dbo" && Array.isArray(object.schema) ? { schema: object.schema } : {}),
           ...(payloadKey === "microservice" ? { ports: servicePorts(object) } : {}),
+          ...(Array.isArray(object.input) ? { input: object.input } : {}),
         });
       });
     }

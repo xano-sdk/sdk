@@ -40,6 +40,9 @@
  *    `Origin` can equal; correcting it changes which callers the group serves.
  *  - `table.column-name-unusable` — a live column whose name deploys but fails
  *    inserts or filters; renaming it moves data.
+ *  - `query.route-shadowed` — two live routes one request path can match;
+ *    making them disjoint renames a route clients already call. Accepted on
+ *    the first query of the pair, which is all the warning asks.
  *
  * Everything else — a shape that silently loses data, reads nothing, or fails
  * at run time — is left to warn: a pull must surface those, not bury them.
@@ -55,6 +58,7 @@ import {
   checkOmittedCallInputs,
   checkPathSegmentCandidates,
   checkRealtimeSilentShapes,
+  checkRouteShadowing,
   checkStacks,
   checkWriteBeforeElicit,
   checkZeroBasedObjects,
@@ -74,6 +78,7 @@ const ACCEPT_ON_DECODE = new Set([
   "value.obj-zero-based-numeric-keys",
   CORS_UNMATCHABLE,
   COLUMN_NAME_UNUSABLE,
+  "query.route-shadowed",
 ]);
 
 const cache = new WeakMap<object, WeakMap<object, string[]>>();
@@ -106,6 +111,7 @@ function acceptedFor(payload: Record<string, unknown>): WeakMap<object, string[]
   checkOmittedCallInputs(sections, bag);
   checkWriteBeforeElicit(sections, bag);
   checkZeroBasedObjects(sections, bag);
+  checkRouteShadowing(sections, bag);
   // Raised while a def encodes, not from the bytes: read here the way it reads
   // the def — a top-level `mvp:return` and an empty response.
   for (const key of ["query", "function"]) {
@@ -139,6 +145,6 @@ function acceptedFor(payload: Record<string, unknown>): WeakMap<object, string[]
  */
 export function acceptedOnDecode(kindName: string, stored: object, payload: Record<string, unknown>): string[] {
   const offered = allowableWarnings(kindName);
-  const codes = acceptedFor(payload).get(stored) ?? [];
+  const codes = [...(acceptedFor(payload).get(stored) ?? [])];
   return offered.filter((code) => codes.includes(code));
 }

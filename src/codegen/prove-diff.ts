@@ -207,7 +207,12 @@ let pendingNote: PendingDecline | undefined;
  */
 export interface PendingDecline {
   readonly why: string;
-  readonly category?: "unconfigured-stub";
+  /**
+   * `unconfigured-stub`: the statement stores nothing to recover.
+   * `workspace-defect`: it stores a shape the engine fails or ignores on every
+   * run — `raw()` is its faithful reading, and the defect is upstream.
+   */
+  readonly category?: "unconfigured-stub" | "workspace-defect";
 }
 
 /**

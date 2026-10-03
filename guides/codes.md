@@ -344,7 +344,7 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 | `query.auth-table-unregistered` | query "…": `auth` is a table def that isn't registered on this workspace — add it with `registerTables([…])`. |
 | `query.input-name-mangled` | query "…" (…) has an input named …, which a query string cannot deliver — the request parser rewrites param names, so `?…=…` … and the input stays empty. |
 | `query.path-segment-candidate` | query "…" (…) looks up one row by the `…` input, but the path declares no `{…}` segment — so the value arrives as `?…=…` instead of addressing the resource. |
-| `query.route-shadowed` | queries "…" and "…" (…, same api group) can both match `…`. |
+| `query.route-shadowed` | Two queries in one api group and verb that one request path can match; the route created first answers for both. |
 | `realtime.conversation-no-limit` | realtimeChannel "…" sets `conversation: { enabled: true }` with no `limit` — `limit` defaults to 0 and 0 means retain NONE, so nothing is recorded or replayed. |
 | `realtime.deliver-explicit` | realtimeMessage "…" sets `deliverTo: "explicit"`, which delivers to NOBODY — nothing selects recipients from inside a handler, and `s.realtime.publish` is no… |
 | `realtime.deliver-falsy-return` | realtimeChannelTrigger "…" gates `deliver` and returns `…` — only an explicit NULL drops a message; `false`, `0` and `""` DELIVER IT UNCHANGED. |
@@ -381,6 +381,7 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 | `statement.unknown-input` | …: `…` of … "…" passes `…`, which that … does not declare — the engine drops it, so the target never sees the value. |
 | `storage.stored-file-input` | … "…": `s.storage.…` reads `inp("…")`…, an `input.…()` — that input takes an already-stored file, so an upload to it is refused (`400 Missing param: path`) b… |
 | `switch.missing-break` | … has a `s.switch` whose case … omits `break: true`, so a match there FALLS THROUGH and also runs …. |
+| `table.column-default-unfit` | A JSON-storage column's `default` its type cannot hold: the table deploys, then every insert that leaves the column unset is refused. |
 | `table.column-name-unusable` | A stored column name the rule refuses (inserts, filters or reads fail on it), kept on a pulled table. |
 | `table.reserved-column-name` | table "…": the column name `…` is reserved by the engine — it is the key a block statement stores its sub-stack under, and an insert's parameter map collides… |
 | `table.view-duplicate` | …: `id` "…" is also the id of … — each view needs its own uuid. |

@@ -73,7 +73,7 @@ function assertFormField(field: InputXdo): void {
   }
 }
 
-const MCP_ELICIT_KEYS = /* @__PURE__ */ Object.keys({ key: 1, message: 1, input: 1, as: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<McpElicitArgs>, 1>);
+const MCP_ELICIT_KEYS = /* @__PURE__ */ Object.keys({ key: 1, message: 1, input: 1, as: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<McpElicitArgs>, 1>);
 
 /**
  * Ask the MCP client's user for input mid-call, and bind their answer.

@@ -375,6 +375,7 @@ export type DiagnosticCode =
   | "statement.unknown-input"
   | "storage.stored-file-input"
   | "switch.missing-break"
+  | "table.column-default-unfit"
   | "table.column-name-unusable"
   | "table.reserved-column-name"
   | "table.view-duplicate"

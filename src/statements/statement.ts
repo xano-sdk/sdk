@@ -168,6 +168,26 @@ export interface StatementOptions extends StatementAnnotations {
    * `json_decode`, …) fold to `unknown` — see `values/filter-result.ts`.
    */
   asFilters?: FilterXdo[];
+  /**
+   * Bind `as` to a name the variable-name rule refuses — `"2343434"`,
+   * `"root-folder-contents"` — which a pulled workspace already stores. The
+   * engine binds the variable and reads it back by that exact name
+   * (`ref("root-folder-contents")`); this skips the name check only. A new
+   * binding takes a real variable name instead.
+   */
+  uncheckedAs?: boolean;
+}
+
+/**
+ * Where {@link StatementOptions.uncheckedAs} rides on a built statement: an
+ * enumerable symbol, so it survives the `{...stmt}` copies a statement goes
+ * through and never reaches the encoded bytes.
+ */
+const UNCHECKED_AS = Symbol.for("xanosdk.statement.uncheckedAs");
+
+/** Whether `stmt` was built with `uncheckedAs: true`. */
+export function isUncheckedAs(stmt: object): boolean {
+  return (stmt as Record<symbol, unknown>)[UNCHECKED_AS] === true;
 }
 
 /**
@@ -190,18 +210,20 @@ export function assertAnnotations(stmt: Pick<Statement, "name" | "disabled" | "d
   // A non-empty binding follows the same variable-name rule as `s.set_var`'s
   // name: `s.db.query({ as: "bad name" })` and `as: "$x"` were stored, and no
   // later `ref()` can reach either. `""` is the statement that binds nothing.
-  if (typeof stmt.as === "string" && stmt.as !== "" && !isVarName(stmt.as)) {
+  // A stored binding carried with `uncheckedAs` is the one exception.
+  if (typeof stmt.as === "string" && stmt.as !== "" && !isVarName(stmt.as) && !isUncheckedAs(stmt)) {
     throw new Error(
       `Statement "${statementLabel(stmt.name)}": argument \`as\` is ${JSON.stringify(stmt.as)}, which is not a variable name — ` +
         `use a letter or underscore, then letters, digits and underscores (e.g. "order_total")` +
         `${stmt.as.startsWith("$") ? `; \`as\` takes the bare name, without the "$"` : ""}.`,
     );
   }
-  if (stmt.disabled != null && typeof stmt.disabled !== "boolean") {
-    throw new Error(
-      `Statement "${statementLabel(stmt.name)}": option \`disabled\` must be true or false — got ` +
-        `${describeEntry(stmt.disabled)}.`,
-    );
+  for (const [option, flag] of [["disabled", stmt.disabled], ["uncheckedAs", (stmt as Record<symbol, unknown>)[UNCHECKED_AS]]]) {
+    if (flag != null && typeof flag !== "boolean") {
+      throw new Error(
+        `Statement "${statementLabel(stmt.name)}": option \`${option}\` must be true or false — got ${describeEntry(flag)}.`,
+      );
+    }
   }
   if (stmt.description != null && typeof stmt.description !== "string") {
     throw new Error(
@@ -215,7 +237,7 @@ export function assertAnnotations(stmt: Pick<Statement, "name" | "disabled" | "d
 export const ANNOTATION_KEYS: readonly string[] = /* @__PURE__ */ Object.keys({ disabled: 1, description: 1, mock: 1 } satisfies Record<keyof StatementAnnotations, 1>);
 
 /** The keys of {@link StatementOptions}: {@link ANNOTATION_KEYS} plus `asFilters`. */
-export const OPTION_KEYS: readonly string[] = /* @__PURE__ */ Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1 } satisfies Record<keyof StatementOptions, 1>);
+export const OPTION_KEYS: readonly string[] = /* @__PURE__ */ Object.keys({ disabled: 1, description: 1, mock: 1, asFilters: 1, uncheckedAs: 1 } satisfies Record<keyof StatementOptions, 1>);
 
 /**
  * Apply {@link StatementOptions} to a built statement.
@@ -232,6 +254,7 @@ export function annotate<T extends Statement>(stmt: T, a?: StatementOptions): T 
   // `null` is the absent option it means, as it is for every optional value.
   if (a?.disabled !== undefined && a.disabled !== null) stmt.disabled = a.disabled;
   if (a?.description !== undefined && a.description !== null) stmt.description = a.description;
+  if (a?.uncheckedAs != null && a.uncheckedAs !== false) (stmt as Record<symbol, unknown>)[UNCHECKED_AS] = a.uncheckedAs;
   assertAnnotations(stmt);
   if (a?.mock !== undefined && a.mock !== null) {
     try {

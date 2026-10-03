@@ -5,7 +5,7 @@
  *
  * PARAM GATE: the return shape + query controls.
  */
-import { defineFunction, s, c, col, inp, ref, expr, and, input, qf } from "@xano/sdk";
+import { defineFunction, s, c, col, inp, ref, expr, and, input, qf, table, f } from "@xano/sdk";
 import { posts, users } from "../../_shared.js";
 import { fieldVector } from "../../fields/vector.js";
 
@@ -150,6 +150,43 @@ export const dbQueryJoinAliased = defineFunction({
       tableAlias: "p",
       bind: [{ table: users, as: "author", join: "left", where: expr(col("p.author_id"), "=", col("author.id")) }],
       where: expr(col("p.published"), "=", c.bool(true)),
+      as: "rows",
+    }),
+  ],
+  response: ref("rows"),
+});
+
+/** A table with a LIST column of objects, for the expansion join below. */
+export const articles = table({
+  name: "ex_db_query_articles",
+  schema: {
+    title: f.text({ required: true }),
+    categories: f.object({ category_id: f.int(), weight: f.int() }, { array: true }),
+  },
+});
+
+/**
+ * Gate 6b — expand a LIST column into one joined row per element.
+ *
+ * `bind: [{ expand: "<alias>.<column>", as }]` joins each element of a list
+ * column already in the query, addressed by dotted path under `as`. A row whose
+ * list holds two matching elements comes back twice, once per element. With
+ * rows `a` (categories `[{1,w5},{2,w7}]`) and `b` (`[{2,w9}]`),
+ * `category_id=2` answers `[{"title":"a","weight":7},{"title":"b","weight":9}]`.
+ * The default join is `inner`, so a row with an empty list drops out;
+ * `join: "left"` keeps it with the element's columns `null`.
+ */
+export const dbQueryExpand = defineFunction({
+  name: "ex_db_query_expand",
+  input: { category_id: input.int({ required: true }) },
+  stack: [
+    s.db.query({
+      table: articles,
+      tableAlias: "a",
+      bind: [{ expand: "a.categories", as: "cat" }],
+      where: expr(col("cat.category_id"), "=", inp("category_id")),
+      eval: [{ name: "cat.weight", as: "weight" }],
+      output: ["title", "weight"],
       as: "rows",
     }),
   ],

@@ -110,6 +110,19 @@ export function arrow(params: readonly string[], body: Expr): Expr {
 }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/** Marks an object key printed as `["name" as never]` — see {@link untypedKey}. */
+const UNTYPED_KEY = "\u0000untyped:";
+
+/**
+ * An object key printed as the computed `["name" as never]`: the same property
+ * at runtime, but one the literal's declared type does not check. For a stored
+ * key the typed surface no longer declares (a call input its target dropped),
+ * so the tree compiles and re-encodes to the same bytes.
+ */
+export function untypedKey(name: string): string {
+  return UNTYPED_KEY + name;
+}
 const INDENT = "  ";
 
 /**
@@ -121,6 +134,7 @@ const INDENT = "  ";
  * ordinary own property.
  */
 function key(name: string): string {
+  if (name.startsWith(UNTYPED_KEY)) return `[${JSON.stringify(name.slice(UNTYPED_KEY.length))} as never]`;
   if (name === "__proto__") return `[${JSON.stringify(name)}]`;
   return IDENTIFIER.test(name) ? name : JSON.stringify(name);
 }

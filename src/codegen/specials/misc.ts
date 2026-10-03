@@ -480,11 +480,11 @@ const workflowTestCall: SpecialDecoder = (a) => {
 // `NO_CREATE_GUID`). It generated a call to `s.security.create_guid`, which no
 // longer exists, so keeping it would emit code that does not compile.
 //
-// A stored `mvp:guid` therefore falls to `raw()` — UNREGISTERED rather than
-// undecodable. It still round-trips byte-for-byte; it is simply no longer
-// rendered as a named surface, which is correct: the statement is internal and
-// the XanoScript language has no spelling for it, so there is nothing to name
-// it AS. See the tombstone in `statements/special/misc.ts` for the full why.
+// A stored `mvp:guid` is a retired statement (`SUPERSEDED_STATEMENTS`): it is
+// carried byte-for-byte through `raw()` and reported as retired, not as a
+// decoder gap. The statement is internal and the XanoScript language has no
+// spelling for it, so there is nothing to name it AS. See the tombstone in
+// `statements/special/misc.ts` for the full why.
 
 /**
  * `array.map` — both engine output modes.

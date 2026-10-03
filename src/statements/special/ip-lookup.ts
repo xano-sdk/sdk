@@ -63,7 +63,7 @@ export interface IpLookupArgs<As extends string = string> extends StatementOptio
   as?: As;
 }
 
-const IP_LOOKUP_KEYS = /* @__PURE__ */ Object.keys({ value: 1, as: 1, asFilters: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<IpLookupArgs>, 1>);
+const IP_LOOKUP_KEYS = /* @__PURE__ */ Object.keys({ value: 1, as: 1, asFilters: 1, uncheckedAs: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<IpLookupArgs>, 1>);
 
 /**
  * `s.util.ip_lookup({ value, as })` — geolocate an IP address

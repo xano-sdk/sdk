@@ -24,6 +24,13 @@ import { AUTHOR_KIND_NAME } from "./def-shape.js";
 import { statementLabel } from "../statements/statement.js";
 import { withArticle } from "../util/article.js";
 
+/**
+ * The forms a stored test id takes: 32 lowercase hex characters (what the
+ * engine derives today) or a lowercase dashed UUID (what older workspaces hold).
+ * The engine matches a mock to its test by exact string, so both resolve.
+ */
+const STORED_TEST_ID = /^[\da-f]{8}(-?)([\da-f]{4}\1){3}[\da-f]{12}$/;
+
 /** A node that is a stack item carrying mocks: `{name, …, mocks}`. */
 function mockBearingItem(node: unknown): { mocks: Record<string, unknown> } | null {
   if (node === null || typeof node !== "object" || Array.isArray(node)) return null;
@@ -64,7 +71,7 @@ export function resolveMockKeys(
         // them), and such an orphan has no name to author it by. It is dead
         // weight the engine ignores either way — but dropping it would make the
         // pulled tree re-export differently from what it was pulled from.
-        if (/^[0-9a-f]{32}$/.test(testName)) {
+        if (STORED_TEST_ID.test(testName)) {
           resolved[testName] = entry as MockXdo;
           continue;
         }
@@ -118,7 +125,7 @@ export function resolveMockKeys(
  * clean and silently never apply, which is the exact failure the name→id
  * rewrite exists to make impossible.
  *
- * Keyed on the shape of a resolved key (32 hex chars) rather than on the kind,
+ * Keyed on the shape of a resolved key (a stored test id) rather than on the kind,
  * so a kind that gains tests later is covered without being listed here.
  */
 export function assertMockKeysResolved(xdo: unknown, kindName: string): void {
@@ -139,7 +146,7 @@ export function assertMockKeysResolved(xdo: unknown, kindName: string): void {
     const item = mockBearingItem(node);
     if (item) {
       for (const key of Object.keys(item.mocks)) {
-        if (/^[0-9a-f]{32}$/.test(key)) continue;
+        if (STORED_TEST_ID.test(key)) continue;
         const stored = (node as { name?: unknown }).name;
         const step = typeof stored === "string" ? `\`${statementLabel(stored)}\`` : "a statement";
         throw new Error(
@@ -159,9 +166,9 @@ export function assertMockKeysResolved(xdo: unknown, kindName: string): void {
 
 /**
  * Refuse a unit test `id` that is not a stored test id, or that two tests of one
- * object share. Every id the engine stores is 32 lowercase hex characters — the
- * form a statement's `mock` is resolved to and checked against — so any other
- * spelling would leave its mocks keyed to nothing.
+ * object share. A stored id is 32 lowercase hex characters or a lowercase dashed
+ * UUID — the forms a statement's `mock` is resolved to and checked against — so
+ * any other spelling would leave its mocks keyed to nothing.
  */
 export function assertTestIds(xdo: unknown, kindName: string): void {
   const tests = (xdo as { test?: unknown } | null)?.test;
@@ -170,10 +177,10 @@ export function assertTestIds(xdo: unknown, kindName: string): void {
   const owner = `${kind} "${String((xdo as { name?: unknown }).name)}"`;
   const byId = new Map<unknown, unknown>();
   for (const t of tests as Array<{ id?: unknown; name?: unknown }>) {
-    if (typeof t?.id !== "string" || !/^[0-9a-f]{32}$/.test(t.id)) {
+    if (typeof t?.id !== "string" || !STORED_TEST_ID.test(t.id)) {
       throw new Error(
         `${owner}: test "${String(t?.name)}" has \`id: ${JSON.stringify(t?.id)}\` — a test id is 32 lowercase hex ` +
-          `characters, the form the engine stores. Omit \`id\` to derive one from the test name, or copy the stored id.`,
+          `characters or a dashed UUID. Omit \`id\` to derive one from the test name, or copy the stored id.`,
       );
     }
     if (byId.has(t.id)) {

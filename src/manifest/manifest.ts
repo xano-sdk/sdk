@@ -1230,7 +1230,7 @@ function renderLambdaSection(): string[] {
     "",
     '- `lam.fn(({ $result, $this }) => $result + $this, { surface?, capture? })` — name a `surface` to check it here, or omit it and the call site checks it.',
     '- `lam.raw("return 1", { surface })` — text, same validation.',
-    '- `lam.raw(code, { surface, unchecked: true })` — sends a body that does not parse (a fixture pinning the engine\'s syntax-error answer); skips the parse check only, here and at the `s.lambda` / `fl.*` site.',
+    '- `lam.raw(code, { surface, unchecked: true })` — sends a body that does not parse or declares a top-level `import`/`export` (a fixture pinning the engine\'s syntax-error answer, or a pulled body); skips those syntax checks only, here and at the `s.lambda` / `fl.*` site.',
     '- `lam.file("./lambdas/total.ts")` — a default-exported function in its own module (path relative to the caller), read as text at build time. NODE ONLY: `import { lam } from "@xano/sdk/node"` (isomorphic `lam` has no `file`). Only the default export\'s BODY is sent, so a value import, a second export or a top-level helper is refused — move helpers inside; `import type` / `import { type X }` are free. `@xano/sdk/lambda-globals` types the globals below program-wide: keep modules in `xano/lambdas/` (its scaffold tsconfig loads it) or `import type {} from` it under their own tsconfig.',
     "",
     "Nothing from the enclosing scope crosses: the body is sent as TEXT, so a closed-over",
@@ -2615,6 +2615,7 @@ function renderSections(m: Manifest): RenderedSections {
     "  - `bind: [{ table, as?, join?, where? }]` — joins (`context.bind[]`). `join` defaults to `\"inner\"`. `as` defaults to the table name; two joins to the same table need distinct aliases.",
     "    - ⚠ In `where`/`sort`/`eval` a JOINED column takes a dotted path (`col(\"team_row.id\")`); THIS query's own columns stay **bare** (`col(\"team\")`). Qualifying your own by table name needs `tableAlias` (same rule as `aggregate`) — without it the engine reads the operand as text and 400s `ParseError: Invalid value for param` naming the OTHER operand, so it throws at export instead.",
     "    - `bind: [{ table: team, as: \"team_row\", join: \"left\", where: expr(col(\"team\"), \"=\", col(\"team_row.id\")) }]`",
+    "    - `bind: [{ expand: \"blog.categories\", as: \"cat\" }]` joins one row per element of a LIST column already in the query; read it as `col(\"cat.<key>\")`.",
     "    - ⚠ A join does NOT put the joined table's columns on the returned row — with or without a `bind`, a row is the QUERIED table's columns, which is what `InferResponse` types. There is no `row.team_row`. To read a joined column, PROJECT it with an `eval` whose `name` is the dotted path: `eval: [{ name: \"team_row.name\", as: \"team_name\" }]` puts `team_name` on the row and on the inferred type. A bare `name` there is `Unsupported parameter reference` at runtime (it qualifies to the base table), and a dotted joined column in `output` is dropped with no error.",
     "  - `returnType` — `\"list\"` (default) | `\"single\"` | `\"count\"` | `\"exists\"` | `\"stream\"` | `\"aggregate\"`. Drives `context.return.type` AND the `InferResponse` shape: `count`→`number`, `exists`→`boolean`, `single`→`Row|null`, `stream`→`Row[]` (pageable, no envelope), `list`→`Row[]`/envelope, `aggregate`→rows keyed by the `aggregate.group`/`eval` aliases. ⚠ A bare `count` of ZERO serializes as an EMPTY body, not `0` — a client parsing JSON gets a parse error on the one result it most needs to handle. Wrap it: `response: { count: ref(\"n\") }`.",
     "  - `eval: [{ name, as, filters? }]` — computed columns (`context.eval[]`). Each `as` grafts onto the row as an `unknown` key in `InferResponse`; shadowing a real column throws. Write `name` **bare** (`\"embedding\"`) — it is alias-qualified on emit exactly like `aggregate` (a bare eval name is `Unsupported param format` at runtime), and the statement declares the alias it used. An `as` alias is `sort`able in the SAME query.",
@@ -2676,6 +2677,7 @@ function renderSections(m: Manifest): RenderedSections {
     "  - ⚠ **Spreading a `Statement[]` helper into a stack kills the whole walk.** The trace needs the stack's TUPLE type, so `...myHelper()` where the helper returns `Statement[]` widens it and EVERY `as` in that stack — including ones declared after the spread — stops resolving. The response then types as `StackTupleWidened`, whose name says so. Fix: return `statements(s.a(...), s.b(...))` from the helper (a const-generic identity export — the tuple survives the spread). A helper that builds its array in a LOOP cannot be a tuple; declare `responseShape` there.",
     "- **Addons** enrich returned rows. `db.query`/`get`/`add`/`edit`/`patch` accept `addon: [{ addon, as, input?, output?, children? }]`; `db.add_or_edit`/`del`/`has`/`truncate` take no `addon`.",
     "  - `addon` is the target (name or def handle). `as` is the destination on the row — a bare alias (`\"_user\"`) or a dotted `offset.alias`, authored relative to a row. Under a metadata paging envelope the `items[]` offset is prefixed automatically; writing it yourself is tolerated and not double-prefixed.",
+    "  - `envelope: true` grafts once onto a paged query's envelope instead of each row.",
     "  - `input` maps addon inputs — bind a parent-row column with `out(col)`. `output` restricts addon columns. `children` nests addons.",
     "  - The DEFINITION side — the `addon({...})` factory and `registerAddons` — is a def shape in `llms/kinds-core.md`.",
     "  - Attaching a typed `addon({ table, output })` handle merges its alias (the last `as` segment) onto the row in `InferResponse`: `{cols} | null` for `single`, `{cols}[]` for `list`, `number` for `count`, `boolean` for `exists`, and for `aggregate` an array keyed by the `group`/`eval` aliases (`unknown` values; `unknown` when neither is declared).",
@@ -2899,19 +2901,19 @@ function renderSections(m: Manifest): RenderedSections {
     for (const s of legacyStatements) {
       legacy.push(`- \`s.${s.sPath}\` — ${LEGACY_SURFACES[s.surface]}`);
     }
-    // Retired VERSIONS of versioned families. These have no `s.` surface at all —
-    // only the latest of each family is authorable — so a pulled workspace holding
-    // one shows it as `raw({ name: "<stored>", … })`. Named here for the same
-    // reason as everything else in this index: an agent that has never heard of
-    // one will try to "fix" what it does not recognize, and the fix would be
-    // wrong, because each version was a breaking change to the one before it.
+    // Retired statements, and retired VERSIONS of versioned families. These have
+    // no `s.` surface at all — only the latest of each family is authorable — so a
+    // pulled workspace holding one shows it as `raw({ name: "<stored>", … })`.
+    // Named here for the same reason as everything else in this index: an agent
+    // that has never heard of one will try to "fix" what it does not recognize,
+    // and the fix would be wrong, because the replacement stores a different shape.
     const retired = [...SUPERSEDED_STATEMENTS.entries()];
     if (retired.length > 0) {
       legacy.push("");
       legacy.push(
-        "Retired statement VERSIONS — no `s.` surface exists. Pulled code shows them as",
-        "`raw({ name: \"…\" })` and they keep running as stored, so leave them; author the",
-        "replacement only for NEW code. Never swap one for the other — each version broke the last.",
+        "Retired statements and statement VERSIONS — no `s.` surface exists. Pulled code shows",
+        "them as `raw({ name: \"…\" })` and they keep running as stored, so leave them; author",
+        "the replacement only for NEW code. Never swap one for the other — the stored shapes differ.",
         "",
       );
       for (const [stored, successor] of retired) {
@@ -2953,6 +2955,10 @@ function renderSections(m: Manifest): RenderedSections {
     "(`@xano/sdk/codegen`); and an object ALREADY EMPTY upstream decodes to a def with",
     "no `stack`, reported as `empty-source` — faithful, not a decode failure. Workspace env",
     "var VALUES go to `xano/.env` (owner-only, gitignored); `xano/workspace.ts` declares each as `\"\"`.",
+    "",
+    "Markers for stored shapes the checks refuse — keep them, not for new code:",
+    "`uncheckedAs: true`, `lam.raw(body, { unchecked: true })`, `rawWhere([...])` from",
+    "`@xano/sdk/codegen` (view filter), `\"key\" as never` (a key the target dropped; remove once declared).",
     "",
   );
 

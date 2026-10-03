@@ -865,10 +865,9 @@ function isRawSqlContext(container: unknown): boolean {
  * lets an ordinary editor-built condition come back as `and(...)`/`or(...)`
  * instead of `raw()`.
  *
- * Scoped to `context.expr` — every consumer of that key is the runtime
- * evaluator above. A db search (`context.search`) becomes a SQL WHERE clause
- * built beside clauses the engine adds itself, where a leading `or` is NOT
- * known to be inert, and is deliberately left alone.
+ * Applied to `context.expr` — every consumer of that key is the runtime
+ * evaluator above — and to a db statement's SQL `search`, where the flag is
+ * inert for a different reason ({@link dbContextInertKeysDropped}).
  */
 function withoutLeadingJoin(v: unknown): unknown {
   if (v === null || typeof v !== "object") return v;
@@ -883,6 +882,49 @@ function withoutLeadingJoin(v: unknown): unknown {
     return { ...rest, ...group };
   });
   return { ...(v as Record<string, unknown>), expression: cleared };
+}
+
+/** A stored db statement (`mvp:dbo_*`) — the owner of a `context.dbo` binding and a SQL `search`. */
+function isDbStatement(value: unknown): boolean {
+  const name = (value as { name?: unknown } | null)?.name;
+  return typeof name === "string" && name.startsWith("mvp:dbo_") && "context" in (value as object);
+}
+
+/**
+ * A db statement's `context` with two inert members dropped, or the context
+ * itself when it carries neither.
+ *
+ * - The leading join flag on its SQL `search` (and each join's `bind[].search`).
+ *   The engine's SQL builder drops the boolean before the first clause of every
+ *   WHERE / ON list it compiles, and a stored search is the first clause of its
+ *   list: the query's own filter is applied before any clause the engine adds
+ *   (which it adds ANDed and grouped), and a join's filter is its whole ON list.
+ *   So the flag is inert here exactly as on the runtime surface
+ *   ({@link withoutLeadingJoin}).
+ * - A `name` beside the table binding's `id` (`dbo: {id, name}`). The statement
+ *   declares its binding as `{id}` and reads `dbo.id` alone — the table is
+ *   resolved by id and nothing reads a stored name — so the member cannot change
+ *   what the statement does. Not modelled, for the reason `allow_notfound` is
+ *   not; the decoder reports the drop.
+ */
+function dbContextInertKeysDropped(context: unknown): unknown {
+  if (context === null || typeof context !== "object" || Array.isArray(context)) return context;
+  const out = { ...(context as Record<string, unknown>) };
+  if ("search" in out) out.search = withoutLeadingJoin(out.search);
+  if (Array.isArray(out.bind)) {
+    out.bind = out.bind.map((b) =>
+      b !== null && typeof b === "object" && "search" in (b as object)
+        ? { ...(b as Record<string, unknown>), search: withoutLeadingJoin((b as { search?: unknown }).search) }
+        : b,
+    );
+  }
+  const dbo = out.dbo;
+  if (dbo !== null && typeof dbo === "object" && !Array.isArray(dbo) && "name" in (dbo as object)) {
+    const rest = { ...(dbo as Record<string, unknown>) };
+    delete rest.name;
+    out.dbo = rest;
+  }
+  return out;
 }
 
 export function isDefaultEnvelopeMember(key: string, v: unknown): boolean {
@@ -1198,6 +1240,12 @@ export function isDefaultEnvelopeMember(key: string, v: unknown): boolean {
     // {@link isBlankAgentSettings}). The SDK spells both by omitting it.
     case "agent_settings":
       return v === null || isBlankAgentSettings(v);
+    // MCP-server sign-in: agents and MCP servers share one stored shape whose
+    // `oauth` block is optional, so every one without sign-in reads back
+    // `oauth:null` while the SDK omits the key. A configured block is never
+    // null, so it is preserved and still compared.
+    case "oauth":
+      return v === null;
     // An agent's default `agent_settings.telemetry` (all providers off, empty
     // keys): the SDK omits it. Drop when telemetry is disabled.
     case "telemetry":
@@ -1890,6 +1938,8 @@ export function normalize<T>(value: T): T {
       const v =
         k === "expr"
           ? withoutLeadingJoin(stored)
+          : k === "context" && isDbStatement(value)
+          ? dbContextInertKeysDropped(stored)
           : k === "result"
           ? (liveResultItems(stored) ?? stored)
           : k === "return"
