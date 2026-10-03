@@ -1,4 +1,4 @@
-# xanosdk v1.0.3
+# xanosdk v1.0.4
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 

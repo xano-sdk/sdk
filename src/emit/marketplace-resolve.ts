@@ -208,7 +208,7 @@ export async function resolveMarketplaceSpec(spec: string, command: string): Pro
       `\`${FIRST_PARTY_SCOPE}\` module installs by its full name without it.`;
     throw isCatalogueOutage(err) ? new CatalogueUnreachableError(message) : new Error(message);
   }
-  if (mod.deleted === true) {
+  if (mod.listed === false) {
     throw new MarketplaceModuleNotFoundError(
       `\`${command}\`: ${mod.npm_package ?? name} has been removed from the Xano SDK marketplace, so nothing was installed. ` +
         `Run \`xanosdk marketplace list\` for the modules that are published.`,
@@ -298,7 +298,7 @@ export async function resolveProjectModuleListing(
   } catch (err) {
     return { pkg: spec, listing: err instanceof ModuleNotFoundError ? "unlisted" : "unknown" };
   }
-  if (mod.deleted === true && !known.has(mod.npm_package ?? spec)) return { pkg: spec, listing: "unlisted" };
+  if (mod.listed === false && !known.has(mod.npm_package ?? spec)) return { pkg: spec, listing: "unlisted" };
   const pkg = mod.npm_package ?? spec;
   if (pkg !== spec) info(`${spec} is the marketplace module ${pkg}.`);
   return { pkg, listing: known.has(pkg) ? "project" : "catalogue" };

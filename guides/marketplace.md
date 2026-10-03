@@ -126,15 +126,18 @@ flag that parses cleanly and then does nothing is worse than one that fails.
 `details` takes an npm package name or a slug. A miss prints the catalogue's own sentence
 plus a pointer at `search`, because a miss is usually a half-remembered name.
 
-A module that has been **removed** from the marketplace keeps its name reserved and is
-warned about before every output mode, `--prompt` included, on stderr so a piped prompt is
-unaffected. Soft-deleted modules are dropped from `list` entirely.
+A module that has been **removed** from the marketplace (`listed: false`) keeps its name
+reserved: `details` still answers it, with a warning before every output mode, `--prompt`
+included, on stderr so a piped prompt is unaffected. It is dropped from `list` and `search`
+entirely, and `install` refuses it.
 
 ### Pointing the reads somewhere else
 
 `XANOSDK_MARKETPLACE_URL` repoints all three read verbs. The catalogue host is otherwise
 hardcoded in a published package, so a move would break every installed copy of the CLI at
-once and only a release would fix it. See [Environment & identity](environment.md).
+once and only a release would fix it. A base with a path works too, so an ephemeral or a
+tenant (`https://<instance>/tenant/<name>`) can stand in for it. See
+[Environment & identity](environment.md).
 
 ## Installing
 

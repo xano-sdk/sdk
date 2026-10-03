@@ -8,6 +8,20 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.3 — Agents and MCP servers pass preflight
+
+_2026-10-03_ · [release notes](https://github.com/xanots/sdk/releases/tag/v1.0.3)
+
+This patch release fixes `xanosdk preflight` on workspaces that have agents or MCP servers, and makes pulling an existing workspace into code more reliable. Agents and MCP servers without sign-in no longer fail the round trip. Workspaces pulled with `export`/codegen now re-export as they were stored and the generated tree typechecks, including shapes older workspaces carry.
+
+- `preflight` no longer fails every agent and MCP server without `oauth`
+- UUID primary keys keep their stored default
+- Pulled workspaces decode more statements to typed code
+- Guards the engine accepts are now warnings a def can allow
+- Workspace defects are reported and the tree still compiles
+
+---
+
 ## 1.0.2 — Fixtures can pin accepted hazards
 
 _2026-10-03_ · [release notes](https://github.com/xanots/sdk/releases/tag/v1.0.2)

@@ -1664,11 +1664,11 @@ export async function runMarketplaceDetailsCommand(args: ParsedArgs): Promise<vo
     throw err;
   }
 
-  // A soft-deleted module keeps its name reserved but is not something to
-  // install. Warned before every output mode, `--prompt` included: the agent
-  // path is the one most likely to act on the answer without a human reading it.
-  // stderr, so a piped prompt is unaffected.
-  if (mod.deleted === true) {
+  // A withdrawn (`listed: false`) module keeps its name reserved but is not
+  // something to install. Warned before every output mode, `--prompt` included:
+  // the agent path is the one most likely to act on the answer without a human
+  // reading it. stderr, so a piped prompt is unaffected.
+  if (mod.listed === false) {
     warn(`${mod.npm_package ?? pkg} has been removed from the marketplace.`, "module.removed-from-marketplace");
   }
 

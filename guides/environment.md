@@ -62,7 +62,7 @@ are what you get when the variable is unset.
 
 | Variable | What it does |
 |---|---|
-| `XANOSDK_MARKETPLACE_URL` | Base URL the `xanosdk marketplace` reads hit, instead of the published catalogue. Repoints the three read verbs without waiting for a release. |
+| `XANOSDK_MARKETPLACE_URL` | Base URL the `xanosdk marketplace` reads hit, instead of the published catalogue. Repoints the three read verbs without waiting for a release. A path is kept, so `https://<instance>/tenant/<name>` works. |
 | `XANOSDK_PROVE_DIFF` | A file path. Codegen appends one JSON line per statement that fell back to `raw()` — the arm that declined and the key paths where the re-encode disagreed. The decline *reason* is on the report either way; this adds the machine-readable detail. |
 
 > `process.env` read inside a **workspace definition** is a different thing entirely: it

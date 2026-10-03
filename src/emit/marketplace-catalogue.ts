@@ -10,9 +10,8 @@
  * All three verbs return the one whole-record {@link CatalogueModule}: a caller
  * piping `list`, `search` or `details` never has to learn which one happens to
  * carry more, and a catalogue UI fills every card from one `list` rather than a
- * `details` per module. `search` filters the `plugins` list here rather than
- * calling `plugins-search`, because that route answers a trimmed row — with no
- * `deleted` column either, so it could not drop a reserved name.
+ * `details` per module. `search` filters the `plugins` list here: the catalogue
+ * serves no search route of its own.
  *
  * Projection is field-by-field rather than a cast, for the same reason
  * `fetchProfile` projects: it pins the output contract to this file. A column
@@ -28,15 +27,16 @@ import { EXIT_SOURCE_UNRESOLVABLE } from "./source-selector.js";
 import { parseJsonAnswer, serverMessage, statusLabel } from "../util/http.js";
 
 /**
- * Where the catalogue lives. Public, and documented as a permanent workspace
- * rather than a throwaway or expiring environment.
+ * Where the catalogue lives: the Xano Release Manager's live workspace, which
+ * serves it as seed data from `xano/marketplace.ts` in that project. Public,
+ * and a permanent workspace rather than a throwaway or expiring environment.
  *
  * It is still one hardcoded host in a published package: if it ever moves, every
  * installed copy of this CLI loses all three read verbs at once, and only a
  * release fixes it. `XANOSDK_MARKETPLACE_URL` is the reason that is survivable —
  * it repoints the reads without an upgrade.
  */
-const DEFAULT_BASE_URL = "https://xare-rvr8-mnnt.dev.xano.io";
+const DEFAULT_BASE_URL = "https://xo2z-4vn5-mdxv.dev.xano.io";
 
 /**
  * Bound every read so a stalled catalogue cannot hang the CLI. Matches
@@ -77,7 +77,7 @@ export interface CatalogueRow {
 
 /** One object a module puts on the workspace. */
 export interface CatalogueInclude {
-  /** table | endpoint | function | task | trigger | agent | mcp | middleware */
+  /** table | endpoint | function | task | trigger | agent | tool | mcp | middleware */
   kind: string | undefined;
   name: string | undefined;
   summary: string | undefined;
@@ -96,9 +96,11 @@ export interface CatalogueModule extends CatalogueRow {
   register_snippet: string | undefined;
   /** Written to be handed to a coding agent to do the wiring. */
   agent_prompt: string | undefined;
-  /** Unlisting hides a module from the index; deleting is soft and reserves the name. */
+  /**
+   * `false` withdraws the module: dropped from `list` and `search`, still
+   * answered by `details` so its name stays reserved, and refused by `install`.
+   */
   listed: boolean | undefined;
-  deleted: boolean | undefined;
 }
 
 function asString(v: unknown): string | undefined {
@@ -164,7 +166,6 @@ function projectModule(raw: Record<string, unknown>): CatalogueModule {
     register_snippet: asString(raw.register_snippet),
     agent_prompt: asString(raw.agent_prompt),
     listed: asBoolean(raw.listed),
-    deleted: asBoolean(raw.deleted),
   };
 }
 
@@ -210,11 +211,17 @@ export function isCatalogueOutage(err: unknown): boolean {
   return err instanceof CatalogueUnreachableError || (err instanceof CatalogueHttpError && err.status >= 500);
 }
 
-/** GET `path`, with the timeout, the status handling, and the parse guard all in one place. */
+/**
+ * GET `path`, with the timeout, the status handling, and the parse guard all in one place.
+ *
+ * `path` is APPENDED to the base rather than resolved against it: `new URL("/api:…", base)`
+ * would drop a base's own path, and an ephemeral or tenant host is only
+ * reachable under one (`https://<instance>/tenant/<name>`).
+ */
 async function read(path: string, params?: Record<string, string>): Promise<unknown> {
   let url: URL;
   try {
-    url = new URL(path, baseUrl());
+    url = new URL(baseUrl().replace(/\/+$/, "") + path);
   } catch {
     // Only reachable through a malformed override. Naming it beats a bare
     // `TypeError: Invalid URL`, which reads as a bug in the CLI.
@@ -287,15 +294,15 @@ function expectArray(value: unknown, path: string): Record<string, unknown>[] {
 /**
  * The whole catalogue, newest first.
  *
- * Soft-deleted rows are dropped here. The route returns `deleted` on every
- * record, so honoring it costs one predicate and removes any dependence on
- * whether the server filters — and a module whose name is merely reserved is not
- * something to offer someone as installable.
+ * Withdrawn (`listed: false`) rows are dropped here. The route returns `listed`
+ * on every record, so honoring it costs one predicate and removes any dependence
+ * on whether the server filters — and a module whose name is merely reserved is
+ * not something to offer someone as installable.
  */
 export async function fetchCatalogue(): Promise<CatalogueModule[]> {
   const path = "/api:marketplace/plugins";
   return expectArray(await read(path), path)
-    .filter((raw) => raw.deleted !== true)
+    .filter((raw) => raw.listed !== false)
     .map(projectModule);
 }
 
