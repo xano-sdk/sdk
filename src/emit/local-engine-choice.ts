@@ -1,5 +1,5 @@
 /**
- * Which engine a `deploy --local-engine` runs, and what that does to the
+ * Which engine a `deploy --local` runs, and what that does to the
  * project's pin.
  *
  * The deploy asks two things of this module: {@link chooseLocalEngine} before
@@ -28,10 +28,10 @@ import { UsageError } from "./errors.js";
 import { ORIGIN_READ_ONLY_BY_REFRESH } from "./context-flags.js";
 
 /**
- * Refuse the credential flags on a local-engine deploy that reads no
- * credential — the `--profile` refusal's siblings. A local engine is reached
+ * Refuse the credential flags on a local deploy that reads no
+ * credential — the `--profile` refusal's siblings. A Xano Engine is reached
  * with its own bearer, so each was accepted and never used: `--config` (a typo
- * in it, or a path that is a directory, passed without a word), `--local` (the
+ * in it, or a path that is a directory, passed without a word), `--local-auth` (the
  * project-local credential file), and `--origin` (the sign-in server). Allowed
  * when a SOURCE among `kinds` is hosted, which does read a credential.
  *
@@ -45,8 +45,8 @@ export function refuseCredentialFlagsForLocal(
   args: { authFile?: string; local?: boolean; authHost?: string },
   kinds: readonly string[],
 ): void {
-  if (kinds.some((k) => k !== "local-engine")) return;
-  const why = "and a local engine takes none — it is reached with the engine's own bearer.";
+  if (kinds.some((k) => k !== "local")) return;
+  const why = "and a Xano Engine takes none — it is reached with the engine's own bearer.";
   const or = "or deploy from a hosted backend that reads it.";
   const refuse = (message: string): never => {
     throw new UsageError(message, { hintFor: { command: "deploy" } });
@@ -55,7 +55,7 @@ export function refuseCredentialFlagsForLocal(
     refuse(`\`--config ${args.authFile}\` names a Xano credential file, ${why} Drop \`--config\`, ${or}`);
   }
   if (args.local === true) {
-    refuse(`\`--local\` selects the project-local Xano credential file, ${why} Drop \`--local\`, ${or}`);
+    refuse(`\`--local-auth\` selects the project-local Xano credential file, ${why} Drop \`--local-auth\`, ${or}`);
   }
   if (args.authHost !== undefined) {
     // Not echoed: an origin can carry a `user:password@`, and the flag's name
@@ -67,19 +67,19 @@ export function refuseCredentialFlagsForLocal(
   }
 }
 
-/** What a `--local-engine` deploy did to the project's engine pin — see `DeploySummary`. */
+/** What a `--local` deploy did to the project's engine pin — see `DeploySummary`. */
 export type LocalEnginePinOutcome = "unchanged" | "created" | "moved" | "none";
 
 /**
- * What put a hand-picked engine in place of the pin: a value on `--local-engine`,
- * XANOSDK_LOCAL_ENGINE_OVERRIDE, or a custom XANOSDK_ENGINE_RELEASES_URL. The
+ * What put a hand-picked engine in place of the pin: a value on `--local`,
+ * XANOSDK_ENGINE_OVERRIDE, or a custom XANOSDK_ENGINE_RELEASES_URL. The
  * summary's `pin` is `none` for each of these AND for a deploy with nothing to
  * pin into, so this is what tells a run on another engine from one with no pin.
  */
 export type LocalEngineOverride = "flag" | "env" | "releases-url";
 
 /**
- * How this run's local engine was chosen, and what that means for the pin.
+ * How this run's Xano Engine was chosen, and what that means for the pin.
  *
  * `pinWrite` is what to write once the engine is acquired — never before, so a
  * failed download cannot move a pin. `pin` is the summary's answer when
@@ -94,8 +94,8 @@ export interface LocalEngineChoice {
 }
 
 /**
- * Decide the engine source for a `--local-engine` run (KTD3): a value on the
- * flag, then XANOSDK_LOCAL_ENGINE_OVERRIDE, then the project's pin, then the
+ * Decide the engine source for a `--local` run (KTD3): a value on the
+ * flag, then XANOSDK_ENGINE_OVERRIDE, then the project's pin, then the
  * latest release.
  *
  * An override (flag or variable), or a custom XANOSDK_ENGINE_RELEASES_URL,
@@ -114,7 +114,7 @@ export async function chooseLocalEngine(
   // hand-picked engine always says the pin was left alone.
   if (flagValue !== undefined && flagValue !== "") {
     const source = resolveEngineSource(flagValue);
-    announceOverride(source, "--local-engine", "run `--local-engine` bare to go back to it");
+    announceOverride(source, "--local", "run `--local` bare to go back to it");
     return { source, pinWrite: undefined, pin: "none", override: "flag" };
   }
 
@@ -141,14 +141,14 @@ export async function chooseLocalEngine(
 
   // A pin that is there but is not a version is the user's field: run on the
   // latest and leave it exactly as written — pinning over it would also
-  // replace their running engine. `local-engine update` is the explicit way
+  // replace their running engine. `local update` is the explicit way
   // to overwrite it.
   const pin = readPin(dir, {
     warn: (message) =>
       warn(
-        `${message} This deploy runs the latest local engine and the field is left as written — ` +
-          `set it to a version like "v0.1.5", or run \`xanosdk local-engine update\` to pin one.`,
-        "local-engine.version-invalid",
+        `${message} This deploy runs the latest Xano Engine and the field is left as written — ` +
+          `set it to a version like "v0.1.5", or run \`xanosdk local update\` to pin one.`,
+        "local.version-invalid",
       ),
   });
   if (isUnusablePin(pin)) {
@@ -159,9 +159,9 @@ export async function chooseLocalEngine(
   // manifest there would litter a directory nobody commits.
   if (pin === undefined && resolveProjectEntry(dir) === undefined) {
     warn(
-      `No package.json in ${dir}, and it is not a Xano SDK project, so the local engine was not ` +
+      `No package.json in ${dir}, and it is not a Xano SDK project, so the Xano Engine was not ` +
         `pinned — this deploy runs the latest engine.`,
-      "local-engine.not-pinned",
+      "local.not-pinned",
     );
     return { source: resolveEngineSource(undefined), pinWrite: undefined, pin: "none" };
   }
@@ -199,8 +199,8 @@ export async function chooseLocalEngine(
   // refuses a non-terminal stdin. Default no: a stray Enter keeps the pin.
   const { confirm } = await import("./prompt.js");
   const yes = await confirm(check.updatePromptText(pin, latest), {
-    flag: "`xanosdk local-engine update`",
-    refusal: { details: { updated: false }, rerun: "xanosdk local-engine update" },
+    flag: "`xanosdk local update`",
+    refusal: { details: { updated: false }, rerun: "xanosdk local update" },
   });
   if (!yes) {
     check.recordDeclined(dir, latest);
@@ -230,7 +230,7 @@ function announceOverride(source: EngineSourceSpec, from: string, back: string):
 
 /**
  * An engine an OVERRIDE named could not be had — no such release, or none for
- * this platform. The release layer's remedy, `xanosdk local-engine update`, moves
+ * this platform. The release layer's remedy, `xanosdk local update`, moves
  * the PIN, and the pin is not what this run used: after following it the same
  * override names the same missing version again. The way back is dropping the
  * override. Anything else, and a pinned run's failure, passes through as is.
@@ -243,8 +243,8 @@ export function explainOverrideFailure(choice: LocalEngineChoice, err: unknown):
   const what = message.split("\n")[0]!;
   const remedy =
     override === "flag"
-      ? "Check the version, or drop it: `xanosdk deploy --local-engine` (bare) runs this project's pinned engine, " +
-        "and `xanosdk local-engine update` moves that pin to the latest release."
+      ? "Check the version, or drop it: `xanosdk deploy --local` (bare) runs this project's pinned engine, " +
+        "and `xanosdk local update` moves that pin to the latest release."
       : `Check ${LOCAL_ENGINE_OVERRIDE_ENV}, or unset it to run this project's pinned engine.`;
   const text = `${what}\n${remedy}`;
   throw err instanceof EngineReleaseNotFoundError
@@ -298,11 +298,11 @@ function announceLocalEnginePin(ctx: {
     info(pinWrittenText({ ...written, moved: choice.pinWrite === "move" }));
     return;
   }
-  if (failure !== undefined) warn(`The local engine version was not pinned: ${failure}`, "local-engine.not-pinned");
+  if (failure !== undefined) warn(`The Xano Engine version was not pinned: ${failure}`, "local.not-pinned");
 }
 
 /**
- * The line that follows every pin write, for the deploy and `local-engine
+ * The line that follows every pin write, for the deploy and `local
  * update` alike. It names the file — a write into the project tree — and asks
  * for it to be committed, because a pin only one checkout has pins nothing.
  */
@@ -315,7 +315,7 @@ export function pinWrittenText(written: {
   moved: boolean;
 }): string {
   const what = written.created
-    ? `Created ${written.path} to pin local engine ${written.version}`
-    : `${written.moved ? "Moved the local engine pin to" : "Pinned local engine"} ${written.version} in ${written.path}`;
+    ? `Created ${written.path} to pin Xano Engine ${written.version}`
+    : `${written.moved ? "Moved the Xano Engine pin to" : "Pinned Xano Engine"} ${written.version} in ${written.path}`;
   return `${what} — commit it so everyone on this project runs the same engine.`;
 }

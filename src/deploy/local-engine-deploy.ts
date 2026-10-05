@@ -171,12 +171,12 @@ export async function ensureProjectEngine(opts: EnsureEngineOptions): Promise<Pr
 
 /**
  * The line every failure to get an engine serving ends with — on a deploy, and
- * only there. The same failures reached from a `local-engine` verb (a bad
+ * only there. The same failures reached from a `local` verb (a bad
  * `cache clear --version`, a `stop` with nothing cached) are about the engine
  * the reader asked for by name, and pointing at the ephemeral arm there reads
  * as an unrelated aside.
  */
-export const DEPLOY_FALLBACK_NOTE = "Meanwhile `xanosdk deploy` still deploys to an ephemeral.";
+export const DEPLOY_FALLBACK_NOTE = "Meanwhile `xanosdk deploy --ephemeral` still deploys to an ephemeral.";
 
 /** `err` with {@link DEPLOY_FALLBACK_NOTE} as its last line; its class, and so its exit code, kept. */
 function withDeployFallbackNote(err: unknown): unknown {
@@ -200,7 +200,7 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
   opts.onAcquired?.(acquired);
 
   // A release's version comes from resolution; an override is asked, as
-  // `local-engine list` asks. Best-effort — it is for display, and an engine
+  // `local list` asks. Best-effort — it is for display, and an engine
   // that cannot say is still an engine.
   const shownVersion = version ?? overrideVersion(entry, env, opts.run);
 
@@ -234,12 +234,12 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
   writeRecord(opts.dir, engine, entry, shownVersion, reused && carry ? priorFilled : undefined, env);
   // A DEPLOY to this engine, so the project's bare commands now follow it.
   // Here, beside the deploy's record write — never inside `writeRecord`, which
-  // the `local-engine update` restart also reaches: a restart is not a deploy,
+  // the `local update` restart also reaches: a restart is not a deploy,
   // and must not pull a project iterating on an ephemeral over to the engine.
   // Only for an engine this call started: a reused one is recorded by the
   // deploy once its import is sent, so a refused `--keep-data` preview leaves
   // the pointer as it was (E2E pass 27: it rewrote `deployedAt`).
-  if (!reused) recordDeployed(opts.dir, "local-engine");
+  if (!reused) recordDeployed(opts.dir, "local");
 
   return {
     engine,
@@ -410,10 +410,10 @@ function stopMismatched(
   if (previous !== undefined && previous.digest !== entry.digest && attempt(previous)) return;
 
   throw new Error(
-    `The local engine "${name}" already serving this project is not the engine this deploy ` +
+    `The Xano Engine "${name}" already serving this project is not the engine this deploy ` +
       `resolved to, and it could not be stopped` +
       (previous === undefined ? `` : ` by either engine version`) +
-      `.\nStop it with \`xanosdk local-engine stop ${name}\` (or end the process), then deploy ` +
+      `.\nStop it with \`xanosdk local stop ${name}\` (or end the process), then deploy ` +
       `again.`,
   );
 }
@@ -492,27 +492,27 @@ export function explainUnsupportedEngineImport(
   ctx: UnsupportedImportContext = {},
 ): Error | undefined {
   if (!(err instanceof ImportHttpError) || err.status !== 501) return undefined;
-  const which = engineVersion === undefined ? "The local engine" : `Local engine ${engineVersion}`;
+  const which = engineVersion === undefined ? "The Xano Engine" : `Xano Engine ${engineVersion}`;
   const newer = newerRelease(engineVersion, ctx.latest);
   if (newer !== undefined) {
     return new Error(
       `${which} does not support this import (HTTP 501): it is older than this SDK needs. Nothing was written. ` +
-        `Deploy with ${newer} — \`xanosdk local-engine update\` moves this project's pin to it, ` +
-        `or pass \`--local-engine=${newer}\` for one deploy.`,
+        `Deploy with ${newer} — \`xanosdk local update\` moves this project's pin to it, ` +
+        `or pass \`--local=${newer}\` for one deploy.`,
       { cause: err },
     );
   }
   if (ctx.resetRerun !== undefined) {
     return new Error(
       `${which} cannot apply this merge (HTTP 501): keeping the rows through this schema change is not available ` +
-        `on the local engine yet. Nothing was written. Deploy with \`${ctx.resetRerun}\` instead — it replaces ` +
+        `on the Xano Engine yet. Nothing was written. Deploy with \`${ctx.resetRerun}\` instead — it replaces ` +
         `the workspace and writes every table's seed rows, so rows entered since the last deploy are lost.`,
       { cause: err },
     );
   }
   return new Error(
     `${which} does not support this import (HTTP 501). Nothing was written. ` +
-      `\`xanosdk deploy\` deploys to an ephemeral meanwhile.`,
+      `\`xanosdk deploy --ephemeral\` deploys to an ephemeral meanwhile.`,
     { cause: err },
   );
 }

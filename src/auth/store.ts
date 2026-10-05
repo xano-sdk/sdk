@@ -132,7 +132,7 @@ export function globalAuthFilePath(): string {
  * resolved absolute. The root is the one `xano.profile.json` is found and
  * written by ({@link pointerRootFor}: the nearest pointer, `package.json` or
  * `.git` at or above the cwd), so from a project subdirectory the pin and the
- * credential it names are read from the same place, and `login --local` writes
+ * credential it names are read from the same place, and `login --local-auth` writes
  * where the next read looks. Outside every project it is the cwd's, as before.
  */
 export function localAuthFilePath(): string {
@@ -143,17 +143,17 @@ export function localAuthFilePath(): string {
  * Resolve the credential file path. Precedence, highest first:
  *   1. `--config <path>` / `$XANO_CONFIG` — an explicit path wins over both
  *      default files (the environment credential, which reads no file, outranks it).
- *   2. `--local` — the project-local `./.xano/auth.json` cache.
+ *   2. `--local-auth` — the project-local `./.xano/auth.json` cache.
  *   3. the shared `~/.xanosdk/auth.json` global cache (the default).
  *
  * `mode` disambiguates the default (step 3):
  *   • `"write"` (login, logout) always targets the shared global cache — the
  *     common flow is one global sign-in reused from every project. Reach the
- *     project-local cache with an explicit `--local` (step 2).
+ *     project-local cache with an explicit `--local-auth` (step 2).
  *   • `"read"` (read-only commands: deploy, profile reads, token
  *     refresh) still prefers an existing project-local cache and, when it is
  *     absent, falls back to the global one — so a project that ran
- *     `login --local` keeps working without repeating the flag.
+ *     `login --local-auth` keeps working without repeating the flag.
  */
 export function resolveAuthFilePath(
   args: Pick<ParsedArgs, "authFile" | "local">,
@@ -170,16 +170,16 @@ export function resolveAuthFilePath(
         (args.authFile !== undefined ? ` — or drop it to use the default one.` : ` — or unset XANO_CONFIG.`),
     );
   }
-  // `--local` beside a `--config`/XANO_CONFIG naming the project-local file
+  // `--local-auth` beside a `--config`/XANO_CONFIG naming the project-local file
   // itself is ONE answer spelled twice — nothing is dropped, so it is used.
   if (explicit !== undefined && args.local && resolve(explicit) !== localAuthFilePath()) {
     // Two answers to "which file" — refused rather than resolved: whichever
     // one won, the other was a typed instruction the command dropped, and
-    // `login --local --config X` wrote X while saying it used the project cache.
+    // `login --local-auth --config X` wrote X while saying it used the project cache.
     const named = args.authFile !== undefined ? `\`--config ${explicit}\`` : `XANO_CONFIG=${explicit}`;
     throw new UsageError(
-      `\`--local\` selects the project-local .xano/auth.json and ${named} names another credential ` +
-        `file — they cannot both be the one this command uses. Drop \`--local\`` +
+      `\`--local-auth\` selects the project-local .xano/auth.json and ${named} names another credential ` +
+        `file — they cannot both be the one this command uses. Drop \`--local-auth\`` +
         (args.authFile !== undefined ? `, or drop \`--config\`.` : `, or unset XANO_CONFIG.`),
     );
   }
@@ -356,7 +356,7 @@ function holdsNoProfiles(path: string): boolean {
 
 /**
  * The file a bare command in this directory reads credentials from — no
- * `--config`, no `--local`; `$XANO_CONFIG` still applies. The project's pin and
+ * `--config`, no `--local-auth`; `$XANO_CONFIG` still applies. The project's pin and
  * its tracked environments are keyed to profiles in THIS file, so a verb editing
  * some other file (a `--config` copy) must not touch them.
  */
@@ -620,13 +620,13 @@ export interface SignInTarget {
 
 /**
  * The flag that makes a later command use `path`: none for the machine's shared
- * file (every command's default write target), `--local` for this directory's
+ * file (every command's default write target), `--local-auth` for this directory's
  * project-local cache, else `--config <path>` shell-quoted.
  *
  * Under `$XANO_CONFIG` a bare command reads THAT file, pasted into the same
  * shell: its own path takes no flag (as contextFlags leaves it out), and every
  * other file — the shared and project-local ones too — needs `--config`, the
- * one flag that outranks the variable (`--local` beside it is refused).
+ * one flag that outranks the variable (`--local-auth` beside it is refused).
  */
 export function credentialFileFlag(path: string | undefined): string {
   if (path === undefined) return "";
@@ -636,7 +636,7 @@ export function credentialFileFlag(path: string | undefined): string {
     return abs === resolve(byEnv) ? "" : ` --config ${shellQuote(abs)}`;
   }
   if (abs === resolve(globalAuthFilePath())) return "";
-  if (abs === localAuthFilePath()) return " --local";
+  if (abs === localAuthFilePath()) return " --local-auth";
   return ` --config ${shellQuote(abs)}`;
 }
 
@@ -1119,7 +1119,7 @@ export async function withCredentialLock<T>(
     // A file we created for the lock, on a run that then failed, must not
     // survive: an empty envelope at the project-local path SHADOWS a working
     // global credential (read resolution prefers a local file that exists), so
-    // a typo'd `profile set-default --local` would otherwise brick the project
+    // a typo'd `profile set-default --local-auth` would otherwise brick the project
     // in a way `login` cannot repair.
     if (created && holdsNoProfiles(target)) rmSync(target, { force: true });
     throw err;
@@ -1269,7 +1269,7 @@ export function writeOrRemoveCredentialFile(path: string, file: CredentialFile):
 
 /**
  * After the project-local credential file was removed, remove the `.xano/`
- * directory it sat in — only when nothing else is left in it. `login --local`
+ * directory it sat in — only when nothing else is left in it. `login --local-auth`
  * created it for the credential alone; left behind empty, it reads as a
  * project cache that still holds something. Never touches any other directory
  * (a `--config` file's parent is the user's), and never a non-empty one: the

@@ -6,7 +6,7 @@
  * calls change exactly one name and leave every other one as it was.
  *
  * One route for every destination. A workspace is addressed by its own id; an
- * ephemeral, a tenant and a local engine are each their own instance whose
+ * ephemeral, a tenant and a Xano Engine are each their own instance whose
  * workspace is always 1 — the caller resolves which, this module only sends.
  *
  * The value travels in the request body, never the URL, and never comes back:
@@ -38,7 +38,7 @@ export interface EnvVarTarget {
   baseUrl: string;
   workspaceId: number;
   name: string;
-  /** What a 403 is checked against for a workspace-binding refusal; absent for a local engine. */
+  /** What a 403 is checked against for a workspace-binding refusal; absent for a Xano Engine. */
   binding?: BindingContext;
 }
 
@@ -141,7 +141,7 @@ async function send<A extends string>(
       );
     }
     const failure = safeHttpFailure(action, res, text, target.binding);
-    // Only where a real instance answered (a local engine carries no binding),
+    // Only where a real instance answered (a Xano Engine carries no binding),
     // and never on top of the binding explanation: a credential bound to another
     // workspace is refused whatever its scopes, so naming them would send the
     // reader to the wrong fix.

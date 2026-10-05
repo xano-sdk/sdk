@@ -51,6 +51,6 @@ A failure document's `exitCode` matches.
 | 5 | `test` / `deploy --test`: the suite ran and a test failed. A deploy is not retracted. | Fix the test or the code. |
 | 6 | `test`, `deploy --test`: the suite could not be reached. | Check the backend; rerun. |
 | 7 | `upgrade --check`: an upgrade is available. | `xanosdk upgrade`. |
-| 8 | A named backend could not be addressed (or a named release, profile, branch, test, module, lock entry, `--seed` guid or local-engine version is missing): gone, expired, unreachable, a stopped local engine, or a busy import. | Retry, or redeploy. |
+| 8 | A named backend could not be addressed (or a named release, profile, branch, test, module, lock entry, `--seed` guid or Xano Engine version is missing): gone, expired, unreachable, a stopped Xano Engine, or a busy import. | Retry, or redeploy. |
 | 9 | A write whose outcome is unknown, Ctrl-C during a write included. | Read the target's state before retrying. |
 | 130 | Ctrl-C outside a write or install. | — |

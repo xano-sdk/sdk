@@ -81,7 +81,7 @@ export interface ExportedBundle {
  * either way.
  *
  * Takes a {@link BearerTarget}: the read uses nothing but the bearer, and the
- * target comes from `opts`, so a local engine's url and token reach it without
+ * target comes from `opts`, so a Xano Engine's url and token reach it without
  * being widened into a credential.
  */
 /**

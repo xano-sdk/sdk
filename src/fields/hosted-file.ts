@@ -5,7 +5,7 @@
  * icons: [{ src: hostedFile("./icon.png", import.meta.url) }]
  * ```
  *
- * The address is not known when you build: each backend (local engine,
+ * The address is not known when you build: each backend (Xano Engine,
  * ephemeral, tenant, workspace) serves the file at its own URL, so the field
  * holds that backend's address after the release lands. Files are public unless
  * you pass `{ access: "private" }`, and a field that a client fetches unauthenticated

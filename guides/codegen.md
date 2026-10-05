@@ -10,12 +10,12 @@ so it is the scaffold command with one extra flag:
 ```bash
 xanosdk init my-app --from workspace          # your real workspace (the one your login is scoped to)
 xanosdk init my-app --from ephemeral:my-env   # a named ephemeral environment
-xanosdk init my-app --from local-engine:<name> # a running local engine (`local-engine list`) — no login
+xanosdk init my-app --from local:<name> # a running Xano Engine (`local list`) — no login
 xanosdk init my-app --from ./ws.json          # a bundle already on disk — offline, no login
 ```
 
 `--from` takes any backend in [the CLI's one grammar](cli.md#naming-a-backend) —
-`workspace`, `ephemeral[:<name>]`, `local-engine[:<name>]`, `tenant:<name>`, `release:<name>` —
+`workspace`, `ephemeral[:<name>]`, `local[:<name>]`, `tenant:<name>`, `release:<name>` —
 or a bundle path. Unlike most commands it has no default: a pull names its source.
 
 Everything else about the project is unchanged: `--framework`, the theme flags, `--no-agents-md` and
@@ -32,7 +32,7 @@ that already has its own shell, or to read one.
 ```bash
 xanosdk generate workspace                    # → ./xano
 xanosdk generate release:v1 --out ./backend   # a stored release
-xanosdk generate ephemeral:my-env             # also tenant:<name>, local-engine[:<name>]
+xanosdk generate ephemeral:my-env             # also tenant:<name>, local[:<name>]
 xanosdk generate ./ws.json                    # a bundle on disk — offline, no login
 xanosdk generate workspace --branch staging   # --branch applies to `workspace` only
 ```
@@ -170,7 +170,8 @@ over a `xano/` no decode wrote follows the same rules.
 > ⚠️ **`xano/` is your source once pulled — commit it.** A refresh overwrites the files it
 > decodes, so commit before one (a directory that isn't a previous pull still needs `--force`).
 > It carries schema only — no table rows or stored files.
-> `xanosdk deploy` sends it to a disposable ephemeral environment as a *full replace*;
+> `xanosdk deploy` sends it to the Xano Engine on this machine (`--ephemeral`: a disposable
+> ephemeral environment) as a *full replace*;
 > `xanosdk promote <release>` or `xanosdk deploy --to workspace` merges it into your real
 > workspace. Workspace env vars are declared by name only — their values never enter the tree.
 

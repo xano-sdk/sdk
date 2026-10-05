@@ -457,15 +457,15 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
   }
 
   // Bare `pull` means the backend this project last deployed to — an ephemeral
-  // or a local engine — decided by the one tracked-backend resolver every bare
+  // or a Xano Engine — decided by the one tracked-backend resolver every bare
   // command shares. The credential is a memoized provider: read only when the
-  // kind is hosted, so pulling from a local engine signs in nowhere.
+  // kind is hosted, so pulling from a Xano Engine signs in nowhere.
   const slot = requireBackendSlot("pull", undefined, "subject");
   const credential = memoCredential(() => getAccessToken(args));
   const source = await selectBackend(slot, args.positionals[0], { credential, deps: { cwd } });
-  // A local engine selects no credential: `--profile` beside one is refused,
+  // A Xano Engine selects no credential: `--profile` beside one is refused,
   // not dropped (R9). After the default is decided, so a bare pull that lands
-  // on the local engine refuses the same way `pull local-engine` does.
+  // on the Xano Engine refuses the same way `pull local` does.
   refuseProfileForLocal(args.profile, [source.kind], slot);
   // Bare resolved to a kind is that kind's bare keyword, which the fetch then
   // resolves to the tracked one — the same record the decision just read.
@@ -489,7 +489,7 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
   // A tenant's (or an ephemeral's) workspace is named by the platform — its
   // handle — and a release carries no workspace at all: neither is the name this
   // project gave itself, so the project's own `workspace("…")` is kept.
-  const keptName = source.kind === "workspace" || source.kind === "local-engine" ? undefined : projectWorkspaceName(join(cwd, backendDir, "index.ts"));
+  const keptName = source.kind === "workspace" || source.kind === "local" ? undefined : projectWorkspaceName(join(cwd, backendDir, "index.ts"));
   const project = decodeBundle(bundle, {
     secretsFile: `${backendDir}/${WORKSPACE_SECRETS_BASENAME}`,
     writesSecrets: args.noSecrets !== true,
@@ -1472,8 +1472,8 @@ export function envFillRemedy(kind: string, args: ParsedArgs, one = false): stri
     );
   }
   const from = raw === undefined ? "" : ` --from ${shellQuote(raw)}`;
-  // A local engine is read with its own bearer: a credential flag there is refused.
-  const flags = kind === "local-engine" ? "" : contextFlags(args);
+  // A Xano Engine is read with its own bearer: a credential flag there is refused.
+  const flags = kind === "local" ? "" : contextFlags(args);
   return `fill ${them} in, or run \`xanosdk env pull${from}${flags}\`.`;
 }
 

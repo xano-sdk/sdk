@@ -200,7 +200,7 @@ function asString(v: unknown): string | undefined {
  *
  * A {@link BearerTarget} rather than a full credential, all the way down this
  * module: the routes are addressed from the {@link TestTarget}, so the bearer is
- * genuinely all that is read — and `deploy --test` against a local engine has
+ * genuinely all that is read — and `deploy --test` against a Xano Engine has
  * only the engine's own token to offer.
  */
 async function metaFetch(

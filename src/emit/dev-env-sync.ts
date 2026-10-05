@@ -139,7 +139,7 @@ export function syncDevEnv(from: string, url: string): DevEnvSync | undefined {
  * Move the dev env file of the project containing `from` from `oldUrl` to
  * `newUrl` — only when its managed block points at `oldUrl` now.
  *
- * For a backend that moved without a deploy (a restarted local engine binds a
+ * For a backend that moved without a deploy (a restarted Xano Engine binds a
  * fresh port): the file follows the backend it was already pointed at, and a
  * file pointed anywhere else — a hosted deploy since, or no block at all — is
  * not this move's to touch. Throws what {@link syncDevEnv} throws.

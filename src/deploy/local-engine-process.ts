@@ -1,5 +1,5 @@
 /**
- * Running a local engine: start it, find the ones already running, stop them.
+ * Running a Xano Engine: start it, find the ones already running, stop them.
  *
  * This is the only module that spawns anything, and both seams it spawns
  * through are parameters rather than module-level mocks — the assertion that
@@ -393,8 +393,8 @@ export async function startEngine(opts: StartEngineOptions): Promise<LocalEngine
       fail(
         new Error(
           `The engine could not be started: ${err.message}\n` +
-            `Fetch a fresh copy with \`xanosdk local-engine cache clear\`, then deploy again ` +
-            `(\`xanosdk deploy --local-engine\`).`,
+            `Fetch a fresh copy with \`xanosdk local cache clear\`, then deploy again ` +
+            `(\`xanosdk deploy --local\`).`,
         ),
       );
     });
@@ -437,7 +437,7 @@ export function bootFailure(name: string, code: number | null, tail: string, out
         ? `It could not write its own files — make ${runHome} and everything under it writable (\`chmod -R u+w ${runHome}\`), then re-run.`
         : `It could not write under ${dir} — make it writable (\`chmod u+w ${dir}\`), then re-run.`;
   } else if (lines.some((l) => /already (?:in use|taken|running|exists)|address in use|\bEADDRINUSE\b/i.test(l))) {
-    cause = `The name or port is already taken — stop the engine holding it with \`xanosdk local-engine stop ${name}\`, then re-run.`;
+    cause = `The name or port is already taken — stop the engine holding it with \`xanosdk local stop ${name}\`, then re-run.`;
   } else {
     const last = [...lines].reverse().find((l) => /\berror\b|failed|denied|cannot|refused|not found|no such/i.test(l));
     cause = last === undefined ? "Check it, then re-run." : `Its last error: ${last}`;
@@ -460,7 +460,7 @@ function nearestExisting(path: string): string | undefined {
  * recently fetched override.
  *
  * The pin leads so a project's verbs run the engine its deploys run. Releases
- * come next because they are what a bare `--local-engine` runs; an override is
+ * come next because they are what a bare `--local` runs; an override is
  * the fallback for a machine that has only ever been handed one. `exclude`
  * drops entries about to be deleted, so `cache clear` stops engines through a
  * binary it keeps whenever there is one.
@@ -472,7 +472,7 @@ function nearestExisting(path: string): string | undefined {
  *
  * Lives here rather than beside the verbs because the selector resolver needs
  * the same choice: an engine enumerated through a different binary than the one
- * `local-engine list` would use is the same answer, but two copies of the rule
+ * `local list` would use is the same answer, but two copies of the rule
  * are two places for "which binary" to drift.
  */
 export function cachedEngineEntry(
@@ -517,8 +517,8 @@ export function listEngines(opts: EngineCommandOptions): LocalEngine[] {
     throw new Error(
       `The engine could not list what is running` +
         (result.stderr.trim() === "" ? `.` : `: ${redactSecrets(result.stderr.trim())}`) +
-        `\nRe-run, and if it happens again fetch a fresh copy with \`xanosdk local-engine cache clear\`, ` +
-        `then \`xanosdk deploy --local-engine\`.`,
+        `\nRe-run, and if it happens again fetch a fresh copy with \`xanosdk local cache clear\`, ` +
+        `then \`xanosdk deploy --local\`.`,
     );
   }
   return parseEngineListing(result.stdout);
@@ -585,7 +585,7 @@ export interface LoginLinkOptions {
 }
 
 const defaultLoginFetch: EngineFetch = (url, init) =>
-  fetchOrExplain(url, init, "open a local engine", LOGIN_LINK_TIMEOUT_MS);
+  fetchOrExplain(url, init, "open a Xano Engine", LOGIN_LINK_TIMEOUT_MS);
 
 /**
  * Mint a one-time login for an engine the enumeration just handed over.
@@ -626,18 +626,18 @@ export async function mintEngineLoginLink(
     if (res.status === 401) {
       throw new Error(
         `The engine no longer accepts the credential it reported for "${engine.name}".\n` +
-          `It was most likely restarted since it was listed — run \`xanosdk local-engine list\` to ` +
+          `It was most likely restarted since it was listed — run \`xanosdk local list\` to ` +
           `see what is running, then try again.`,
       );
     }
-    throw httpFailureError(`open a local engine`, res, body);
+    throw httpFailureError(`open a Xano Engine`, res, body);
   }
   const data = (await res.json().catch(() => ({}))) as { _ti?: unknown; url?: unknown };
   if (typeof data._ti !== "string" || data._ti === "" || typeof data.url !== "string" || data.url === "") {
     throw new Error(
       `The engine did not return a one-time sign-in (\`_ti\`) and a url for "${engine.name}".\n` +
         `That is not an engine this SDK knows how to drive — move to a current one with ` +
-        `\`xanosdk local-engine update\`.`,
+        `\`xanosdk local update\`.`,
     );
   }
   assertLoopbackUrl(data.url, "The sign-in the engine returned");
@@ -815,7 +815,7 @@ const defaultSignal: ProcessSignal = (pid, signal) => {
  * {@link engineRunHome} — so each one's command line names that directory. A
  * live engine is their parent; an engine killed outright (`kill -9`, a crash)
  * is not there to stop them, they are re-parented, and no enumeration lists
- * them: `local-engine list` and `stop --all` asked the engine, and the engine
+ * them: `local list` and `stop --all` asked the engine, and the engine
  * that owned them is gone. So an orphan is a process whose command line names
  * the run home and whose parent is not a process run from {@link
  * localEngineHome} — not an engine, and not another of an engine's helpers.

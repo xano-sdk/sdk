@@ -265,10 +265,8 @@ export async function runPublishCommand(args: ParsedArgs): Promise<void> {
   // `warnings[]`, a failure's `error.details.warnings` — by the run's collector.
   warnSecretLookingStaticEnv(args.staticEnv);
   // `--to`, or bare: the backend this project last deployed to, through the one
-  // tracked-backend resolver. The slot refuses a local engine with its reason
-  // (a local engine takes its frontend from `deploy --local-engine --static`)
-  // whether it was typed or came from the pointer, so a bare
-  // publish after a local deploy says so instead of uploading somewhere else.
+  // tracked-backend resolver — a Xano Engine included, so a bare publish
+  // after a local deploy lands on that engine.
   const slot = requireBackendSlot("publish", undefined, "to");
   // Credential resolution's own warnings (no project pin, a shadowed global
   // credential) are printed as `!` like the rest, so they are carried too.
@@ -324,6 +322,10 @@ async function publishChecked(
       if (err instanceof StaticDirError) throw new UsageError(`${err.message} Nothing was uploaded.`, HINT);
       throw err;
     }
+  }
+  if (dest.kind === "local") {
+    await publishToLocalEngine(args, dir, dest, credential);
+    return;
   }
   if (dest.kind !== "workspace" && dest.kind !== "ephemeral" && dest.kind !== "tenant") {
     throw new Error(`Internal: \`publish --to\` selected ${withArticle(dest.kind)}, which its slot does not accept.`);
@@ -523,6 +525,90 @@ async function publishChecked(
         ? `For release ${release.name}, in front of live branch "${branch.live}" — the label matches; the branch's contents were not compared with the release.`
         : `For release ${release.name} — the release exists; which backend is serving was not checked (\`--branch\` checks it on your workspace).`,
     );
+  }
+  detail("Not scanned for non-public seed values — publish holds no seed rows. `deploy --static` runs that scan.");
+}
+
+/**
+ * `publish` to a Xano Engine: the engine's own static host, through the
+ * engine's own bearer, so no Xano account is read. The same upload
+ * `deploy --local --static` makes, server half included, without
+ * re-importing the backend. Nothing prompts: the engine is the developer's own.
+ */
+async function publishToLocalEngine(
+  args: ParsedArgs,
+  dir: string,
+  dest: Extract<Awaited<ReturnType<typeof selectBackend>>, { kind: "local" }>,
+  credential: CredentialProvider,
+): Promise<void> {
+  // Both read the workspace — its release records, its live branch — and a
+  // Xano Engine has neither to check against.
+  for (const [flag, value] of [
+    ["--release", args.release],
+    ["--branch", args.branch],
+  ] as const) {
+    if (value !== undefined) {
+      throw new UsageError(
+        `\`${flag}\` checks your workspace, and a Xano Engine is not one: drop it, or publish with \`--to workspace\`.`,
+        HINT,
+      );
+    }
+  }
+  const resolved = await resolveSource(dest, credential);
+  const { base, workspaceId } = resolved.target;
+  const named = describeBackend(resolved);
+  const where = { kind: "local", url: base, workspaceId } as const;
+  step(`Publishing ${dir} → ${named}${args.staticHost !== undefined ? ` (host: ${args.staticHost})` : ""}`);
+  discloseWriteTarget(where);
+
+  const published = await deployStaticTo(
+    dir,
+    resolved.bearer,
+    { baseUrl: base, workspaceId, label: named, announced: true },
+    buildStaticEnv(base, args.staticEnv),
+    Object.keys(args.staticEnv).length > 0,
+    args.staticHost,
+    // Nothing to wait for: the engine serves the build once the upload returns.
+    true,
+    args.staticRouting,
+    undefined,
+    { serverRendered: true, rerun: publishRerun(args, dir).command },
+  ).catch((err: unknown) => {
+    if ((err as { status?: unknown }).status === 501) {
+      throw new Error(
+        "This Xano Engine cannot host a static site (HTTP 501): static hosting on a Xano Engine came in a later " +
+          "release. `xanosdk local update` moves this project to the newest one. Nothing was published.",
+      );
+    }
+    throw uploadOutcomeUnknown(err, args, dir);
+  });
+  if (published.serverBundle === "uploaded") {
+    detail("Server half uploaded: the engine renders the site's dynamic routes.");
+  }
+
+  if (isMachineOutput(args)) {
+    const summary: PublishSummary = {
+      verb: "publish",
+      // The engine's own name, as `deploy --local` reports it: the
+      // target's label is a phrase ("your Xano Engine") when none was typed.
+      destination: {
+        ...writeTargetPayload(where),
+        label: resolved.backend.kind === "local" ? resolved.backend.engine.name : resolved.target.label,
+        url: base,
+      },
+      association: "none",
+      published: true,
+      declined: false,
+      // Not polled, so not verified: the rollout check is the hosted edge's.
+      verified: false,
+      verification: "skipped",
+      url: published.url,
+      ...(published.canonical !== undefined ? { canonical: published.canonical } : {}),
+      ...(published.routing !== undefined ? { routing: published.routing } : {}),
+      ...(published.staticEnv !== undefined ? { staticEnv: published.staticEnv } : {}),
+    };
+    writeJson(summary);
+    return;
   }
   detail("Not scanned for non-public seed values — publish holds no seed rows. `deploy --static` runs that scan.");
 }

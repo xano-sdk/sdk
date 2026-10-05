@@ -1,7 +1,7 @@
 /**
  * The server half of a static build: a directory a server-rendering build
  * carries beside its static files (`@xano/sdk/sveltekit` writes it), which a
- * local engine runs and every other host leaves out.
+ * Xano Engine runs and every other host leaves out.
  *
  * It is a DOT directory on purpose. The server bundle can hold the app's
  * private build-time env (SvelteKit inlines `$env/static/private` into it), and
@@ -19,7 +19,7 @@ export const SERVER_DIR = ".xano-ssr";
 export const SERVER_BUNDLE = `${SERVER_DIR}/server.js`;
 /**
  * The public config a deploy injects into the static half's documents
- * (`window.<KEY>` globals), uploaded beside the bundle so a local engine gives a
+ * (`window.<KEY>` globals), uploaded beside the bundle so a Xano Engine gives a
  * rendered page the same globals. Written by the deploy, never by the adapter.
  */
 export const SERVER_ENV = `${SERVER_DIR}/env.json`;

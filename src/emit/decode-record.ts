@@ -29,7 +29,7 @@ export function decodeMarkerWith(
 }
 
 /** The source kinds a provenance can name (`ephemeral:x`); anything else is a bundle file. */
-const SOURCE_KINDS = new Set(["workspace", "ephemeral", "local-engine", "tenant", "release"]);
+const SOURCE_KINDS = new Set(["workspace", "ephemeral", "local", "tenant", "release"]);
 
 /**
  * The marker's head — which source the tree came from, which command wrote it,

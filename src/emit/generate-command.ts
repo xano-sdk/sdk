@@ -9,10 +9,10 @@
  * source. This does, from every source the rest of the CLI can name — the
  * spellings `generate <source>` declares in the registry:
  *
- *   workspace | release:<name> | ephemeral[:<name>] | local-engine[:<name>] |
+ *   workspace | release:<name> | ephemeral[:<name>] | local[:<name>] |
  *   tenant:<name> | ./bundle.json
  *
- * A local engine is read through its own bearer, so `generate local-engine`
+ * A Xano Engine is read through its own bearer, so `generate local`
  * needs no Xano sign-in — and refuses `--profile`, which would select one.
  *
  * ## It creates, and replaces only its own output
@@ -136,8 +136,8 @@ interface Loaded {
 async function loadSource(args: ParsedArgs, raw: string, cwd: string): Promise<Loaded> {
   // Through the slot the registry declares, so the spellings a refusal lists are
   // the ones help shows — a bundle path among them. A kind-shaped word is a
-  // kind or refused, never a filename: `generate local-engine` names the
-  // engine, and no file called `local-engine` is looked up.
+  // kind or refused, never a filename: `generate local` names the
+  // engine, and no file called `local` is looked up.
   const slot = requireBackendSlot("generate", undefined, "subject");
   const source = parseSlot(slot, raw);
   if (source.kind === "file") {
@@ -152,7 +152,7 @@ async function loadSource(args: ParsedArgs, raw: string, cwd: string): Promise<L
     step(`Reading ${raw}`);
     return { bundle: readBundleFile(source.path), label: raw, kind: "file" };
   }
-  // A local engine selects no credential, so a `--profile` beside one is
+  // A Xano Engine selects no credential, so a `--profile` beside one is
   // refused rather than silently dropped (R9) — before anything is resolved.
   refuseProfileForLocal(args.profile, [source.kind], slot);
   // Read only if a hosted source asks: the resolver never calls it for a local
@@ -174,7 +174,7 @@ async function loadSource(args: ParsedArgs, raw: string, cwd: string): Promise<L
     );
   }
   step(`Reading ${raw}`);
-  // A bare tracked source (`local-engine`, `ephemeral`) is the one recorded for
+  // A bare tracked source (`local`, `ephemeral`) is the one recorded for
   // the PROJECT this run stands in — its root, from a subdirectory of it. Only
   // the lookup moves: `--out` stays relative to where the command was typed.
   const { projectDirFrom } = await import("./xanosdk-project.js");
@@ -187,7 +187,7 @@ async function loadSource(args: ParsedArgs, raw: string, cwd: string): Promise<L
     // The provenance is the selector of whatever backend was read; a release is not one.
     backend: {
       ...(source.kind === "release" ? {} : { selector: fetched.provenance }),
-      ...(source.kind === "local-engine" ? {} : { workspaceId: (await credential()).workspaceId }),
+      ...(source.kind === "local" ? {} : { workspaceId: (await credential()).workspaceId }),
     },
     seed: {
       rows: carriedSeedRows(fetched.archive, (bundle.payload ?? {}) as Record<string, unknown>),

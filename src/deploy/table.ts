@@ -178,10 +178,10 @@ const isTableRow = (row: Record<string, unknown>): boolean =>
  *
  * `base` addresses a TENANT's own meta API, where the workspace is always id 1.
  *
- * Takes only the bearer, so a local engine's url and token list its tables
+ * Takes only the bearer, so a Xano Engine's url and token list its tables
  * exactly as a hosted credential lists a workspace's — same walk, same
  * projection, same rows. `binding` is what a 403 is explained against; a
- * hosted caller passes it, and a local engine has none, since its bearer is
+ * hosted caller passes it, and a Xano Engine has none, since its bearer is
  * its own and bound to no Xano workspace.
  */
 export async function listTables(

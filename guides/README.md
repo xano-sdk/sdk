@@ -18,6 +18,7 @@ typed, so your editor's autocomplete is usually the faster lookup — tab-comple
 | [Environment & identity](environment.md) | Every environment variable, and how `xano.lock` pins identity |
 | [The typed frontend surface](typed-frontend.md) | Path resolution, input/response inference, bundle cost, the route manifest |
 | [Pulling an existing workspace](codegen.md) | What `xanosdk init --from` writes, how faithful it is, and how to read its report |
+| [Reading a compiled bundle](bundle.md) | `@xano/sdk/bundle`: walking, hashing and diffing compiled JSON from your own tools |
 | [Coverage & agent grounding](coverage.md) | What's covered, what's out of scope, and the files agents read |
 
 ## The agent-facing surface

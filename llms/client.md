@@ -40,11 +40,10 @@ by grepping `window.XANO_HOST` matches nothing and reads as a failed inject. Gre
 bare `XANO_HOST` token.
 **Frontend without the backend.** `xanosdk publish <dir> [--to <backend>]` uploads an
 already-built directory and nothing else — no compile, no import (scaffold script
-`npm run xano:deploy:frontend`). `publish` does not reach a local engine: after a local-engine
-deploy, pass `--to ephemeral`, or give the engine the frontend with
-`xanosdk deploy <entry> --local-engine --static <dir>` (served at `http://<prefix>.localhost:<port>`).
+`npm run xano:deploy:frontend`). A Xano Engine (`--to local`, or bare after a local
+deploy) serves it, server half included, at `http://<prefix>.localhost:<port>`.
 **Server-rendered SvelteKit.** `adapter()` from `@xano/sdk/sveltekit` (needs `esbuild`) writes
-the static half at the build's root plus a server half in `.xano-ssr/`. A local engine renders every
+the static half at the build's root plus a server half in `.xano-ssr/`. A Xano Engine renders every
 path that is not a file through it (`load` reads the engine's own URL as `XANO_HOST` from
 `$env/dynamic/private`; a rendered page gets the deploy's `window.XANO_HOST` too). Any other host
 is not sent `.xano-ssr/`: it serves the static half and answers other paths with the `404.html`

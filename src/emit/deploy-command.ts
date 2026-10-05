@@ -228,14 +228,14 @@ export interface DeploySummary {
    * that says so. `kind` because that is the one field name for a backend kind
    * in every machine document — the same spelling the selector grammar uses.
    */
-  kind: "ephemeral" | "local-engine";
+  kind: "ephemeral" | "local";
   /**
    * The backend this run wrote to, in the one shape every writing command uses.
    *
    * `{ instance, workspaceId, kind, label, url }`: the PARENT — which instance,
    * which workspace the ephemeral was created under — because that is the
    * answer to "did this land in the right account"; `label` the environment's
-   * bare name and `url` its own base URL. A local engine has no parent, so its
+   * bare name and `url` its own base URL. A Xano Engine has no parent, so its
    * `instance` is the engine's URL and it carries `local: true`. A `--json`
    * caller never sees the progress stream, so without this the write-target
    * disclosure would not reach the reader most likely to be automating against
@@ -254,20 +254,20 @@ export interface DeploySummary {
   url: string | undefined;
   ephemeral?: { name: string; display: string | undefined; expiresAt: string | number | undefined };
   /**
-   * The engine a `--local-engine` deploy landed on. Present only on that
+   * The engine a `--local` deploy landed on. Present only on that
    * destination, under its OWN key: reusing `ephemeral` would hand a wrapper a
    * name it would then feed to `xanosdk ephemeral get`, which has no engine to
    * find and no way to say so.
    *
    * The log path is here because it is the only handle on an engine that has
    * gone wrong — nothing else in this document leads to one. The bearer is NOT,
-   * anywhere: a local engine's bearer is never recorded, and is printed only by
-   * `xanosdk local-engine token`, which a caller runs to ask for it — a summary
+   * anywhere: a Xano Engine's bearer is never recorded, and is printed only by
+   * `xanosdk local token`, which a caller runs to ask for it — a summary
    * gets logged by CI whether anyone wanted the bearer or not. Neither is the
    * sign-in URL, which may be shown to a person and still opens an owner
    * session.
    */
-  localEngine?: {
+  engine?: {
     name: string;
     workspaceId: number;
     logPath: string;
@@ -281,7 +281,7 @@ export interface DeploySummary {
      * What this run did to the project's pinned engine version in
      * `package.json`: `created` (first run pinned it), `moved` (an update was
      * accepted), `unchanged` (a pin was read and kept), or `none` (no pin is in
-     * play — an override on the flag or in XANOSDK_LOCAL_ENGINE_OVERRIDE, a
+     * play — an override on the flag or in XANOSDK_ENGINE_OVERRIDE, a
      * custom XANOSDK_ENGINE_RELEASES_URL, or a deploy from a directory with no
      * `package.json` that is not a project either).
      * `created` includes creating a `package.json` to hold the pin when the
@@ -290,8 +290,8 @@ export interface DeploySummary {
     pin: LocalEnginePinOutcome;
     /**
      * Present only when this run served an override rather than the pin — the
-     * one thing `pin: "none"` cannot say on its own: `flag` (`--local-engine=`),
-     * `env` (XANOSDK_LOCAL_ENGINE_OVERRIDE), or `releases-url` (a custom
+     * one thing `pin: "none"` cannot say on its own: `flag` (`--local=`),
+     * `env` (XANOSDK_ENGINE_OVERRIDE), or `releases-url` (a custom
      * XANOSDK_ENGINE_RELEASES_URL).
      */
     override?: LocalEngineOverride;
@@ -371,7 +371,7 @@ export interface DeploySummary {
    * What this deploy recorded as landed on the ephemeral (the scope of a later
    * `deploy --to ephemeral:<it> --prune`), in the shape `deploy --to`,
    * `tenant deploy` and `promote` report it; `null` when nothing was recorded —
-   * a local engine keeps none.
+   * a Xano Engine keeps none.
    */
   landingRecord?: import("./landing-record.js").LandingReport | null;
   /**
@@ -705,8 +705,8 @@ export async function runDeployedTests(
     // names it for the same failure.
     const reason = isSuiteUnreachable(err)
       ? `${message.split("\n")[0] ?? message}\n${suiteUnreachableCheck(
-          summary.localEngine !== undefined
-            ? { kind: "local-engine", env: summary.localEngine.name }
+          summary.engine !== undefined
+            ? { kind: "local", env: summary.engine.name }
             : { kind: "ephemeral", env: summary.ephemeral?.name ?? null },
           args,
         )}.`
@@ -725,20 +725,20 @@ export async function runDeployedTests(
 /**
  * `xanosdk test run-all` against the backend this deploy landed on, with the
  * run's own `--kind`/`--concurrency` and credential flags — the suite `--test`
- * would have run. A local engine takes no credential flags. Undefined when the
+ * would have run. A Xano Engine takes no credential flags. Undefined when the
  * summary names no backend to point it at.
  */
 export function testRunAllCommand(summary: DeploySummary, args: ParsedArgs): string | undefined {
   const on =
-    summary.localEngine !== undefined
-      ? `local-engine:${shellQuote(summary.localEngine.name)}`
+    summary.engine !== undefined
+      ? `local:${shellQuote(summary.engine.name)}`
       : summary.ephemeral?.name !== undefined
         ? `ephemeral:${shellQuote(summary.ephemeral.name)}`
         : undefined;
   if (on === undefined) return undefined;
   const kind = args.kind !== undefined ? ` --kind ${args.kind}` : "";
   const concurrency = args.concurrency !== undefined ? ` --concurrency ${args.concurrency}` : "";
-  const flags = summary.localEngine !== undefined ? "" : contextFlags(args);
+  const flags = summary.engine !== undefined ? "" : contextFlags(args);
   return `xanosdk test run-all --on ${on}${kind}${concurrency}${flags}`;
 }
 
@@ -767,10 +767,10 @@ async function runTestsOrThrow(
   // that wrote the document is the destination the suite runs against — a local
   // engine stands up its OWN workspace, and running its tests against a
   // hard-coded 1 would be a guess about someone else's backend.
-  const local = summary.localEngine;
+  const local = summary.engine;
   const name = summary.ephemeral?.name;
   const target: MetaTarget = local
-    ? { base: summary.url, workspaceId: local.workspaceId, label: `local engine "${local.name}"` }
+    ? { base: summary.url, workspaceId: local.workspaceId, label: `Xano Engine "${local.name}"` }
     : {
         base: summary.url,
         workspaceId: 1,
@@ -892,7 +892,7 @@ export function recordedLanding(
   flags = "",
 ): string {
   if (dest.kind === "workspace") return `\`xanosdk promote <name>${flags}\``;
-  if (isEphemeral) return `\`xanosdk deploy release:<name>${flags}\``;
+  if (isEphemeral) return `\`xanosdk deploy release:<name> --ephemeral${flags}\``;
   return `\`xanosdk tenant deploy ${shellQuote(dest.name)} <name>${flags}\``;
 }
 
@@ -954,7 +954,7 @@ export function storeAsReleaseHint(
     typed.bundle !== undefined ? ` --bundle ${shellQuote(typed.bundle)}` : typed.file !== undefined ? ` ${shellQuote(typed.file)}` : "";
   return (
     `A release is cut from a backend that ran on the instance, and a standard tenant cannot be cut from. To keep this ` +
-    `source as one that ${landed}: \`xanosdk deploy${source}${flags}\` (to this project's ephemeral), then ` +
+    `source as one that ${landed}: \`xanosdk deploy${source} --ephemeral${flags}\` (to this project's ephemeral), then ` +
     `\`xanosdk release create <name>${against}${flags}\`, then ${land} lands it here — it REPLACES what the tenant runs ` +
     `with that release, so anything else merged onto it (another project's objects) is dropped.`
   );
@@ -994,7 +994,7 @@ export function tenantWithoutWorkspace(
     `${named} has no workspace yet, so there is nothing for \`deploy --to\` to merge into or preview against — ` +
       `a tenant on its own domain gets its workspace when its first release lands. Nothing was written.\n` +
       `Land a release on it first: ${land("<release>")} (\`xanosdk release list${flags}\` names them). ` +
-      `To land this source, deploy it to this project's ephemeral (\`xanosdk deploy${source}${flags}\`), cut it ` +
+      `To land this source, deploy it to this project's ephemeral (\`xanosdk deploy${source} --ephemeral${flags}\`), cut it ` +
       `(\`xanosdk release create <name>${against}${seed}${flags}\`), and land that: ${land("<name>")}.\n` +
       `After that, \`${rerun.command}\` ${args.dryRun ? "previews merging" : "merges"} onto it.${withheldNote(rerun.withheld)}`,
     { details: { reason: "tenant-has-no-workspace", tenant } },
@@ -1038,7 +1038,7 @@ async function runDeployToDestination(args: ParsedArgs, to: string): Promise<voi
   const { looksLikeSource, resolveProjectEntry } = await import("./deploy-source.js");
 
   // FIRST, before any other refusal and long before a credential: the slot's
-  // declaration refuses `--to local-engine[:name]` naming `--local-engine`, and
+  // declaration refuses `--to local[:name]` naming `--local`, and
   // `--to ephemeral` naming the bare deploy. Either one parsed any later would
   // be a destination this handoff had already started treating as hosted.
   const dest = parseSlot(requireBackendSlot("deploy", undefined, "to"), to, to.trim() === "ephemeral" ? await soleTrackedEphemeral() : undefined);
@@ -1220,10 +1220,10 @@ export const DESTINATION_ONLY: ReadonlyArray<{ readonly key: keyof ParsedArgs; r
   { key: "resetData", flag: "--reset-data", why: "a refresh already replaces the rows unless `--keep-data` keeps them (`--reset` overrides that)" },
   { key: "seed", flag: "--seed", why: "a refresh already seeds when it replaces and never when `--keep-data` keeps the rows" },
   { key: "allowSharedSchemaChanges", flag: "--allow-shared-schema-changes", why: "the environment is this project's own, with no shared schema to gate" },
-  { key: "allowBranchDeletion", flag: "--allow-branch-deletion", why: "an ephemeral or local engine has no branches to delete" },
-  { key: "branch", flag: "--branch", why: "an ephemeral or local engine has no branch to name" },
-  { key: "setLive", flag: "--set-live", why: "an ephemeral or local engine has no branch to make live" },
-  { key: "backupBranch", flag: "--backup-branch", why: "an ephemeral or local engine has no branch to back up" },
+  { key: "allowBranchDeletion", flag: "--allow-branch-deletion", why: "an ephemeral or Xano Engine has no branches to delete" },
+  { key: "branch", flag: "--branch", why: "an ephemeral or Xano Engine has no branch to name" },
+  { key: "setLive", flag: "--set-live", why: "an ephemeral or Xano Engine has no branch to make live" },
+  { key: "backupBranch", flag: "--backup-branch", why: "an ephemeral or Xano Engine has no branch to back up" },
 ];
 
 function assertNoDestinationFlags(args: ParsedArgs): void {
@@ -1236,7 +1236,7 @@ function assertNoDestinationFlags(args: ParsedArgs): void {
   const why = passed.map((f) => (one ? f.why : `\`${f.flag}\`: ${f.why}`)).join("; ");
   throw new UsageError(
     `${andList(names)} ${one ? "needs" : "need"} a destination, and this deploy names none — ` +
-      `it refreshes this project's own ephemeral or local engine, and ${why}. Add \`--to workspace\` ` +
+      `it refreshes this project's own ephemeral or Xano Engine, and ${why}. Add \`--to workspace\` ` +
       `(or \`--to tenant:<name>\`) to reach a real destination, or drop ${one ? "the flag" : "the flags"}.` +
       (args.keepData ? ` \`--keep-data\` still keeps this environment's rows without them.` : "") +
       (args.dryRun ? ` ${previewOwnEphemeral(args)}` : ""),
@@ -1265,7 +1265,7 @@ function previewOwnEphemeral(args: ParsedArgs): string {
 }
 
 /**
- * Flags that describe the ephemeral (or local engine) a deploy with no `--to`
+ * Flags that describe the ephemeral (or Xano Engine) a deploy with no `--to`
  * refreshes — the mirror of {@link DESTINATION_ONLY}.
  *
  * `--to` hands the run to the release merge, which reads none of them: it
@@ -1364,7 +1364,7 @@ export function assertNoEphemeralFlags(args: ParsedArgs): void {
 export type DeployDestination =
   | { readonly kind: "ephemeral" }
   | {
-      readonly kind: "local-engine";
+      readonly kind: "local";
       /**
        * The override the flag carried — a URL or an archive path. Absent means
        * a published release; see `resolveEngineSource` for the precedence.
@@ -1375,12 +1375,12 @@ export type DeployDestination =
 /** Read the destination off the parsed flags. No I/O, no refusals — see {@link assertLocalEngineUsable}. */
 export function resolveDeployDestination(args: ParsedArgs): DeployDestination {
   return args.localEngine
-    ? { kind: "local-engine", downloadUrl: args.localEngineUrl }
+    ? { kind: "local", downloadUrl: args.localEngineUrl }
     : { kind: "ephemeral" };
 }
 
 /**
- * Everything `--local-engine` refuses, all of it BEFORE any work.
+ * Everything `--local` refuses, all of it BEFORE any work.
  *
  * Two flag combinations and one fact about the machine. Every one of them
  * fails a run that has compiled nothing, resolved no credential and written
@@ -1389,26 +1389,26 @@ export function resolveDeployDestination(args: ParsedArgs): DeployDestination {
  * it did not".
  *
  * The `--to` refusal in particular has to run before the `--to` handoff below
- * it. Under it, `--local-engine --to workspace` reads as an ordinary hosted
+ * it. Under it, `--local --to workspace` reads as an ordinary hosted
  * deploy and lands in a real workspace with nothing said.
  *
  * There is no "nowhere to get an engine" refusal: on a supported machine a bare
  * flag resolves a published release, so every run has a source.
  */
 async function assertLocalEngineUsable(args: ParsedArgs, dest: DeployDestination): Promise<void> {
-  if (dest.kind !== "local-engine") return;
+  if (dest.kind !== "local") return;
 
   if (args.to !== undefined) {
     throw new UsageError(
-      "`--local-engine` and `--to` are two destinations, and a deploy has one. " +
-        "Drop whichever is not meant: `--local-engine` runs this workspace on an engine on " +
+      "`--local` and `--to` are two destinations, and a deploy has one. " +
+        "Drop whichever is not meant: `--local` runs this workspace on an engine on " +
         "this machine, `--to` merges it into a backend that already exists. Either one alone " +
         "still works exactly as it did.",
       { hintFor: { command: "deploy" } },
     );
   }
 
-  // Both describe an ephemeral (its display name, its lifetime); a local engine
+  // Both describe an ephemeral (its display name, its lifetime); a Xano Engine
   // has neither, so they are refused rather than silently dropped.
   const ephemeralOnly = [
     ...(args.name !== undefined ? ["--name"] : []),
@@ -1417,15 +1417,15 @@ async function assertLocalEngineUsable(args: ParsedArgs, dest: DeployDestination
   if (ephemeralOnly.length > 0) {
     const one = ephemeralOnly.length === 1;
     throw new UsageError(
-      `${andList(ephemeralOnly)} ${one ? "describes" : "describe"} an ephemeral, and a local engine ` +
+      `${andList(ephemeralOnly)} ${one ? "describes" : "describe"} an ephemeral, and a Xano Engine ` +
         `has no display name or expiry, so ${one ? "it is" : "they are"} refused rather than quietly ` +
-        `skipped. Drop ${one ? "it" : "them"}, or drop \`--local-engine\` to deploy to an ephemeral.`,
+        `skipped. Drop ${one ? "it" : "them"}, or add \`--ephemeral\` to deploy to an ephemeral.`,
       { hintFor: { command: "deploy" } },
     );
   }
 
   // Lazily imported, like everything Node-only this command reaches: the
-  // browser-safe authoring bundle must not pull the local-engine stack in.
+  // browser-safe authoring bundle must not pull the local stack in.
   const { engineSourceRefusal, MISSING_ARCHIVE, resolveEnginePlatform, SUPPORTED_PLATFORMS } = await import(
     "../deploy/local-engine-config.js"
   );
@@ -1442,10 +1442,10 @@ async function assertLocalEngineUsable(args: ParsedArgs, dest: DeployDestination
 
   if (resolveEnginePlatform() === undefined) {
     throw new Error(
-      `There is no local engine build for ${process.platform} ${process.arch} — it runs on ` +
-        `${SUPPORTED_PLATFORMS.join(", ")} and nothing else, so there is nothing for ` +
-        `\`--local-engine\` to run here. Deploy from one of those machines, or drop the flag: ` +
-        `\`xanosdk deploy\` reaches an ephemeral from anywhere.`,
+      `There is no Xano Engine build for ${process.platform} ${process.arch} — it runs on ` +
+        `${SUPPORTED_PLATFORMS.join(", ")} and nothing else, so there is no engine to run here. ` +
+        `Deploy from one of those machines, or add \`--ephemeral\`: \`xanosdk deploy --ephemeral\` ` +
+        `reaches an ephemeral from anywhere.`,
     );
   }
 }
@@ -1482,11 +1482,11 @@ async function assertLocalEngineUsable(args: ParsedArgs, dest: DeployDestination
  */
 async function deployToLocalEngine(
   args: ParsedArgs,
-  dest: Extract<DeployDestination, { kind: "local-engine" }>,
+  dest: Extract<DeployDestination, { kind: "local" }>,
   /**
    * Present only for a FETCHED source — see the call site. A provider, not a
    * credential: the resolver calls it for a hosted source and never for a
-   * local engine, so copying one engine into another signs in nowhere.
+   * Xano Engine, so copying one engine into another signs in nowhere.
    */
   sourceCredential: CredentialProvider | undefined,
   ctx: { startedAt: number },
@@ -1562,7 +1562,7 @@ async function deployToLocalEngine(
     await assertNoSeedLeaks(args.static, nonPublicSeedValues, { serverRendered: true });
   }
 
-  step(`Deploying ${shownSource} → local engine`);
+  step(`Deploying ${shownSource} → Xano Engine`);
 
   // The derived-artifact hooks, after the compile and BEFORE an engine is stood
   // up. A hook describes the SOURCE, so it has the same job here as on the
@@ -1609,7 +1609,7 @@ async function deployToLocalEngine(
   // replace that completes re-stamps it below.
   const flags = { keepData: args.keepData, reset: args.reset };
   const { engine, reused, previousUrl, hadRecord, priorFilled, engineVersion, replaced, sweptOrphans } =
-    await withSpinner("Preparing the local engine…", () =>
+    await withSpinner("Preparing the Xano Engine…", () =>
       ensureProjectEngine({
         dir,
         source: choice.source,
@@ -1622,13 +1622,13 @@ async function deployToLocalEngine(
   pin.announce();
   if (sweptOrphans !== undefined) {
     info(
-      `Stopped ${sweptOrphans.length === 1 ? "a process" : `${sweptOrphans.length} processes`} a crashed local engine ` +
+      `Stopped ${sweptOrphans.length === 1 ? "a process" : `${sweptOrphans.length} processes`} a crashed Xano Engine ` +
         `left running (pid ${sweptOrphans.join(", ")}).`,
     );
   }
   if (replaced !== undefined) {
     info(
-      `Replaced local engine ${replaced.name} (${replaced.from ?? "an unrecorded version"} → ` +
+      `Replaced Xano Engine ${replaced.name} (${replaced.from ?? "an unrecorded version"} → ` +
         `${replaced.to ?? "the resolved engine"}). It starts empty, so this deploy seeds it.`,
     );
   }
@@ -1642,14 +1642,14 @@ async function deployToLocalEngine(
   await refuseEnvClearedByFallbackReplace(arm);
 
   const target: LocalEngineTarget = {
-    kind: "local-engine",
+    kind: "local",
     url: engine.url,
     workspaceId: engine.workspaceId,
   };
   // Before the work, through the shared helper, and saying in words that
   // this is not a hosted instance.
   discloseWriteTarget(target);
-  announceArm(arm, "local-engine");
+  announceArm(arm, "local");
 
   const bearer = { access_token: engine.token, instance: engine.url };
   let merged: KeepDataMergeResult | undefined;
@@ -1661,7 +1661,7 @@ async function deployToLocalEngine(
   const sending = (): void => {
     sent = true;
     // A reused engine is recorded here; a started one already was.
-    if (reused) recordDeployed(dir, "local-engine");
+    if (reused) recordDeployed(dir, "local");
   };
   try {
     if (arm.arm === "merge") {
@@ -1670,16 +1670,16 @@ async function deployToLocalEngine(
         auth: bearer,
         baseUrl: engine.url,
         workspaceId: engine.workspaceId,
-        label: `local engine ${engine.name}`,
+        label: `Xano Engine ${engine.name}`,
         bundle: bundleText ?? JSON.stringify(bundleObject),
         content,
         files: archiveHostedFiles(archive),
-        // No credential flags: a local engine refuses them.
+        // No credential flags: a Xano Engine refuses them.
         stateCheck:
-          `Check what local engine ${engine.name} now holds with \`xanosdk tables local-engine:${shellQuote(engine.name)}\` ` +
+          `Check what Xano Engine ${engine.name} now holds with \`xanosdk tables local:${shellQuote(engine.name)}\` ` +
           `before retrying.`,
-        envSetTo: ` --to ${shellQuote(`local-engine:${engine.name}`)}`,
-        kind: "local-engine",
+        envSetTo: ` --to ${shellQuote(`local:${engine.name}`)}`,
+        kind: "local",
         rerun: rerunOf(args),
         // The lock waits for the import itself, not only its refusals: an
         // engine that cannot apply this merge (a 501) wrote nothing, and a lock
@@ -1705,7 +1705,7 @@ async function deployToLocalEngine(
           mode: "replace",
           dryRun: false,
           preserveGuids: true,
-          label: `local engine ${engine.name}`,
+          label: `Xano Engine ${engine.name}`,
         }),
       );
     }
@@ -1717,7 +1717,7 @@ async function deployToLocalEngine(
     // a refusal before it already says nothing was written.
     if (err instanceof XanoSdkImportRefusal && err.retryable) {
       const { importInProgressError } = await import("./keep-data-merge.js");
-      throw importInProgressError(`local engine ${engine.name}`, rerunOf(args), err);
+      throw importInProgressError(`Xano Engine ${engine.name}`, rerunOf(args), err);
     }
     // An engine too old for this import answers with its own internals; say
     // that in the SDK's words instead.
@@ -1733,12 +1733,12 @@ async function deployToLocalEngine(
       const rerun = rerunOf(args);
       warn(
         "The import failed — the engine is still running, so nothing needs restarting:",
-        "local-engine.import-failed",
+        "local.import-failed",
         [
           unsupported !== undefined
             ? `It is serving at ${engine.url}, holding what it held — this engine cannot run this import; the error below names what can.`
             : `It is serving at ${engine.url}. Fix what the error below names, then run \`${rerun.command}\` again.${rerun.note}`,
-          `Stop it with \`xanosdk local-engine stop ${engine.name}\`.`,
+          `Stop it with \`xanosdk local stop ${engine.name}\`.`,
         ],
       );
     }
@@ -1757,8 +1757,8 @@ async function deployToLocalEngine(
   // to be told about.
   const urlChanged = !reused || previousUrl !== engine.url;
   if (urlChanged) {
-    success(`Local engine ${engine.name} deployed${elapsedSuffix(startedAt)}`);
-    info("New local engine URL:");
+    success(`Xano Engine ${engine.name} deployed${elapsedSuffix(startedAt)}`);
+    info("New Xano Engine URL:");
     link(engine.url);
   } else {
     const kept = arm.arm === "merge" ? ", keeping its data" : "";
@@ -1771,8 +1771,8 @@ async function deployToLocalEngine(
   detail(`Open the builder: ${engine.signInUrl}`);
   // Pointed at rather than printed: this output lands in terminals and CI logs,
   // and the bearer is only for the caller who asks for it.
-  detail(`Meta API bearer (the local XANO_META_TOKEN): \`xanosdk local-engine token\``);
-  detail(`Stop it with \`xanosdk local-engine stop ${engine.name}\``);
+  detail(`Meta API bearer (the local XANO_META_TOKEN): \`xanosdk local token\``);
+  detail(`Stop it with \`xanosdk local stop ${engine.name}\``);
   // After the import, as on an ephemeral: the static host lives in the very
   // workspace the import replaces. Never fails the backend deploy.
   let staticSummary: StaticPublishSummary | undefined;
@@ -1787,14 +1787,14 @@ async function deployToLocalEngine(
   }
 
   const summary: DeploySummary = {
-    kind: "local-engine",
+    kind: "local",
     destination: { ...writeTargetPayload(target), label: engine.name, url: engine.url },
     // Nothing chose a credential for this run, so there is no profile to name.
     // Null rather than omitted: the field is non-optional, and a wrapper that
     // reads it everywhere must not have to branch on the destination first.
     profile: null,
     url: engine.url,
-    localEngine: {
+    engine: {
       name: engine.name,
       workspaceId: engine.workspaceId,
       logPath: engine.logPath,
@@ -1807,7 +1807,7 @@ async function deployToLocalEngine(
     ...mergeLossFields(merged),
     ...(staticSummary === undefined ? {} : { static: staticSummary }),
   };
-  // A local engine is never what a release was cut from, so seeded password
+  // A Xano Engine is never what a release was cut from, so seeded password
   // hashes from one never verify here — said once the rows are written.
   if (fetchedSource !== undefined && summary.data === "replaced") {
     const unverifiable = await notePasswordHashesDoNotTravel(
@@ -1836,7 +1836,7 @@ async function deployToLocalEngine(
 }
 
 /**
- * `--static` on a local engine: publish the built frontend to the engine's own
+ * `--static` on a Xano Engine: publish the built frontend to the engine's own
  * static host. The ephemeral arm's guard, in the local arm's words: a failure is
  * reported (and exits 3, or 9 when the upload's answer was lost), never thrown,
  * because the backend it follows has landed.
@@ -1848,13 +1848,13 @@ async function publishStaticToLocalEngine(
   engineVersion: string | undefined,
 ): Promise<StaticPublishSummary> {
   // The engine is re-deployed with the same command to retry: its import is
-  // local and quick, and `publish` does not reach a local engine.
+  // local and quick, and it is the command the reader already typed.
   const retry = rerunOf(args).command;
   try {
     const summary = await deployStaticTo(
       dir,
       { access_token: engine.token },
-      { baseUrl: engine.url, workspaceId: engine.workspaceId, label: `local engine ${engine.name}` },
+      { baseUrl: engine.url, workspaceId: engine.workspaceId, label: `Xano Engine ${engine.name}` },
       buildStaticEnv(engine.url, args.staticEnv),
       Object.keys(args.staticEnv).length > 0,
       args.staticHost,
@@ -1871,14 +1871,14 @@ async function publishStaticToLocalEngine(
   } catch (err) {
     const unknown = err instanceof Error && statesOutcomeUnknown(err.message);
     const tooOld = (err as { status?: unknown }).status === 501;
-    const which = engineVersion === undefined ? "This local engine" : `Local engine ${engineVersion}`;
+    const which = engineVersion === undefined ? "This Xano Engine" : `Xano Engine ${engineVersion}`;
     const message = tooOld
-      ? `${which} cannot host a static site (HTTP 501): static hosting on a local engine came in a later release. ` +
-        "`xanosdk local-engine update` moves this project to the newest one."
+      ? `${which} cannot host a static site (HTTP 501): static hosting on a Xano Engine came in a later release. ` +
+        "`xanosdk local update` moves this project to the newest one."
       : unknownStaticOutcome(err instanceof Error ? err.message : String(err), unknown);
     warn("The static-host upload failed — the backend deploy stands:", "static.upload-failed", [
       message,
-      `Retry with \`${retry}\` (it re-imports the backend, which is quick on a local engine).`,
+      `Retry with \`${retry}\` (it re-imports the backend, which is quick on a Xano Engine).`,
     ]);
     process.exitCode = unknown ? EXIT_OUTCOME_UNKNOWN : EXIT_STATIC_FAILED;
     return { url: undefined, error: message, retry, completed: unknown ? "unknown" : "no" };
@@ -1986,7 +1986,7 @@ function urlsNote(merged: KeepDataMergeResult | undefined): string {
  * flags that would fill them are refused for this source. What the landing
  * does with that depends on where it lands, which only the hosted arm knows
  * after the deploy: `landing` names the ephemeral a refresh kept, `"new"` is one
- * this run created, and absent (the local-engine arm, which notes it before
+ * this run created, and absent (the local arm, which notes it before
  * deploying) says both.
  *
  * Measured live: a NEW ephemeral stood up from a release has every env var
@@ -2076,7 +2076,7 @@ function noteLiveCopyCarriesNoRows(raw: string, display?: string, flags = ""): v
  * was cut from, the key is the one that made them and logins work (measured),
  * so that landing says nothing. Nothing this deploy could send changes either.
  *
- * `landedOn` is the ephemeral's name, or `undefined` for a local engine, which
+ * `landedOn` is the ephemeral's name, or `undefined` for a Xano Engine, which
  * no release is ever cut from. Only when rows were written: a `--keep-data`
  * merge leaves the environment's own rows in place.
  */
@@ -2091,7 +2091,7 @@ async function notePasswordHashesDoNotTravel(
   // Read only now, with something to warn about: a source that is no release never signs in.
   const origin = await passwordOrigin(await credential(), release);
   if (landedOn !== undefined && origin?.name === landedOn) return undefined;
-  const where = landedOn === undefined ? "the local engine" : `ephemeral "${landedOn}"`;
+  const where = landedOn === undefined ? "the Xano Engine" : `ephemeral "${landedOn}"`;
   warn(passwordHashesWarning(release, columns, where, "the deploy", origin?.phrase), "seed.password-hashes");
   return [...columns];
 }
@@ -2132,20 +2132,20 @@ function noteBundleFileCarriesNoRows(path: string, reset: boolean): void {
  *
  * Compared by engine NAME, off the record and the path-derived name the
  * destination itself would use — no enumeration, so the refusal costs nothing.
- * Bare `local-engine` IS this project's engine by definition, whatever the
+ * Bare `local` IS this project's engine by definition, whatever the
  * record says. The replace that would follow empties the destination before it
  * imports, and here the destination is the source: the export would be read
  * from an engine the same run is about to replace, or restart, under it.
  */
 function refuseSameEngine(source: Exclude<Source, { kind: "file" }> | undefined, dir: string): void {
-  if (source?.kind !== "local-engine") return;
+  if (source?.kind !== "local") return;
   const own = getEngineRecord(dir)?.name ?? engineNameForProject(dir);
   if (source.name !== undefined && source.name !== own) return;
   throw new UsageError(
-    `"${source.name === undefined ? "local-engine" : `local-engine:${source.name}`}" is this project's own ` +
-      `engine (${own}), which is also where \`--local-engine\` deploys — the same engine as source and ` +
-      `destination. Nothing was downloaded or stopped. \`xanosdk deploy local-engine\` stands its export up ` +
-      `as an ephemeral; \`xanosdk deploy local-engine:<name> --local-engine\` copies another engine into this one.`,
+    `"${source.name === undefined ? "local" : `local:${source.name}`}" is this project's own ` +
+      `engine (${own}), which is also where \`--local\` deploys — the same engine as source and ` +
+      `destination. Nothing was downloaded or stopped. \`xanosdk deploy local\` stands its export up ` +
+      `as an ephemeral; \`xanosdk deploy local:<name> --local\` copies another engine into this one.`,
     { hintFor: { command: "deploy" } },
   );
 }
@@ -2183,7 +2183,7 @@ export function refuseSameEphemeral(
   const typed = source.name === undefined ? source.kind : `${source.kind}:${source.name}`;
   throw new UsageError(
     `"${typed}" is this project's own ` +
-      `ephemeral (${own}), which is also where \`xanosdk deploy\` lands — the same environment as source and ` +
+      `ephemeral (${own}), which is also where \`xanosdk deploy --ephemeral\` lands — the same environment as source and ` +
       `destination. ` +
       (keepsData
         ? `Merging it into itself would land its own export back onto it, so there is nothing to change. `
@@ -2191,10 +2191,10 @@ export function refuseSameEphemeral(
           `would come back empty. `) +
       `Nothing was fetched or changed.\n` +
       (keepsData
-        ? `Redeploy the project with \`xanosdk deploy --keep-data${flags}\`, or merge another environment in with ` +
-          `\`xanosdk deploy ephemeral:<other> --keep-data${flags}\`.`
-        : `Redeploy the project with \`xanosdk deploy${flags}\` (add \`--keep-data\` to keep the rows), or copy ` +
-          `another environment in with \`xanosdk deploy ephemeral:<other>${flags}\`.`),
+        ? `Redeploy the project with \`xanosdk deploy --ephemeral --keep-data${flags}\`, or merge another environment in with ` +
+          `\`xanosdk deploy ephemeral:<other> --ephemeral --keep-data${flags}\`.`
+        : `Redeploy the project with \`xanosdk deploy --ephemeral${flags}\` (add \`--keep-data\` to keep the rows), or copy ` +
+          `another environment in with \`xanosdk deploy ephemeral:<other> --ephemeral${flags}\`.`),
     { hintFor: { command: "deploy" } },
   );
 }
@@ -2308,11 +2308,11 @@ async function runDeploy(args: ParsedArgs): Promise<void> {
   const destination = resolveDeployDestination(args);
   await assertLocalEngineUsable(args, destination);
 
-  // Before the `--to` handoff, for the same reason the local-engine refusal is:
+  // Before the `--to` handoff, for the same reason the local refusal is:
   // below it, this flag would be carried into a release that ignores it.
   if (args.keepData && args.to !== undefined) {
     throw new UsageError(
-      "`--keep-data` keeps an ephemeral's or a local engine's rows across a redeploy, and " +
+      "`--keep-data` keeps an ephemeral's or a Xano Engine's rows across a redeploy, and " +
         "`--to` already merges — it empties tables only when `--replace` or `--reset-data` asks. " +
         "Drop `--keep-data`; `--to` without those keeps the destination's data as it always has.",
       { hintFor: { command: "deploy" } },
@@ -2358,19 +2358,19 @@ async function runDeploy(args: ParsedArgs): Promise<void> {
   // Parsed here, through the slot the registry declares, rather than first
   // inside the fetch: a kind this command does not know is refused listing
   // every spelling `<source>` takes — a bundle path included — before a
-  // credential is read, and the local-engine checks below need the kind.
+  // credential is read, and the local checks below need the kind.
   const sourceSpec = fetching ? await parseDeploySource(args.file!) : undefined;
   if (sourceSpec !== undefined) refuseValueFlagsForSource(args, args.file!, sourceSpec);
-  if (destination.kind === "local-engine") {
+  if (destination.kind === "local") {
     refuseSameEngine(sourceSpec, process.cwd());
-    // A local engine selects no credential, so `--profile` is refused rather
+    // A Xano Engine selects no credential, so `--profile` is refused rather
     // than dropped — unless the SOURCE is hosted, which reads it (R9).
     const { refuseProfileForLocal } = await import("./tracked-backend.js");
     // The file and origin flags are refused just below, in the deploy's own words.
-    refuseProfileForLocal(args.profile, sourceSpec === undefined ? ["local-engine"] : ["local-engine", sourceSpec.kind], undefined, {});
-    // `--config`, `--local` and `--origin` choose a credential, refused on the same grounds.
+    refuseProfileForLocal(args.profile, sourceSpec === undefined ? ["local"] : ["local", sourceSpec.kind], undefined, {});
+    // `--config`, `--local-auth` and `--origin` choose a credential, refused on the same grounds.
     const { refuseCredentialFlagsForLocal } = await import("./local-engine-choice.js");
-    refuseCredentialFlagsForLocal(args, sourceSpec === undefined ? ["local-engine"] : ["local-engine", sourceSpec.kind]);
+    refuseCredentialFlagsForLocal(args, sourceSpec === undefined ? ["local"] : ["local", sourceSpec.kind]);
   }
 
   if (!fetching) {
@@ -2392,12 +2392,12 @@ async function runDeploy(args: ParsedArgs): Promise<void> {
   // Whatever the source: a fetched backend publishes a `--static` build too.
   refuseMissingStaticDir(args);
 
-  if (destination.kind === "local-engine") {
+  if (destination.kind === "local") {
     // An engine on this machine needs no Xano account, but a deploy whose INPUT
     // is a hosted source still needs a credential to fetch that source. Handed
     // down as a provider rather than read here: the resolver calls it for a
-    // hosted source and never for a local engine, so `deploy local-engine:<other>
-    // --local-engine` signs in nowhere.
+    // hosted source and never for a Xano Engine, so `deploy local:<other>
+    // --local` signs in nowhere.
     const { memoCredential } = await import("./tracked-backend.js");
     return deployToLocalEngine(
       args,
@@ -2857,11 +2857,11 @@ export function noteStaticUrlChange(
  * the flag a replace is simply what a deploy does, and a merge is announced by
  * its own preview.
  */
-function announceArm(arm: DeployArm, kind: "ephemeral" | "local-engine", landedBefore = false, seeded = true): void {
+function announceArm(arm: DeployArm, kind: "ephemeral" | "local", landedBefore = false, seeded = true): void {
   if (arm.arm !== "replace" || arm.skipped === undefined) return;
   const why: Record<KeepDataSkipped, string> = {
     new: "Nothing to keep yet — this environment is new, so it is replaced and seeded. Later deploys with `--keep-data` keep its rows.",
-    // An ephemeral expires or is deleted; a local engine's rows go when its
+    // An ephemeral expires or is deleted; a Xano Engine's rows go when its
     // process restarts. Each told its own reason.
     recreated:
       kind === "ephemeral"
@@ -3182,13 +3182,13 @@ export function noteKeptFilledMarker(err: unknown, filled: boolean, args: Parsed
 const DUPLICATE_GUID = /Duplicate (\S+) guid: (\S+?)\./;
 
 /** The backend a deploy argument fetches from — `undefined` for a path. */
-function fetchedSourceOf(file: string | undefined): { kind: "release" | "tenant" | "ephemeral" | "workspace" | "local-engine"; name?: string } | undefined {
+function fetchedSourceOf(file: string | undefined): { kind: "release" | "tenant" | "ephemeral" | "workspace" | "local"; name?: string } | undefined {
   if (file === undefined) return undefined;
   const colon = file.indexOf(":");
   const kind = colon < 0 ? file : file.slice(0, colon);
   const name = colon < 0 ? undefined : file.slice(colon + 1).trim();
   if (kind === "release" || kind === "tenant") return name ? { kind, name } : undefined;
-  if (kind === "ephemeral" || kind === "local-engine") return name ? { kind, name } : { kind };
+  if (kind === "ephemeral" || kind === "local") return name ? { kind, name } : { kind };
   if (kind === "workspace" && colon < 0) return { kind };
   return undefined;
 }
@@ -3231,7 +3231,7 @@ export function explainDuplicateArchiveGuid(err: unknown, file: string | undefin
       `one ${section} per guid to deploy it here.`;
   } else {
     const label =
-      source.kind === "workspace" ? "The workspace" : source.name === undefined ? `The ${source.kind}` : `${source.kind === "tenant" ? "Tenant" : source.kind === "ephemeral" ? "Ephemeral" : "Local engine"} ${source.name}`;
+      source.kind === "workspace" ? "The workspace" : source.name === undefined ? `The ${source.kind}` : `${source.kind === "tenant" ? "Tenant" : source.kind === "ephemeral" ? "Ephemeral" : "Xano Engine"} ${source.name}`;
     const reland =
       source.kind === "tenant"
         ? `, land it there again with \`xanosdk deploy --to ${shellQuote(`tenant:${source.name!}`)}${flags}\``
@@ -3392,10 +3392,10 @@ function failDeploy(): void {
 export function ephemeralDisabledError(source: string): Error {
   return new Error(
     "Ephemeral environments are not enabled on this instance, so there is nothing for " +
-      `\`xanosdk deploy ${source}\` to create — they are the only environment it writes to.\n` +
+      `\`xanosdk deploy ${source} --ephemeral\` to create.\n` +
       "Ask whoever administers the instance to enable them.\n" +
-      "Until then `xanosdk export` still writes the bundle, and `xanosdk preflight` still " +
-      "checks the round-trip, without needing one.",
+      `Until then \`xanosdk deploy ${source}\` runs it on the Xano Engine on this machine, \`xanosdk export\` ` +
+      "still writes the bundle, and `xanosdk preflight` still checks the round-trip, without needing one.",
   );
 }
 
@@ -3414,7 +3414,7 @@ export function notReadyError(err: unknown, name: string, flags: string, created
   const failure = new Error(
     `${head}\n` +
       `${created ? `Ephemeral "${name}" was created and is` : `Ephemeral "${name}" is`} recorded in .xano/ephemeral.json, ` +
-      `but ${unanswered ? "whether it is ready could not be read" : "it is not ready yet"}, so nothing was imported. \`${retry?.command ?? `xanosdk deploy${flags}`}\` retries onto it; ` +
+      `but ${unanswered ? "whether it is ready could not be read" : "it is not ready yet"}, so nothing was imported. \`${retry?.command ?? `xanosdk deploy --ephemeral${flags}`}\` retries onto it; ` +
       `\`xanosdk ephemeral delete ${name}${flags}${offTerminalYes()}\` removes it.${withheldNote(retry?.withheld ?? [])}` +
       `${unanswered ? " The poll got no answer (a server error or a network failure), so this run exits 8." : ""}`,
     { cause: err },
@@ -3495,7 +3495,7 @@ export function unknownCreateOutcome(err: unknown, display: string, flags: strin
   if (!(err instanceof Error) || !/may or may not have taken effect/.test(err.message)) return err;
   const head = closeSentence(err.message.split("\n")[0]!);
   // The literal rerun, not "run the deploy again" (E2E pass 29).
-  const again = retry?.command ?? `xanosdk deploy${flags}`;
+  const again = retry?.command ?? `xanosdk deploy --ephemeral${flags}`;
   // Both answers the list can give, each with its step: a listed one exists and
   // nothing here tracks it, so a retry would create a second beside it.
   const message =
@@ -3717,7 +3717,7 @@ async function deployEphemeralGuarded(
     publishStatic?: PublishStatic;
     /**
      * The compile's deferred `xano.lock` write. Run once the import LANDED —
-     * as the local-engine arm does (E2E pass 28), and as the landing record is
+     * as the local arm does (E2E pass 28), and as the landing record is
      * written only by a completed deploy. A refusal, a create that failed or
      * whose answer was lost (exit 9), an environment that never became ready,
      * or an import that failed or whose outcome is unknown leaves the lock as
@@ -4081,7 +4081,7 @@ async function deployEphemeralGuarded(
   // And, right behind the record, that this project's bare commands now follow
   // an ephemeral. Same side of the import for the same reason: a failed import
   // leaves the environment standing, and the next bare `env set` or `test`
-  // should still find it. Only this arm and the local-engine one write it — a
+  // should still find it. Only this arm and the local one write it — a
   // `--to workspace|tenant` deploy is real and never becomes the default.
   recordDeployed(dir, "ephemeral");
 
@@ -4447,7 +4447,7 @@ export interface StaticPublishSummary {
   routing?: "spa" | "multipage";
   /**
    * The build's server half (`.xano-ssr/`, from `@xano/sdk/sveltekit`): `uploaded`
-   * where the target renders it (a local engine), `omitted` where the target
+   * where the target renders it (a Xano Engine), `omitted` where the target
    * serves files only. Absent when the build has none.
    */
   serverBundle?: "uploaded" | "omitted";
@@ -4505,7 +4505,7 @@ export async function deployStaticTo(
    */
   dirLabel?: string,
   /**
-   * `serverRendered`: the target runs a build's server half (a local engine).
+   * `serverRendered`: the target runs a build's server half (a Xano Engine).
    * `rerun`: the publish that settles an interrupted upload — a publish
    * replaces the host's build, so running it again is safe either way.
    */
@@ -4540,7 +4540,7 @@ export async function deployStaticTo(
   // since the site's dynamic routes are then served by the fallback page alone.
   if (sh.serverBundle === "omitted") {
     detail(
-      "Server half (.xano-ssr/) not uploaded: this host serves files only. `xanosdk deploy --local-engine --static` renders it.",
+      "Server half (.xano-ssr/) not uploaded: this host serves files only. `xanosdk deploy --local --static` renders it.",
     );
   }
 

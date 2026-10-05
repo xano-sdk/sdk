@@ -141,7 +141,7 @@ export function retryCommand(
       if (!attached && (CREDENTIAL_VALUE_FLAGS.has(spelling) || createOnly.has(spelling))) i += 1;
       continue;
     }
-    if (token === "--local") continue;
+    if (token === "--local-auth") continue;
     kept.push(shellQuote(token));
   }
   const stdin = secretAt === undefined ? "" : `printf %s "${STDIN_VALUE}" | `;

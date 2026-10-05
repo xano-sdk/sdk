@@ -286,7 +286,7 @@ export async function syncContributions(
   // manufactures exactly that. A package that is neither a dependency nor
   // configured has no claim on a span of the user's file.
   //
-  // The SDK's own entry is never removed: it holds the project's local-engine
+  // The SDK's own entry is never removed: it holds the project's local
   // pin, not a module's settings, and a globally installed SDK is not a
   // dependency at all.
   const removed = [
@@ -621,7 +621,7 @@ function describeRun(ctx: {
   // A configured module that discovery never returned and never reported as
   // broken was skipped for being `enabled: false` — the one state that is
   // decided from JSON, before anything is imported. Only an entry that SAYS
-  // so is reported: the SDK's own key holds the local-engine pin, not a
+  // so is reported: the SDK's own key holds the Xano Engine pin, not a
   // module, and reporting it "disabled" named a module that does not exist.
   for (const [pkg, config] of Object.entries(ctx.block)) {
     if (pkg === SDK_PACKAGE || ctx.untouchable.has(pkg) || ctx.dropped.includes(pkg)) continue;

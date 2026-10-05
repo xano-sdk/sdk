@@ -2,7 +2,7 @@
  * `xanosdk init [<dir>] [--from <source>] [--web]` — scaffold a ready-to-run
  * Xano SDK project: a Vite
  * frontend under `frontend/` and a Xano SDK-authored backend under `xano/`,
- * wired with `dev`/`build`/`xano:export`/`xano:deploy` scripts. The starter
+ * wired with `dev`/`build`/`xano:export`/`xano:deploy`/`xano:deploy:ephemeral` scripts. The starter
  * backend is empty but valid (it compiles and deploys with zero domain code);
  * the walkthrough for the first table/endpoint lives in comments and
  * `xano/EXAMPLE.md`.
@@ -673,7 +673,7 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
     }
     const source = resolveFromSource(args.from);
     // Only a bundle on disk: a hosted source resolves `--profile` to read it,
-    // and refuses an unknown one there, and a local engine refuses the flag.
+    // and refuses an unknown one there, and a Xano Engine refuses the flag.
     if (source.kind === "file") await refuseUnknownProfileFlag(args, resolve(args.positionals[0] ?? "."));
     const { runInitFromCommand } = await import("./codegen-command.js");
     return runInitFromCommand(args, source);
@@ -1126,14 +1126,17 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
       `Next steps:\n` +
         cdHint +
         (result.install === "installed" || sdkResolves(targetDir) ? `` : `  ${installLine}\n`) +
-        `  npm run dev            # run the frontend\n` +
-        loginNextStep(pin, targetDir) +
         // A declared name with no line in xano/.env refuses the deploy, so the
         // step that supplies it comes first.
         (addonEnv.length > 0
           ? `  cp xano/.env.example xano/.env   # then set ${addonEnv.join(", ")} — the add-ons read ${addonEnv.length === 1 ? "it" : "them"}\n`
           : ``) +
-        `  npm run xano:deploy    # build the frontend, then deploy → live ephemeral URL\n` +
+        // The Xano Engine first: it needs no account, so sign-in waits for
+        // the cloud deploy that does.
+        `  npm run xano:deploy    # run the backend on the Xano Engine, on this machine\n` +
+        `  npm run dev            # run the frontend, pointed at it\n` +
+        loginNextStep(pin, targetDir) +
+        `  npm run xano:deploy:ephemeral   # build the frontend, then deploy → live ephemeral URL\n` +
         `\n` +
         (hadLock !== undefined
           ? `xano/xano.lock was kept (${hadLock} ${hadLock === 1 ? "entry" : "entries"}). An entry the new xano/index.ts\n` +

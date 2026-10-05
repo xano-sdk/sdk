@@ -7,7 +7,7 @@
  *   carrying seed content and the lockfile write that goes with it;
  * - **a bundle on disk** — already compiled, `--bundle`;
  * - **a live backend** (`release:<name>`, `ephemeral:<name>`, `tenant:<name>`,
- *   `workspace`, `local-engine[:<name>]`) — fetched, not compiled, and carrying
+ *   `workspace`, `local[:<name>]`) — fetched, not compiled, and carrying
  *   no seed at all.
  *
  * The third is what makes the iterate loop expressible: take a release, stand
@@ -35,7 +35,7 @@ import type { SeedContentFile } from "../workspace/seed.js";
 
 /**
  * The kinds a deploy can take bytes FROM. A release is one of them; `file` is a
- * path. A local engine is one too: it is a running workspace like the others,
+ * path. A Xano Engine is one too: it is a running workspace like the others,
  * exported through its own bearer rather than a Xano credential.
  */
 export const DEPLOY_SOURCE_KINDS = [
@@ -43,7 +43,7 @@ export const DEPLOY_SOURCE_KINDS = [
   "ephemeral",
   "tenant",
   "workspace",
-  "local-engine",
+  "local",
 ] as const satisfies readonly SourceKind[];
 
 /** The entry's filename. The DIRECTORY is resolved, not assumed — see below. */
@@ -105,7 +105,7 @@ export interface FetchedSource {
  * The export route is the same for every kind because they are all workspaces
  * underneath — what differs is which base URL and workspace id address them,
  * and which bearer, which is what the resolver answered. The credential is a
- * provider for that reason: a local engine's export needs none, so it is only
+ * provider for that reason: a Xano Engine's export needs none, so it is only
  * read for a hosted kind.
  */
 export async function fetchSourceArchive(

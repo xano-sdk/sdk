@@ -268,7 +268,7 @@ const PROFILE_NAME_VERBS = ["use", "show", "delete", "set-default"] as const;
  * Print the stored profile NAMES — the keys of the credential file's
  * `profiles`, never a value, so no token reaches a terminal — from the file the
  * command being typed would read, by the CLI's own rule: `--config`, else
- * $XANO_CONFIG, else `--local`'s project file; else `login`/`logout` write the
+ * $XANO_CONFIG, else `--local-auth`'s project file; else `login`/`logout` write the
  * shared file, and every other command reads the project's `.xano/auth.json`
  * when it holds a profile, else the shared file. The shells pass the words
  * typed so far after `--`. Plain JS for `node -e` (xanosdk already needs node);
@@ -283,7 +283,7 @@ const PROFILE_NAMES_JS = [
   "for(let i=0;i<a.length;i++){const w=a[i];",
   // bash splits `--config=/alt.json` at the `=` (COMP_WORDBREAKS): `--config`, `=`, `/alt.json`.
   'if(w==="--config"){cfg=a[++i];if(cfg==="=")cfg=a[++i];}else if(w.startsWith("--config="))cfg=w.slice(9);',
-  'else if(w==="--local")local=true;else if(w==="-p"||w==="--profile"){i++;if(a[i]==="=")i++;}',
+  'else if(w==="--local-auth")local=true;else if(w==="-p"||w==="--profile"){i++;if(a[i]==="=")i++;}',
   'else if(!w.startsWith("-")&&cmd===undefined)cmd=w;}',
   // A leading `~` the shell left unexpanded (quoted, or after `--config=`) is the home directory.
   'const tl=(f)=>f&&(f==="~"||f.startsWith("~/"))?p.join(os.homedir(),f.slice(1)):f;',
@@ -298,21 +298,21 @@ const PROFILE_NAMES_JS = [
   'const n=names(file);if(n.length)console.log(n.join(" "));',
 ].join("");
 
-/** The `local-engine` verbs whose positional is an engine's name. */
+/** The `local` verbs whose positional is an engine's name. */
 const ENGINE_NAME_VERBS = ["stop", "token"] as const;
 
 /**
- * The local engine records' home and file — `LOCAL_ENGINE_HOME_ENV` and
+ * The Xano Engine records' home and file — `LOCAL_ENGINE_HOME_ENV` and
  * `LOCAL_ENGINE_STATE_FILE`, spelled here because this module stays free of
  * `node:*` (a test holds them equal).
  */
-export const ENGINE_RECORDS = { homeEnv: "XANOSDK_LOCAL_ENGINE_HOME", file: "engines.json" } as const;
+export const ENGINE_RECORDS = { homeEnv: "XANOSDK_ENGINE_HOME", file: "engines.json" } as const;
 
 /**
- * Print the local engine NAMES this machine's records hold — read off the
+ * Print the Xano Engine NAMES this machine's records hold — read off the
  * records file, never by starting or asking an engine, so a Tab costs a file
  * read. A record may name an engine that has since stopped; `stop` answers that
- * as "not running" (E2E pass 27: `local-engine stop <Tab>` offered nothing).
+ * as "not running" (E2E pass 27: `local stop <Tab>` offered nothing).
  * Plain JS for `node -e`, no single quote.
  */
 const ENGINE_NAMES_JS = [
@@ -444,7 +444,7 @@ _xanosdk_profiles() {
   node -e ${sq(PROFILE_NAMES_JS)} -- "\${COMP_WORDS[@]:1:COMP_CWORD-1}" 2>/dev/null
 }
 
-# Local engine names, from the engine records on this machine — nothing is started.
+# Xano Engine names, from the engine records on this machine — nothing is started.
 _xanosdk_engines() {
   command -v node >/dev/null 2>&1 || return
   node -e ${sq(ENGINE_NAMES_JS)} 2>/dev/null
@@ -570,8 +570,8 @@ _xanosdk() {
       COMPREPLY=( $(compgen -W "$(_xanosdk_profiles)" -- "$cur") )
       return
       ;;
-    # The engine name \`local-engine stop|token\` takes.
-    ${ENGINE_NAME_VERBS.map((v) => sq(`local-engine ${v}`)).join("|")})
+    # The engine name \`local stop|token\` takes.
+    ${ENGINE_NAME_VERBS.map((v) => sq(`local ${v}`)).join("|")})
       COMPREPLY=( $(compgen -W "$(_xanosdk_engines)" -- "$cur") )
       return
       ;;
@@ -761,9 +761,9 @@ ${flagKindBlocks}
       return
       ;;
   esac
-  # The engine name \`local-engine stop|token\` takes, from the engine records on this machine.
+  # The engine name \`local stop|token\` takes, from the engine records on this machine.
   case "$scope" in
-    ${ENGINE_NAME_VERBS.map((v) => sq(`local-engine ${v}`)).join("|")})
+    ${ENGINE_NAME_VERBS.map((v) => sq(`local ${v}`)).join("|")})
       (( $+commands[node] )) && compadd -- \${=$(node -e ${sq(ENGINE_NAMES_JS)} 2>/dev/null)}
       return
       ;;
@@ -869,7 +869,7 @@ function renderFish(): string {
     `    node -e ${sq(PROFILE_NAMES_JS)} -- $words[2..-1] 2>/dev/null | string split ' '`,
     "end",
     "",
-    "# Local engine names, from the engine records on this machine — nothing is started.",
+    "# Xano Engine names, from the engine records on this machine — nothing is started.",
     "function __xanosdk_engines",
     "    command -q node; or return",
     `    node -e ${sq(ENGINE_NAMES_JS)} 2>/dev/null | string split ' '`,
@@ -934,7 +934,7 @@ function renderFish(): string {
     if ((PROFILE_NAME_VERBS as readonly string[]).some((v) => scope.key === `profile ${v}`)) {
       lines.push(`complete -c xanosdk -n ${sq(condition)} -a '(__xanosdk_profiles)'`);
     }
-    if ((ENGINE_NAME_VERBS as readonly string[]).some((v) => scope.key === `local-engine ${v}`)) {
+    if ((ENGINE_NAME_VERBS as readonly string[]).some((v) => scope.key === `local ${v}`)) {
       lines.push(`complete -c xanosdk -n ${sq(condition)} -a '(__xanosdk_engines)'`);
     }
     if (scope.paths) lines.push(`complete -c xanosdk -n ${sq(condition)} -F`);

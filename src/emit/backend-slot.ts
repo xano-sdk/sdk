@@ -132,7 +132,7 @@ const ROLE_NOUN: Record<SelectorRole, string> = {
 const KIND_PHRASE: Record<SourceKind, string> = {
   workspace: "the workspace",
   ephemeral: "an ephemeral",
-  "local-engine": "a local engine",
+  "local": "a Xano Engine",
   tenant: "a tenant",
   release: "a release",
   file: "a bundle file",
@@ -171,7 +171,7 @@ function kindOf(raw: string): SourceKind | undefined {
  * A ready-to-type alternative for a tracked refusal: `, for example \`--to ephemeral\``.
  *
  * An ephemeral when the slot takes one, because the refusal fires right after a
- * local-engine deploy and the throwaway hosted kind is the one that cannot land
+ * local deploy and the throwaway hosted kind is the one that cannot land
  * anywhere real. A positional slot has no flag to prefix, so it gets none.
  */
 function exampleOf(slot: BackendSlot): string {
@@ -189,8 +189,8 @@ function exampleOf(slot: BackendSlot): string {
  * `origin` is what named the kind: the raw string typed into the slot, or
  * `"tracked"` when it came from what the project last deployed to. The second
  * form exists because a bare command must refuse exactly as the typed form
- * does — `publish` bare after a local-engine deploy is the same impossibility
- * as `publish --to local-engine` — and must say how to name something else.
+ * does — `publish` bare after a local deploy is the same impossibility
+ * as `publish --to local` — and must say how to name something else.
  */
 export function refusedKind(
   slot: BackendSlot,

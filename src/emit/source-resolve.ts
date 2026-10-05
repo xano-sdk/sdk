@@ -36,7 +36,7 @@
  *
  * Every hosted kind is looked up THROUGH a Xano credential, so the resolver
  * takes a provider rather than a credential and awaits it once, inside the
- * hosted arms. A local engine selects no credential at all — its bearer comes
+ * hosted arms. A Xano Engine selects no credential at all — its bearer comes
  * off the engine's own enumeration — so the local arm never calls the provider.
  * Taking a ready credential instead would force every caller to read one
  * before knowing the kind, and a run with nobody logged in could then never
@@ -47,7 +47,7 @@
  * transport takes. The whole engine value rides along on the local arm because
  * a bearer alone cannot mint an engine login link, and `impersonate` needs one.
  *
- * ## The local arm keeps the local-engine invariants
+ * ## The local arm keeps the Xano Engine invariants
  *
  * The engine's own enumeration is the liveness oracle and a record is only a
  * hint: a recorded engine the enumeration does not show is stale, and its
@@ -150,7 +150,7 @@ export const NO_CREDENTIAL: CredentialProvider = () =>
  *   disk or printed: it carries the bearer and a sign-in url.
  *
  * The field names differ on purpose (`auth` vs `engine`), for the reason
- * `LocalEngine` does not reuse `instance`/`access_token`: a local engine that
+ * `LocalEngine` does not reuse `instance`/`access_token`: a Xano Engine that
  * type-checked as a hosted credential would be accepted by the hosted state
  * writer and explained by the hosted binding refusal.
  */
@@ -188,7 +188,7 @@ export function actualKind(resolved: Pick<ResolvedSource, "kind" | "target">): S
 
 /**
  * How a human line names a resolved backend: `ephemeral "e4f2-…" ("My App")`,
- * `tenant "eu"`, `your workspace`, `your local engine`. The display name rides
+ * `tenant "eu"`, `your workspace`, `your Xano Engine`. The display name rides
  * beside the name when the record carries a different one — it is what people
  * call the backend, and the name alone is a server-assigned handle.
  */
@@ -202,8 +202,8 @@ export function describeBackend(resolved: Pick<ResolvedSource, "kind" | "target"
       return `${kind} ${JSON.stringify(label)}${shown}`;
     case "workspace":
       return "your workspace";
-    case "local-engine":
-      return resolved.provenance === "local-engine" ? "your local engine" : `local engine ${JSON.stringify(label)}`;
+    case "local":
+      return resolved.provenance === "local" ? "your Xano Engine" : `Xano Engine ${JSON.stringify(label)}`;
     default:
       return label;
   }
@@ -215,7 +215,7 @@ export interface ResolveDeps {
   getEphemeral?: typeof getEphemeral;
   getTenant?: typeof getTenant;
   findRelease?: typeof findRelease;
-  /** Where local-engine records and the engine cache live. Defaults to the process env. */
+  /** Where Xano Engine records and the engine cache live. Defaults to the process env. */
   env?: NodeJS.ProcessEnv;
   /**
    * The engine's own enumeration of what is running on this machine, or
@@ -236,15 +236,15 @@ export interface ResolveDeps {
   /**
    * Whether a not-running refusal ends with "`xanosdk deploy` still deploys to
    * an ephemeral". Right for a verb that USES an engine as a source; noise for
-   * the `local-engine` lifecycle verbs, which manage the engine itself. Default true.
+   * the `local` lifecycle verbs, which manage the engine itself. Default true.
    */
   deployFallback?: boolean;
   /**
-   * Whether a local engine's name was typed BARE — a lifecycle verb's
-   * positional (`local-engine token <name>`) — rather than as a
-   * `local-engine:<name>` selector. A near-name suggestion is spelled the way
+   * Whether a Xano Engine's name was typed BARE — a lifecycle verb's
+   * positional (`local token <name>`) — rather than as a
+   * `local:<name>` selector. A near-name suggestion is spelled the way
    * the command takes it: the bare name would be refused by `tables`, the
-   * selector by `local-engine token`. Default false (a selector).
+   * selector by `local token`. Default false (a selector).
    */
   bareName?: boolean;
   /**
@@ -432,8 +432,8 @@ function listHint(kind: SourceKind): string {
       return `\`xanosdk tenant list${contextFlags()}\` and \`xanosdk ephemeral list${contextFlags()}\` show the ones that exist`;
     case "release":
       return `\`xanosdk release list${contextFlags()}\` shows the ones that exist`;
-    case "local-engine":
-      return "`xanosdk local-engine list` shows the ones that are running";
+    case "local":
+      return "`xanosdk local list` shows the ones that are running";
     default:
       return "";
   }
@@ -649,7 +649,7 @@ export async function releaseNames(auth: ResolvedAuth): Promise<string[]> {
  * Resolve a parsed source to a meta target and a backend, or throw a
  * {@link SourceError}.
  *
- * `credential` is awaited once for a hosted kind and never for a local engine.
+ * `credential` is awaited once for a hosted kind and never for a Xano Engine.
  *
  * `file` is not resolved here: it names bytes on disk, has no liveness, and
  * belongs to the caller that reads it.
@@ -660,7 +660,7 @@ export async function resolveSource(
   deps: ResolveDeps = {},
 ): Promise<ResolvedSource> {
   const cwd = deps.cwd ?? process.cwd();
-  if (source.kind === "local-engine") return resolveLocalEngine(source.name, cwd, deps);
+  if (source.kind === "local") return resolveLocalEngine(source.name, cwd, deps);
 
   const auth = await credential();
   const hosted = await resolveHosted(auth, source, cwd, deps);
@@ -681,7 +681,7 @@ export async function resolveSource(
 /** The hosted arms, which differ only in which lookup answers them. */
 async function resolveHosted(
   auth: ResolvedAuth,
-  source: Exclude<Source, { kind: "file" | "local-engine" }>,
+  source: Exclude<Source, { kind: "file" | "local" }>,
   cwd: string,
   deps: ResolveDeps,
 ): Promise<Omit<ResolvedSource, "backend" | "bearer">> {
@@ -721,7 +721,7 @@ async function resolveHosted(
         if (cleared) {
           throw new SourceError(
             `No ephemeral named "${name}" — this project's ephemeral was deleted (cleared this project's record of it). ` +
-              `Run \`xanosdk deploy${contextFlags()}\` to create a fresh one.`,
+              `Run \`xanosdk deploy --ephemeral${contextFlags()}\` to create a fresh one.`,
             "gone",
             "ephemeral",
           );
@@ -742,7 +742,7 @@ async function resolveHosted(
       if (isExpired(summary.expiresAt)) {
         const cleared = clearStale(auth, name, cwd);
         throw new SourceError(
-          `Ephemeral "${name}" has expired. Run \`xanosdk deploy${contextFlags()}\` to create a fresh one` +
+          `Ephemeral "${name}" has expired. Run \`xanosdk deploy --ephemeral${contextFlags()}\` to create a fresh one` +
             `${cleared ? " (cleared this project's record of it)" : ""}.`,
           "expired",
           "ephemeral",
@@ -841,12 +841,12 @@ async function resolveHosted(
  * The local arm: the engine named, else the one recorded for `cwd`, checked
  * against the enumeration.
  *
- * A recorded engine and a foreign one — which `local-engine list` shows and
+ * A recorded engine and a foreign one — which `local list` shows and
  * `stop` will stop — go through the same gate: matched by NAME against the
  * enumeration, then loopback-checked before the bearer is handed back. They
  * differ only in what a miss clears: a recorded name's rows, or nothing.
  *
- * The name comes first and needs no subprocess: bare `local-engine` in a
+ * The name comes first and needs no subprocess: bare `local` in a
  * project that never recorded one has nothing to look for.
  */
 async function resolveLocalEngine(
@@ -858,12 +858,12 @@ async function resolveLocalEngine(
   const name = named !== undefined && named !== "" ? named : getEngineRecord(cwd, env)?.name;
   if (name === undefined) {
     throw new SourceError(
-      `No local engine is recorded for this project, and no name was given.\n` +
-        `Run \`xanosdk deploy --local-engine\` to stand one up, or name one from ` +
-        `\`xanosdk local-engine list\`.` +
-        (deps.deployFallback !== false ? ` Meanwhile \`xanosdk deploy${contextFlags()}\` still deploys to an ephemeral.` : ""),
+      `No Xano Engine is recorded for this project, and no name was given.\n` +
+        `Run \`xanosdk deploy --local\` to stand one up, or name one from ` +
+        `\`xanosdk local list\`.` +
+        (deps.deployFallback !== false ? ` Meanwhile \`xanosdk deploy --ephemeral${contextFlags()}\` still deploys to an ephemeral.` : ""),
       "gone",
-      "local-engine",
+      "local",
     );
   }
 
@@ -873,10 +873,10 @@ async function resolveLocalEngine(
     // So the record stays: it is still the best hint there is.
     throw new SourceError(
       `No engine is cached on this machine, so nothing here can find "${name}".\n` +
-        `Run \`xanosdk deploy --local-engine\` to fetch one.` +
-        (deps.deployFallback !== false ? ` Meanwhile \`xanosdk deploy${contextFlags()}\` still deploys to an ephemeral.` : ""),
+        `Run \`xanosdk deploy --local\` to fetch one.` +
+        (deps.deployFallback !== false ? ` Meanwhile \`xanosdk deploy --ephemeral${contextFlags()}\` still deploys to an ephemeral.` : ""),
       "gone",
-      "local-engine",
+      "local",
     );
   }
 
@@ -889,12 +889,12 @@ async function resolveLocalEngine(
   const swept = stale && sweep !== undefined ? await sweep() : [];
   const engine = liveEngine(name, running, env, deps.deployFallback !== false, swept, deps.bareName === true);
   return {
-    kind: "local-engine",
-    provenance: named !== undefined && named !== "" ? `local-engine:${name}` : "local-engine",
+    kind: "local",
+    provenance: named !== undefined && named !== "" ? `local:${name}` : "local",
     target: {
       base: engine.url.replace(/\/$/, ""),
       workspaceId: engine.workspaceId,
-      label: named !== undefined && named !== "" ? name : "your local engine",
+      label: named !== undefined && named !== "" ? name : "your Xano Engine",
     },
     backend: { kind: "local", engine },
     // The ENUMERATION's url and token, never a record's: a restarted engine
@@ -919,13 +919,13 @@ function liveEngine(
     // it would keep a dead engine findable. Cleared before the refusal, which
     // then says so. Name-keyed, like `stop`: no row anywhere may keep claiming
     // it. A name no record holds clears nothing. A near name is spelled the
-    // way this command takes it — `local-engine:<name>` from a selector.
+    // way this command takes it — `local:<name>` from a selector.
     const near = suggest(name, running.map((e) => e.name));
     throw engineNotRunning(
       name,
       recorded ? clearEngineRecordsNamed(name, env).length : 0,
       deployFallback,
-      near === undefined || bareName ? near : `local-engine:${near}`,
+      near === undefined || bareName ? near : `local:${near}`,
       swept,
     );
   }
@@ -938,7 +938,7 @@ function liveEngine(
     // Running, and not somewhere its bearer may follow. Nothing is cleared:
     // the record is accurate, and the fix is to restart the engine bound to
     // loopback, not to forget it.
-    throw new SourceError((err as Error).message, "unreachable", "local-engine");
+    throw new SourceError((err as Error).message, "unreachable", "local");
   }
   return engine;
 }
@@ -946,7 +946,7 @@ function liveEngine(
 /**
  * The three beats for an engine that is not running: cause, fix, what still works.
  *
- * For the verbs that resolve an engine to USE it. `local-engine stop <name>` of
+ * For the verbs that resolve an engine to USE it. `local stop <name>` of
  * one that is not running does not come here: the engine is already where the
  * stop would leave it, so it exits 0 with `alreadyStopped: true`.
  */
@@ -967,13 +967,13 @@ function engineNotRunning(
   ];
   const tail = said.length === 0 ? "" : ` (${said.join("; ")})`;
   return new SourceError(
-    `Local engine "${name}" is not running${tail}.\n` +
+    `Xano Engine "${name}" is not running${tail}.\n` +
       // A one-letter slip on a name nobody types by hand — say which one runs.
       (nearest !== undefined ? `Did you mean \`${nearest}\`? It is running.\n` : "") +
-      `${listHint("local-engine")}, and \`xanosdk deploy --local-engine\` stands one up.` +
-      (deployFallback ? ` Meanwhile \`xanosdk deploy${contextFlags()}\` still deploys to an ephemeral.` : ""),
+      `${listHint("local")}, and \`xanosdk deploy --local\` stands one up.` +
+      (deployFallback ? ` Meanwhile \`xanosdk deploy --ephemeral${contextFlags()}\` still deploys to an ephemeral.` : ""),
     "gone",
-    "local-engine",
+    "local",
     nearest,
   );
 }

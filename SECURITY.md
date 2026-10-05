@@ -4,7 +4,7 @@
 
 Report it privately, not in a public issue:
 
-**[Open a private security advisory](https://github.com/xanots/sdk/security/advisories/new)**
+**[Open a private security advisory](https://github.com/xano-sdk/sdk/security/advisories/new)**
 
 Include what you found, how to reproduce it, and what an attacker could do with
 it. A proof of concept helps; a redacted one is fine.

@@ -2,7 +2,7 @@
  * `xanosdk impersonate [backend]` — open a backend's dashboard in the Xano
  * builder, for every kind.
  *
- * It was once three copies under `ephemeral`, `tenant` and `local-engine`, each
+ * It was once three copies under `ephemeral`, `tenant` and `local`, each
  * with its own output shape. One verb with the selector grammar gives them one
  * shape and a tracked default: bare opens what the project last deployed to.
  *
@@ -11,7 +11,7 @@
  * - An ephemeral and a tenant — one primitive on the server — mint a one-time
  *   token through the tenant impersonation call, and the url is built from it
  *   under the instance origin, where the builder exchanges it for a session.
- * - A local engine mints through its own loopback login-link endpoint with the
+ * - A Xano Engine mints through its own loopback login-link endpoint with the
  *   bearer from its enumeration, and the url is the one the ENGINE returns: it
  *   knows where its own builder lives. No Xano credential is read.
  * - The workspace is refused by the slot: it is the account's own workspace,
@@ -49,7 +49,7 @@ import { detail, step, success } from "./ui.js";
 export interface ImpersonateCommandOptions {
   /** The resolver's seams (hosted lookups, the engine enumeration, where records live). */
   deps?: ResolveDeps;
-  /** The request seam a local engine's login link is minted through. */
+  /** The request seam a Xano Engine's login link is minted through. */
   fetch?: EngineFetch;
 }
 
@@ -68,7 +68,7 @@ export async function runImpersonateCommand(args: ParsedArgs, opts: ImpersonateC
   const url = await dashboardUrl(resolved, args.guest, opts);
 
   // Bare on a mere pipe — `$(xanosdk impersonate -u)` is the form it exists for —
-  // but `--json` asked for by name gets the document, as `local-engine token` does.
+  // but `--json` asked for by name gets the document, as `local token` does.
   if (args.urlOnly && args.json !== true) {
     process.stdout.write(`${url}\n`);
     return;

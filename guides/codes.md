@@ -97,15 +97,15 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `init.verify-failed` | Verification FAILED — the objects listed above do not re-export as they were pulled. |
 | `init.workflow-exists` | … already exists — moving the new workflow there replaces it. |
 | `landing.record-failed` | The prune landed, but … could not be updated: … |
-| `local-engine.foreign` | Left running, not started by xanosdk: … |
-| `local-engine.import-failed` | The import failed — the engine is still running, so nothing needs restarting: |
-| `local-engine.list-failed` | Could not list running engines, so none are shown: … |
-| `local-engine.not-pinned` | No package.json in …, and it is not a Xano SDK project, so the local engine was not pinned — this deploy runs the latest engine. |
-| `local-engine.pin-unusable` | The project's pinned engine version could not be read and was not used. |
-| `local-engine.runtime-kept` | Kept the unpacked runtime (…): … still running on it. |
-| `local-engine.stale` | … is running …, but the engine cached here is …. |
-| `local-engine.stop-failed` | … was listed as running but did not stop…. |
-| `local-engine.version-invalid` | … This deploy runs the latest local engine and the field is left as written — set it to a version like "v0.1.5", or run `xanosdk local-engine update` to pin… |
+| `local.foreign` | Left running, not started by xanosdk: … |
+| `local.import-failed` | The import failed — the engine is still running, so nothing needs restarting: |
+| `local.list-failed` | Could not list running engines, so none are shown: … |
+| `local.not-pinned` | No package.json in …, and it is not a Xano SDK project, so the Xano Engine was not pinned — this deploy runs the latest engine. |
+| `local.pin-unusable` | The project's pinned engine version could not be read and was not used. |
+| `local.runtime-kept` | Kept the unpacked runtime (…): … still running on it. |
+| `local.stale` | … is running …, but the engine cached here is …. |
+| `local.stop-failed` | … was listed as running but did not stop…. |
+| `local.version-invalid` | … This deploy runs the latest Xano Engine and the field is left as written — set it to a version like "v0.1.5", or run `xanosdk local update` to pin one. |
 | `lock.ceded-canonical` | A lock entry kept its guid but ceded its canonical to a live object; a rename moves the entry so the object keeps its URL. |
 | `lock.created-in-ci` | This lock was created in CI, which means the repository does not have one. |
 | `lock.dropped-entry` | A stale lock entry was dropped because its identity reappeared under a live name (a reverted or identity-keeping rename). |

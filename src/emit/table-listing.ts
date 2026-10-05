@@ -69,7 +69,7 @@ function unreachableListing(err: unknown, resolved: ResolvedSource): unknown {
  * Takes the RESOLVED source rather than a hand-assembled host and workspace id:
  * `target` already carries both, along with the rule that its base is appended
  * to and never resolved against. The call goes out on the
- * source's own `bearer`, so a local engine lists through the same path as a
+ * source's own `bearer`, so a Xano Engine lists through the same path as a
  * hosted source; only a hosted one has a binding to explain a 403 against.
  *
  * The id prints first because other engine surfaces and URLs show it, so it is
@@ -100,7 +100,7 @@ export async function printTableListing(args: ParsedArgs, resolved: ResolvedSour
     // ephemeral's guids must not branch on which backend it asked, and a bare
     // command's answer has to say which backend the default resolved to.
     // `env` is an ephemeral's or tenant's server-assigned name; `name` is the
-    // backend's own name whatever its kind (that name, or a local engine's), and
+    // backend's own name whatever its kind (that name, or a Xano Engine's), and
     // `display` the display name people call it by — each always present, null
     // where the kind has none, so the keys never depend on the kind. `name` was
     // null for an ephemeral, and nothing carried its display name.
@@ -125,8 +125,8 @@ export async function printTableListing(args: ParsedArgs, resolved: ResolvedSour
   printHuman(`${formatTableListing(rows)}\n`);
   // `--seed=<guids>`, with the equals: the space form sets a bare `--seed` and
   // leaves the guids to be read as a positional. The registry spells it the same.
-  // Not under a local engine's listing: a release is cut on the instance, and
-  // `release create` refuses a local engine as its source — the hint would name
+  // Not under a Xano Engine's listing: a release is cut on the instance, and
+  // `release create` refuses a Xano Engine as its source — the hint would name
   // a command that cannot use these guids.
   if (resolved.backend.kind === "local") return;
   detail(`Pass these guids to \`xanosdk release create <name> --seed=<guids>${contextFlags()}\` to carry their rows.`);

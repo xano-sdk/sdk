@@ -6,11 +6,11 @@
  * `backend-slot.ts`). This module is what that sentence means:
  *
  * 1. **The pointer.** `.xano/deployed.json` names the KIND the project last
- *    deployed to: an ephemeral or a local engine, never a workspace or a tenant
+ *    deployed to: an ephemeral or a Xano Engine, never a workspace or a tenant
  *    (see {@link isRealDeployment} and `deploy/deployed-state.ts`). Read
  *    without a credential.
  * 2. **The kind's own store.** An ephemeral pointer is answered by the
- *    ephemeral record under the CURRENT credential; a local-engine pointer by
+ *    ephemeral record under the CURRENT credential; a local pointer by
  *    the engine record for this directory. A pointer whose store has nothing
  *    refuses — it never quietly falls through to the other kind, because the
  *    project said which kind it was using.
@@ -19,7 +19,7 @@
  *    credential resolves silently — today's rule — else the engine record for
  *    this directory, else nothing is tracked. A missing credential SKIPS the
  *    ephemeral check rather than failing it: a signed-out developer iterating
- *    against a local engine must never be told to log in.
+ *    against a Xano Engine must never be told to log in.
  * 4. **Liveness** is the resolver's (`source-resolve.ts`): a gone or expired
  *    ephemeral, a stale or off-loopback engine.
  *
@@ -30,7 +30,7 @@
  * slightly different fix. They are read by coding agents that do exactly what
  * the text says, so every refusal names the slot's own spelling (`--to`,
  * `--on`, `--from`, or the positional), `xanosdk deploy` and `xanosdk deploy
- * --local-engine`, and — where it is the cause — the other profile or the
+ * --local`, and — where it is the cause — the other profile or the
  * other workspace that holds the record. A kind the slot cannot serve is
  * refused with the slot's declared reason, whether it was typed or tracked.
  *
@@ -42,9 +42,9 @@
  * failure as "signed out" rather than an error. {@link memoCredential} makes
  * the lookup here and the resolve after it share one fetch.
  *
- * ## `--profile` against a local engine (R9)
+ * ## `--profile` against a Xano Engine (R9)
  *
- * A local engine selects no credential, so a `--profile` beside one is refused,
+ * A Xano Engine selects no credential, so a `--profile` beside one is refused,
  * never dropped — a flag that silently did nothing would let an agent believe
  * it had picked an account. A single-slot handler passes `profile` and
  * {@link resolveBackend} refuses; a handler with two slots (a source AND a
@@ -91,7 +91,7 @@ export type { DeployedKind };
 export interface TrackedContext {
   /**
    * Yields the Xano credential. Called only for a hosted kind — never for a
-   * local engine — and, on the absent-pointer fallback, only when an ephemeral
+   * Xano Engine — and, on the absent-pointer fallback, only when an ephemeral
    * is recorded at all. Production passes `() => getAccessToken(args)`.
    */
   credential: CredentialProvider;
@@ -186,7 +186,7 @@ export async function resolveBackend(
   if (source.kind === "file") {
     throw new Error(`Internal: \`${commandPath(slot.command, slot.subcommand)}\` resolved a bundle file; read it before resolving a backend.`);
   }
-  if (source.kind === "local-engine") refuseProfileForLocal(ctx.profile, [source.kind], slot);
+  if (source.kind === "local") refuseProfileForLocal(ctx.profile, [source.kind], slot);
   return resolveSource(source, credential, { ...ctx.deps, cwd: ctx.deps?.cwd ?? process.cwd() }).catch((err: unknown) => {
     throw lookupRetry(err, slot);
   });
@@ -204,7 +204,7 @@ function lookupRetry(err: unknown, slot: BackendSlot): unknown {
 
 /**
  * Refuse `--profile` when none of an invocation's resolved kinds is hosted
- * (R9). A profile beside one hosted slot is legitimate — `deploy local-engine`
+ * (R9). A profile beside one hosted slot is legitimate — `deploy local`
  * to an ephemeral picks the destination's account with it — so this takes
  * every slot's kind, and a two-slot handler calls it once both have resolved.
  */
@@ -214,27 +214,27 @@ export function refuseProfileForLocal(
   slot?: BackendSlot,
   /**
    * The run's other credential flags. Defaults to what the dispatcher recorded
-   * (`typedCredentialFlags`), so every local-engine backend refuses them
-   * whichever command selected it — `tables local-engine --config X` exited 0
-   * with the file never read, as `deploy --local-engine` already refused.
+   * (`typedCredentialFlags`), so every local backend refuses them
+   * whichever command selected it — `tables local --config X` exited 0
+   * with the file never read, as `deploy --local` already refused.
    */
   flags: { authFile?: string; local?: boolean; authHost?: string } = typedCredentialFlags(),
 ): void {
-  if (kinds.some((k) => k !== "local-engine")) return;
-  const why = "and a local engine takes none — it is reached with the engine's own bearer.";
-  // No slot is `deploy --local-engine`, whose destination is the flag itself:
+  if (kinds.some((k) => k !== "local")) return;
+  const why = "and a Xano Engine takes none — it is reached with the engine's own bearer.";
+  // No slot is `deploy --local`, whose destination is the flag itself:
   // "name a hosted backend on the command" read as keeping it.
-  const or = slot === undefined ? "or drop `--local-engine` to deploy to a hosted backend." : `or ${nameOne(slot, "a hosted backend", true)}.`;
+  const or = slot === undefined ? "or add `--ephemeral` to deploy to a hosted backend." : `or ${nameOne(slot, "a hosted backend", true)}.`;
   if (profile !== undefined) {
     throw new UsageError(`\`--profile ${profile}\` selects a Xano credential, ${why} Drop \`--profile\`, ${or}`, hintOpts(slot));
   }
   if (flags.authFile !== undefined) {
-    // The path the reader typed, as `deploy --local-engine` names it; never
-    // resolved or read — a local engine never reaches it.
+    // The path the reader typed, as `deploy --local` names it; never
+    // resolved or read — a Xano Engine never reaches it.
     throw new UsageError(`\`--config ${flags.authFile}\` names a Xano credential file, ${why} Drop \`--config\`, ${or}`, hintOpts(slot));
   }
   if (flags.local === true) {
-    throw new UsageError(`\`--local\` selects the project-local Xano credential file, ${why} Drop \`--local\`, ${or}`, hintOpts(slot));
+    throw new UsageError(`\`--local-auth\` selects the project-local Xano credential file, ${why} Drop \`--local-auth\`, ${or}`, hintOpts(slot));
   }
   if (flags.authHost !== undefined) {
     // Not echoed: an origin can carry a `user:password@`.
@@ -296,8 +296,8 @@ function decide(facts: Facts, slot: BackendSlot | undefined): Decision {
   const { cwd, pointer, state, scope, engineRecorded } = facts;
   const ephemeralHere = scope !== undefined && getEnvironment(state, scope) !== undefined;
 
-  if (pointer === "local-engine") {
-    return engineRecorded ? { kind: "local-engine", via: "pointer" } : { refusal: noEngineRecorded(slot) };
+  if (pointer === "local") {
+    return engineRecorded ? { kind: "local", via: "pointer" } : { refusal: noEngineRecorded(slot) };
   }
   if (pointer === "ephemeral") {
     if (scope === undefined) return { refusal: signedOut(slot, state) };
@@ -305,7 +305,7 @@ function decide(facts: Facts, slot: BackendSlot | undefined): Decision {
   }
 
   if (ephemeralHere) return { kind: "ephemeral", via: "fallback" };
-  if (engineRecorded) return { kind: "local-engine", via: "fallback" };
+  if (engineRecorded) return { kind: "local", via: "fallback" };
   if (scope !== undefined) return { refusal: untracked(cwd, state, scope, slot, false) };
   return { refusal: nothingTracked(cwd, slot, Object.keys(state.environments).length > 0, state) };
 }
@@ -317,7 +317,7 @@ function decide(facts: Facts, slot: BackendSlot | undefined): Decision {
  * Only absence is: a refresh that failed, a half-set environment credential or
  * an unreadable token is a credential that exists and did not work. Read as
  * signed out, it would skip the ephemeral check and quietly send a bare command
- * to the local engine instead — so it throws, with its own fix.
+ * to the Xano Engine instead — so it throws, with its own fix.
  */
 async function silently(credential: CredentialProvider): Promise<ResolvedAuth | undefined> {
   try {
@@ -345,7 +345,7 @@ function refuseUnservable(slot: BackendSlot, kind: DeployedKind): void {
 
 const KIND_PHRASE: Record<DeployedKind, string> = {
   ephemeral: "an ephemeral",
-  "local-engine": "a local engine",
+  "local": "a Xano Engine",
 };
 
 /**
@@ -367,10 +367,10 @@ function hintOpts(slot: BackendSlot | undefined): { hintFor?: HelpTarget } {
  */
 function nameOne(slot: BackendSlot | undefined, what = "a backend", hostedOnly = false): string {
   if (slot === undefined) return `name ${what} on the command explicitly`;
-  // "Name a hosted backend" lists only hosted forms: a local engine (or a
+  // "Name a hosted backend" lists only hosted forms: a Xano Engine (or a
   // bundle file) among them is the choice the sentence just refused.
   const spellings = sourceSpellings(
-    hostedOnly ? slot.selector.accepted.filter((k) => k !== "local-engine" && k !== "file") : slot.selector.accepted,
+    hostedOnly ? slot.selector.accepted.filter((k) => k !== "local" && k !== "file") : slot.selector.accepted,
   );
   if (!slot.spelling.startsWith("--")) {
     const verb = slot.subcommand === undefined ? slot.command : `${slot.command} ${slot.subcommand}`;
@@ -387,10 +387,10 @@ function nameOne(slot: BackendSlot | undefined, what = "a backend", hostedOnly =
 function bothDeploys(cwd?: string): string {
   const flags = contextFlags();
   const entry = cwd === undefined ? "" : soleNestedEntry(cwd);
-  // `--local` beside `--local-engine` read as "deploy locally" (E2E pass 26):
-  // it selects the project-local CREDENTIAL, and the hosted deploy says so.
-  const hosted = /(^| )--local( |$)/.test(flags) ? "an ephemeral, with the project-local credential" : "an ephemeral";
-  return `\`xanosdk deploy${entry}${flags}\` (${hosted}) or \`xanosdk deploy${entry} --local-engine\` (a local engine on this machine)`;
+  // `--local-auth` selects the project-local CREDENTIAL, not a Xano Engine,
+  // so the hosted deploy that carries it says so.
+  const hosted = /(^| )--local-auth( |$)/.test(flags) ? "an ephemeral, with the project-local credential" : "an ephemeral";
+  return `\`xanosdk deploy${entry} --local\` (a Xano Engine on this machine) or \`xanosdk deploy${entry} --ephemeral${flags}\` (${hosted})`;
 }
 
 /**
@@ -423,8 +423,8 @@ function untracked(cwd: string, state: EphemeralState, scope: EnvScope, slot: Ba
       );
     }
     return new SourceError(
-      `This project last deployed to an ephemeral, but the last one is gone (deleted or expired). Run \`xanosdk deploy${contextFlags()}\` to create one — or \`xanosdk deploy ` +
-        `--local-engine\` for a local engine — or ${nameOne(slot)}.`,
+      `This project last deployed to an ephemeral, but the last one is gone (deleted or expired). Run \`xanosdk deploy --ephemeral${contextFlags()}\` to create one — or \`xanosdk deploy ` +
+        `--local\` for a Xano Engine — or ${nameOne(slot)}.`,
       "gone",
       "ephemeral",
     );
@@ -487,7 +487,7 @@ function nothingTracked(
       : ` An ephemeral is recorded, but no credential is signed in to look it up — \`${runLogin()}\` reaches it.`;
   return new NothingTrackedError(
     `This project has no backend to default to: it has not deployed to an ephemeral under this ` +
-      `credential or to a local engine from this directory.${signIn} Deploy first with ${bothDeploys(cwd)}, ` +
+      `credential or to a Xano Engine from this directory.${signIn} Deploy first with ${bothDeploys(cwd)}, ` +
       `or ${nameOne(slot)}.`,
     hintOpts(slot),
   );
@@ -576,24 +576,24 @@ function nestedTrackedBackends(cwd: string): NestedBackend[] {
   return found;
 }
 
-/** The pointer says local engine, and this directory has no engine recorded. */
+/** The pointer says Xano Engine, and this directory has no engine recorded. */
 function noEngineRecorded(slot: BackendSlot | undefined): SourceError {
   // A positional slot is rendered as the command it is (`xanosdk tables
-  // local-engine:<name>`), as {@link nameOne} does — `<backend> …` read as a
+  // local:<name>`), as {@link nameOne} does — `<backend> …` read as a
   // flag nobody can type.
   const named =
     slot === undefined
       ? "name one on the command"
       : slot.spelling.startsWith("--")
-        ? `name one with \`${slot.spelling} local-engine:<name>\``
-        : `name one: \`xanosdk ${slot.subcommand === undefined ? slot.command : `${slot.command} ${slot.subcommand}`} local-engine:<name>\``;
+        ? `name one with \`${slot.spelling} local:<name>\``
+        : `name one: \`xanosdk ${slot.subcommand === undefined ? slot.command : `${slot.command} ${slot.subcommand}`} local:<name>\``;
   // Exit 8, as the ephemeral case above: the record it pointed at is gone.
   return new SourceError(
-    `This project last deployed to a local engine, but no engine is recorded for this directory. ` +
-      `Run \`xanosdk deploy --local-engine\` to stand one up, or \`xanosdk local-engine list\` to see what is ` +
-      `running and ${named}. \`xanosdk deploy${contextFlags()}\` still deploys to an ephemeral.`,
+    `This project last deployed to a Xano Engine, but no engine is recorded for this directory. ` +
+      `Run \`xanosdk deploy --local\` to stand one up, or \`xanosdk local list\` to see what is ` +
+      `running and ${named}. \`xanosdk deploy --ephemeral${contextFlags()}\` still deploys to an ephemeral.`,
     "gone",
-    "local-engine",
+    "local",
   );
 }
 
@@ -615,7 +615,7 @@ function signedOut(slot: BackendSlot | undefined, state: EphemeralState): UsageE
 
 /**
  * The sign-in for THIS run's credential file and typed profile — `--config
- * <other.json>` / `--local` carried, as `status`'s own `signIn` carries them. A
+ * <other.json>` / `--local-auth` carried, as `status`'s own `signIn` carries them. A
  * bare `xanosdk login` writes the shared file, which a run reading another never
  * sees.
  */

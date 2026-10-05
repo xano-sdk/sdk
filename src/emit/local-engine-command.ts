@@ -1,8 +1,8 @@
 /**
- * `xanosdk local-engine <list|token|stop|update|cache>` — the handles
- * that ship with `deploy --local-engine`.
+ * `xanosdk local <list|token|stop|update|cache>` — the handles
+ * that ship with `deploy --local`.
  *
- * A local engine has no TTL and nothing on the server side ever reclaims it,
+ * A Xano Engine has no TTL and nothing on the server side ever reclaims it,
  * and the binary it runs from lives in a hidden cache directory that is never
  * on `PATH`. So the only way a developer reclaims one is a verb this tool owns:
  * printing the engine's own invocation would hand them a path to copy, for a
@@ -29,7 +29,7 @@
  * stays forbidden is printing it as a side effect of another verb.
  *
  * Opening one in the builder is not a verb here: `xanosdk impersonate
- * local-engine[:name]` does it, the same verb and output as every other kind.
+ * local[:name]` does it, the same verb and output as every other kind.
  *
  * **Which cached binary runs a verb (KTD7).** The project's pinned version when
  * it is cached, else the newest cached release, else the newest override. Any
@@ -198,7 +198,7 @@ export async function runLocalEngineCommand(
     case "cache":
       return runCache(args, opts);
     default:
-      throw unknownSubcommand("local-engine", args.subcommand, args.positionals);
+      throw unknownSubcommand("local", args.subcommand, args.positionals);
   }
 }
 
@@ -262,8 +262,8 @@ function report(rows: readonly LocalEngineRow[], args: ParsedArgs, orphans: read
   // here rather than left for the reader to find in a process monitor.
   if (orphans.length > 0) {
     info(
-      `${orphans.length === 1 ? "A process" : `${orphans.length} processes`} a crashed local engine left running ` +
-        `(pid ${orphans.join(", ")}) — \`xanosdk local-engine stop --all\` stops ${orphans.length === 1 ? "it" : "them"}.`,
+      `${orphans.length === 1 ? "A process" : `${orphans.length} processes`} a crashed Xano Engine left running ` +
+        `(pid ${orphans.join(", ")}) — \`xanosdk local stop --all\` stops ${orphans.length === 1 ? "it" : "them"}.`,
     );
   }
   if (isMachineOutput(args)) {
@@ -273,7 +273,7 @@ function report(rows: readonly LocalEngineRow[], args: ParsedArgs, orphans: read
   }
   const s = stdoutStyle();
   if (rows.length === 0) {
-    process.stdout.write("No local engine is running\n");
+    process.stdout.write("No Xano Engine is running\n");
     return;
   }
   const lines = rows.map((row) => {
@@ -305,10 +305,10 @@ function reportMismatches(rows: readonly LocalEngineRow[]): void {
     const running = from.startsWith("engine ") ? from : `engine ${from}`;
     warn(
       `${row.name} is running ${running}, but the engine cached here is ${cached}.`,
-      "local-engine.stale",
+      "local.stale",
       [
-        `Deploy its project again with \`xanosdk deploy --local-engine\` to restart it on that project's ` +
-          `pinned engine, or stop it with \`xanosdk local-engine stop ${row.name}\`.`,
+        `Deploy its project again with \`xanosdk deploy --local\` to restart it on that project's ` +
+          `pinned engine, or stop it with \`xanosdk local stop ${row.name}\`.`,
       ],
     );
   }
@@ -321,17 +321,17 @@ async function runStop(args: ParsedArgs, opts: LocalEngineCommandOptions): Promi
   const name = args.positionals[0];
   if (args.all && name !== undefined && name !== "") {
     throw new UsageError(
-      `\`xanosdk local-engine stop\` takes a name or \`--all\`, not both — \`--all\` already covers ` +
+      `\`xanosdk local stop\` takes a name or \`--all\`, not both — \`--all\` already covers ` +
         `"${name}". Drop one of them.`,
-      { hintFor: { command: "local-engine", subcommand: "stop" } },
+      { hintFor: { command: "local", subcommand: "stop" } },
     );
   }
   if (args.all) return runStopAll(args, opts, env);
   if (name === undefined || name === "") {
     throw new UsageError(
-      `\`xanosdk local-engine stop\` needs the name of an engine, or \`--all\` for every engine xanosdk ` +
-        `started on this machine, across projects. Run \`xanosdk local-engine list\` to see them.`,
-      { hintFor: { command: "local-engine", subcommand: "stop" } },
+      `\`xanosdk local stop\` needs the name of an engine, or \`--all\` for every engine xanosdk ` +
+        `started on this machine, across projects. Run \`xanosdk local list\` to see them.`,
+      { hintFor: { command: "local", subcommand: "stop" } },
     );
   }
   // `stop STRIPE=sk_…` is an assignment, never an engine's name (they are
@@ -340,8 +340,8 @@ async function runStop(args: ParsedArgs, opts: LocalEngineCommandOptions): Promi
   const assignment = /^([A-Za-z_][A-Za-z0-9_]*)=/.exec(name);
   if (assignment !== null) {
     throw new UsageError(
-      `"${assignment[1]}=…" is not a local engine name. Run \`xanosdk local-engine list\` to see what is running.`,
-      { hintFor: { command: "local-engine", subcommand: "stop" } },
+      `"${assignment[1]}=…" is not a Xano Engine name. Run \`xanosdk local list\` to see what is running.`,
+      { hintFor: { command: "local", subcommand: "stop" } },
     );
   }
   return runStopNamed(name, args, opts, env);
@@ -372,8 +372,8 @@ async function runStopNamed(
     // A one-letter slip still exits 0 — the engine asked for IS stopped — but
     // the one that runs under a near-identical name is named, not left running.
     const nearest = entry === undefined ? undefined : nearestRunning(name, entry, env, opts);
-    if (nearest !== undefined) detail(`Did you mean \`${nearest}\`? It is running: \`xanosdk local-engine stop ${nearest}\`.`);
-    else detail("Run `xanosdk local-engine list` to see what is running.");
+    if (nearest !== undefined) detail(`Did you mean \`${nearest}\`? It is running: \`xanosdk local stop ${nearest}\`.`);
+    else detail("Run `xanosdk local list` to see what is running.");
     if (isMachineOutput(args)) writeJson({ ...outcome, alreadyStopped: true, ...(nearest === undefined ? {} : { suggestion: nearest }) });
     return;
   }
@@ -437,14 +437,14 @@ export function reportOrphanSweep(orphans: OrphanSweep): void {
   const n = orphans.stopped.length;
   if (n > 0) {
     success(
-      `Stopped ${n} process${n === 1 ? "" : "es"} a crashed local engine left running ` +
+      `Stopped ${n} process${n === 1 ? "" : "es"} a crashed Xano Engine left running ` +
         `(pid ${orphans.stopped.join(", ")}).`,
     );
   }
   if (orphans.stillRunning.length > 0) {
     detail(
       `Still exiting after the wait: pid ${orphans.stillRunning.join(", ")} — ` +
-        `run \`xanosdk local-engine stop --all\` again in a moment.`,
+        `run \`xanosdk local stop --all\` again in a moment.`,
     );
   }
 }
@@ -457,15 +457,15 @@ function reportStopAll(
   // The lines go to stderr piped or not, as a named stop's do; the document follows.
   for (const stop of outcome.stopped) {
     if (stop.stopped) success(`Stopped ${stop.name}${clearedSuffix(stop)}`);
-    else warn(`${stop.name} was listed as running but did not stop${clearedSuffix(stop)}.`, "local-engine.stop-failed");
+    else warn(`${stop.name} was listed as running but did not stop${clearedSuffix(stop)}.`, "local.stop-failed");
   }
   if (outcome.foreign.length > 0) {
     // Reported rather than silently skipped: a developer who ran `stop --all`
     // and still sees an engine needs to be told which one, and why.
     warn(
       `Left running, not started by xanosdk: ${outcome.foreign.join(", ")}`,
-      "local-engine.foreign",
-      ["Name one explicitly — `xanosdk local-engine stop <name>` — to stop it anyway."],
+      "local.foreign",
+      ["Name one explicitly — `xanosdk local stop <name>` — to stop it anyway."],
     );
   }
   reportOrphanSweep(outcome.orphans);
@@ -474,7 +474,7 @@ function reportStopAll(
   }
   const swept = outcome.orphans.stopped.length + outcome.orphans.stillRunning.length;
   if (outcome.stopped.length === 0 && outcome.foreign.length === 0 && swept === 0) {
-    info("No local engine is running — nothing to stop.");
+    info("No Xano Engine is running — nothing to stop.");
   }
   if (isMachineOutput(args)) {
     // `alreadyStopped`, the key a named stop carries: none of ours was running
@@ -498,7 +498,7 @@ function clearedSuffix(outcome: StopOutcome): string {
  * `XANO_META_TOKEN` a hosted run reads.
  *
  * Bare on stdout in every mode, not only on a terminal: the form this exists
- * for is `XANO_META_TOKEN=$(xanosdk local-engine token)`, which is piped, and a
+ * for is `XANO_META_TOKEN=$(xanosdk local token)`, which is piped, and a
  * JSON document there would be a token nobody can use. `--json` asks for the
  * document explicitly, and carries the url and workspace the bearer is for.
  *
@@ -534,14 +534,14 @@ function targetEngine(args: ParsedArgs, opts: LocalEngineCommandOptions, doing: 
  * `env set NAME` — so the engine name is passed rather than read off them.
  * Undefined or empty means this project's engine.
  *
- * A thin wrapper over the selector resolver's local arm, so `local-engine:<name>`
+ * A thin wrapper over the selector resolver's local arm, so `local:<name>`
  * on any command and a name given to a verb here reach the same engine through
  * the same gate: named or recorded, checked against the enumeration, stale
  * records cleared, loopback enforced before the bearer comes back. The one
  * thing added here is the no-cached-engine refusal in the verb's own words —
  * checked first, as it always was, because the enumeration needs a binary.
  *
- * The name is OPTIONAL, unlike `stop`'s: a local engine's name is DERIVED from
+ * The name is OPTIONAL, unlike `stop`'s: a Xano Engine's name is DERIVED from
  * the project path rather than chosen, so nobody types one by hand, and bare
  * is the form every ordinary run wants.
  */
@@ -557,13 +557,13 @@ export async function resolveLiveEngine(
     // the name. With nothing cached, nothing can be running.
     throw new SourceError(
       `No engine is cached on this machine, so there is nothing here to ${doing}.\n` +
-        `Run \`xanosdk deploy --local-engine\` to fetch one if you meant to use a local engine.`,
+        `Run \`xanosdk deploy --local\` to fetch one if you meant to use a Xano Engine.`,
       "gone",
-      "local-engine",
+      "local",
     );
   }
   const resolved = await resolveSource(
-    named === undefined || named === "" ? { kind: "local-engine" } : { kind: "local-engine", name: named },
+    named === undefined || named === "" ? { kind: "local" } : { kind: "local", name: named },
     NO_CREDENTIAL,
     // A lifecycle verb manages the engine itself; "deploy still reaches an
     // ephemeral" answers a question nobody running it asked.
@@ -571,7 +571,7 @@ export async function resolveLiveEngine(
     { env, listEngines: () => listEngines({ entry, env, run: opts.run }), deployFallback: false, bareName: true },
   );
   // The local arm always answers with a local backend; narrowed for the type.
-  if (resolved.backend.kind !== "local") throw new Error("Internal: a local engine resolved to a hosted backend.");
+  if (resolved.backend.kind !== "local") throw new Error("Internal: a Xano Engine resolved to a hosted backend.");
   return resolved.backend.engine;
 }
 
@@ -603,7 +603,7 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
     );
   }
   // An unusable pin is replaced like an unset one: the user asked for this write.
-  const read = readPin(dir, { warn: (message) => warn(message, "local-engine.pin-unusable") });
+  const read = readPin(dir, { warn: (message) => warn(message, "local.pin-unusable") });
   // No package.json outside a project is a wrong directory, not a first pin:
   // refused before any request, so nothing is downloaded or created there.
   if (read === undefined && resolveProjectEntry(dir) === undefined) {
@@ -648,19 +648,19 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
   // reaches nothing. Only a file that pointed at THIS engine follows it.
   const devEnv = replaced === undefined ? undefined : await repointDevEnvAfterRestart(dir, replaced);
 
-  success(`Local engine ${current ?? "(unpinned)"} → ${target}`);
+  success(`Xano Engine ${current ?? "(unpinned)"} → ${target}`);
   info(pinWrittenText({ path: pin.path, version: target, created: pin.created, moved: current !== null }));
   if (replaced !== undefined) {
     info(`Restarted ${replaced.name} on ${target}. It starts empty — run your deploy to seed it.`);
     if (replaced.url !== replaced.previousUrl) {
-      info("New local engine URL:");
+      info("New Xano Engine URL:");
       link(replaced.url);
     }
     if (devEnv !== undefined) {
       detail(`Pointed ${devEnv.label} at the restarted engine (${devEnv.variable}) — restart your dev server to pick it up.`);
     }
   } else {
-    detail(`No engine is running for this project; the next \`xanosdk deploy --local-engine\` starts ${target}.`);
+    detail(`No engine is running for this project; the next \`xanosdk deploy --local\` starts ${target}.`);
   }
   if (isMachineOutput(args)) {
     writeJson({
@@ -711,16 +711,16 @@ async function requestedEngineVersion(
       throw new UsageError(
         (err instanceof Error ? err.message : String(err)) +
           (clearing ? " `cache clear` also takes `override`, or an override's `src-…` id from `cache list`." : ""),
-        { hintFor: { command: "local-engine", subcommand: clearing ? "cache" : "update" } },
+        { hintFor: { command: "local", subcommand: clearing ? "cache" : "update" } },
       );
     }
   }
   const platform = resolveEnginePlatform(opts.platform ?? process.platform, opts.arch ?? process.arch);
   if (platform === undefined) {
     throw new Error(
-      `There is no local engine build for ${opts.platform ?? process.platform} ` +
+      `There is no Xano Engine build for ${opts.platform ?? process.platform} ` +
         `${opts.arch ?? process.arch} — it runs on ${SUPPORTED_PLATFORMS.join(", ")} and nothing ` +
-        `else, so there is no engine to ${purpose}. \`xanosdk deploy\` reaches an ephemeral from anywhere.`,
+        `else, so there is no engine to ${purpose}. \`xanosdk deploy --ephemeral\` reaches an ephemeral from anywhere.`,
     );
   }
   const fetch = opts.fetch === undefined ? {} : { fetch: opts.fetch };
@@ -736,29 +736,29 @@ async function runCache(args: ParsedArgs, opts: LocalEngineCommandOptions): Prom
   if (action === "list") {
     if (args.engineVersion !== undefined) {
       throw new UsageError(
-        "`xanosdk local-engine cache list` takes no `--version` — it lists every cached engine. " +
+        "`xanosdk local cache list` takes no `--version` — it lists every cached engine. " +
           "`cache clear --version <v>` is the one that takes it.",
-        { helpFor: { command: "local-engine", subcommand: "cache" } },
+        { helpFor: { command: "local", subcommand: "cache" } },
       );
     }
     if (args.legacyRuntime) {
       throw new UsageError(
-        "`xanosdk local-engine cache list` takes no `--legacy-runtime` — it lists the earlier runtime copy when there is one. " +
+        "`xanosdk local cache list` takes no `--legacy-runtime` — it lists the earlier runtime copy when there is one. " +
           "`cache clear --legacy-runtime` is the one that takes it.",
-        { helpFor: { command: "local-engine", subcommand: "cache" } },
+        { helpFor: { command: "local", subcommand: "cache" } },
       );
     }
     return runCacheList(args, opts);
   }
   if (action === "clear") return runCacheClear(args, opts);
   throw new UsageError(
-    `\`xanosdk local-engine cache\`: ${action === undefined || action === "" ? "no action given" : `unknown action "${action}"`} — ` +
+    `\`xanosdk local cache\`: ${action === undefined || action === "" ? "no action given" : `unknown action "${action}"`} — ` +
       // Listed bare, as `unknownSubcommand` leaves the list to its help block: a
       // backticked `clear` here read as the correction already said, and the
       // "Did you mean: clear" line every other unknown verb prints was dropped.
       `it takes ${CACHE_ACTIONS.join(" or ")}.`,
     {
-      helpFor: { command: "local-engine", subcommand: "cache" },
+      helpFor: { command: "local", subcommand: "cache" },
       suggestion: action === undefined ? undefined : suggest(action, CACHE_ACTIONS),
     },
   );
@@ -800,7 +800,7 @@ async function runCacheList(args: ParsedArgs, opts: LocalEngineCommandOptions): 
   if (entries.length === 0 && legacy.length === 0 && runtime.length === 0) {
     if (isMachineOutput(args)) writeJson({ entries: [] });
     // An info line like every other "nothing here" answer, not bare stdout text.
-    else info("No local engine is cached — `xanosdk deploy --local-engine` fetches one.");
+    else info("No Xano Engine is cached — `xanosdk deploy --local` fetches one.");
     return;
   }
   // The engine list is a courtesy on this verb: an enumeration that fails still
@@ -812,7 +812,7 @@ async function runCacheList(args: ParsedArgs, opts: LocalEngineCommandOptions): 
     try {
       running = listEngines({ entry: binary, env, ...(opts.run === undefined ? {} : { run: opts.run }) });
     } catch (err) {
-      warn(`Could not list running engines, so none are shown: ${(err as Error).message.split("\n")[0]}`, "local-engine.list-failed");
+      warn(`Could not list running engines, so none are shown: ${(err as Error).message.split("\n")[0]}`, "local.list-failed");
     }
   }
   const using = enginesByDigest(running, env);
@@ -868,15 +868,15 @@ async function runCacheList(args: ParsedArgs, opts: LocalEngineCommandOptions): 
   });
   printHuman(lines.join("\n") + "\n");
   if (legacy.length > 0) {
-    detail("Old-layout directories are never run — `xanosdk local-engine cache clear` removes them.");
+    detail("Old-layout directories are never run — `xanosdk local cache clear` removes them.");
   }
   if (runtime.some((r) => r.source === "runtime")) {
-    detail("The unpacked runtime is what the engines run from — `xanosdk local-engine cache clear` removes it with the engines.");
+    detail("The unpacked runtime is what the engines run from — `xanosdk local cache clear` removes it with the engines.");
   }
   if (runtime.some((r) => r.source === "legacy-runtime")) {
     detail(
       "An earlier runtime copy was left in your own cache directory by an earlier version, and nothing runs from it — " +
-        "`xanosdk local-engine cache clear --legacy-runtime` removes it.",
+        "`xanosdk local cache clear --legacy-runtime` removes it.",
     );
   }
 }
@@ -935,7 +935,7 @@ async function runCacheClear(args: ParsedArgs, opts: LocalEngineCommandOptions):
       // other did-you-mean does — `suggestions` in the document (E2E pass 29).
       const near =
         requested === "override" ? [] : suggestAll(label ?? requested ?? "", cached.filter((c) => !c.startsWith("override")));
-      const clear = (v: string): string => `\`xanosdk local-engine cache clear --version ${v}\``;
+      const clear = (v: string): string => `\`xanosdk local cache clear --version ${v}\``;
       info(
         `${requested === "override" ? "No override engine is cached" : `${label} is not cached`} — nothing to clear. ` +
           (cached.length === 0 ? "No engine is cached." : `Cached: ${cached.join(", ")}.`) +
@@ -1003,11 +1003,11 @@ async function runCacheClear(args: ParsedArgs, opts: LocalEngineCommandOptions):
   const bytesFreed = items.reduce((sum, item) => sum + item.bytes, 0);
 
   // The lines below go to stderr whatever stdout is, and the document is
-  // written LAST: returning before them kept a `local-engine.stop-failed` out
+  // written LAST: returning before them kept a `local.stop-failed` out
   // of `--json`'s warnings, and a piped clear that worked said nothing (E2E pass 28).
   for (const stop of stopped) {
     if (stop.stopped) success(`Stopped ${stop.name} — it ran on an engine being removed`);
-    else warn(`${stop.name} was listed as running but did not stop. Stop it with \`xanosdk local-engine stop ${stop.name}\`.`, "local-engine.stop-failed");
+    else warn(`${stop.name} was listed as running but did not stop. Stop it with \`xanosdk local stop ${stop.name}\`.`, "local.stop-failed");
   }
   const what = [
     ...(removed.length === 0 ? [] : [label ?? `${removed.length} cached engine director${removed.length === 1 ? "y" : "ies"}`]),
@@ -1027,12 +1027,12 @@ async function runCacheClear(args: ParsedArgs, opts: LocalEngineCommandOptions):
   if (runtimeBytes > 0 && !runtimeRemoved) {
     warn(
       `Kept the unpacked runtime (${formatBytes(runtimeBytes)}): ${stillRunning.join(", ")} ${stillRunning.length === 1 ? "is" : "are"} still running on it. ` +
-        "Stop every engine (`xanosdk local-engine stop --all`), then run `xanosdk local-engine cache clear` again.",
-      "local-engine.runtime-kept",
+        "Stop every engine (`xanosdk local stop --all`), then run `xanosdk local cache clear` again.",
+      "local.runtime-kept",
     );
   }
   if (stopped.length > 0) {
-    detail("The next `xanosdk deploy --local-engine` fetches its engine again and restarts it.");
+    detail("The next `xanosdk deploy --local` fetches its engine again and restarts it.");
   }
   if (isMachineOutput(args)) {
     writeJson({ stopped: stopped.map((o) => o.name), removed, runtimeRemoved, items, bytesFreed, alreadyGone: false });
@@ -1064,7 +1064,7 @@ function enginesStillRunning(env: NodeJS.ProcessEnv, run: EngineRun | undefined)
 async function clearLegacyRuntime(args: ParsedArgs, env: NodeJS.ProcessEnv): Promise<void> {
   if (args.engineVersion !== undefined) {
     throw new UsageError("`--legacy-runtime` clears the earlier runtime copy, not a cached version — drop `--version`.", {
-      hintFor: { command: "local-engine", subcommand: "cache" },
+      hintFor: { command: "local", subcommand: "cache" },
     });
   }
   const dirs = legacyRuntimeDirs(env);
@@ -1079,7 +1079,7 @@ async function clearLegacyRuntime(args: ParsedArgs, env: NodeJS.ProcessEnv): Pro
   if (!args.yes) {
     const ok = await confirm(`Delete ${dirs.join(", ")} (${formatBytes(bytes)}), the runtime copy an earlier version left?`, {
       flag: "--yes",
-      refusal: { details: { removed: [], bytesFreed: 0 }, ...yesRerun(args, "local-engine cache clear --legacy-runtime") },
+      refusal: { details: { removed: [], bytesFreed: 0 }, ...yesRerun(args, "local cache clear --legacy-runtime") },
     });
     if (!ok) {
       info("Nothing was deleted.");
@@ -1122,8 +1122,8 @@ function stopEnginesOn(
   } catch (err) {
     warn(
       `Could not list running engines, so none were stopped: ${(err as Error).message.split("\n")[0]}\n` +
-        "  Any engine still running on a removed version keeps running — stop it with `xanosdk local-engine stop <name>`.",
-      "local-engine.list-failed",
+        "  Any engine still running on a removed version keeps running — stop it with `xanosdk local stop <name>`.",
+      "local.list-failed",
     );
     return [];
   }

@@ -16,7 +16,7 @@
  * redirect_uri is exactly that loopback URL) → open the browser to the authorize
  * URL → capture the callback → exchange the code → read the bound instance from
  * the token's `aud` claim → write the shared global cache (0600, or the
- * project-local one with `--local`) and ensure it is gitignored.
+ * project-local one with `--local-auth`) and ensure it is gitignored.
  *
  * The user always picks the target instance at the hosted consent screen (like
  * the dashboard); the saved instance is the token's true `aud`, never a flag.
@@ -188,7 +188,7 @@ export async function runLoginCommand(args: ParsedArgs): Promise<void> {
   success(`Signed in to ${hostLabel(record.instance)} as profile "${profile}"`);
   detail(`Workspace ${record.workspace_id} (pinned — every command acts on this one)`);
   detail(`Credentials saved to ${authFilePath}`);
-  // "This machine's default" only for the machine-wide file: a `--local` or
+  // "This machine's default" only for the machine-wide file: a `--local-auth` or
   // `--config` file's default governs runs that read THAT file, nothing more.
   const machineFile = authFilePath === globalAuthFilePath();
   const defaultOf = machineFile ? "this machine's default" : `the default profile in ${authFilePath}`;

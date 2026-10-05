@@ -16,7 +16,7 @@ are what you get when the variable is unset.
 | `XANO_META_TOKEN` | Meta API bearer token. With the two above it forms a complete credential that outranks every other source, reads no file, and never rotates. |
 | `XANO_REFRESH_TOKEN` | OAuth refresh token for non-interactive runs (CI, agents). Paired with `XANO_CLIENT_ID`; the target instance comes from the token's own `aud` claim. Rotates on use — prefer the meta credential above. |
 | `XANO_CLIENT_ID` | OAuth client id that goes with `XANO_REFRESH_TOKEN`. Both are copied once out of the profile in `auth.json` after a local `xanosdk login`. |
-| `XANO_CONFIG` | Explicit path to the credential file. Wins over both default locations — the same thing `--config <path>` does. Refused beside `--local`, which names a different file. |
+| `XANO_CONFIG` | Explicit path to the credential file. Wins over both default locations — the same thing `--config <path>` does. Refused beside `--local-auth`, which names a different file. |
 | `XANO_PROFILE` | Which stored credential profile to act as, when no `--profile` names one. Outranked by the flag, by the project's `xano.profile.json` pin, and by an environment credential (which displaces it with a note on stderr). |
 | `XANO_GLOBAL_CONFIG` | Moves the **shared** credential cache off `~/.xanosdk/auth.json`. Only changes where the global cache lives; the project-local `./.xano/auth.json` and the `XANO_CONFIG`/`--config` override are unaffected. |
 | `XANO_CLIENT_FILE` | Moves the OAuth **client-registration** cache off `~/.xano/xanosdk-clients.json`. That file holds the `client_id` minted per auth host + redirect URI, not a credential. |
@@ -49,14 +49,14 @@ are what you get when the variable is unset.
 | `XANOSDK_UPDATE_REGISTRY` | Registry URL the check reads, instead of the npm endpoint for `@xano/sdk`. |
 | `XANOSDK_UPDATE_CACHE` | Moves the check's cache file off `~/.xanosdk/update-check.json`. |
 
-**Local engine** (see [Deploying to a local engine](deploying.md#deploying-to-a-local-engine))
+**Xano Engine** (see [Deploying locally](deploying.md#deploying-locally))
 
 | Variable | What it does |
 |---|---|
-| `XANOSDK_LOCAL_ENGINE_OVERRIDE` | An engine to run instead of the project's pinned one, for every `deploy --local-engine` in this shell: a version (`v0.1.8`), an `https://` URL to an engine archive (plain `http://` only from this machine), or an archive path. A value on `--local-engine=` beats it; it never reads or moves the pin. |
-| `XANOSDK_LOCAL_ENGINE_TOKEN` | Bearer credential sent with an override URL's download — only to that URL's own origin, never to another host a redirect leads to. |
-| `XANOSDK_LOCAL_ENGINE_HOME` | Moves everything the local engine writes off `~/.xanosdk/local-engine`: the engine cache, the running-engine records, and the engine's own logs and runtime data — see [where the engine keeps its data](deploying.md#where-the-engine-keeps-its-data). |
-| `XANOSDK_ENGINE_RELEASES_URL` | A different engine release service for version lookups. Its engines are fetched fresh each deploy, the pin is not read or written, and `xanosdk local-engine update` refuses while it is set. |
+| `XANOSDK_ENGINE_OVERRIDE` | An engine to run instead of the project's pinned one, for every `deploy --local` in this shell: a version (`v0.1.8`), an `https://` URL to an engine archive (plain `http://` only from this machine), or an archive path. A value on `--local=` beats it; it never reads or moves the pin. |
+| `XANOSDK_ENGINE_TOKEN` | Bearer credential sent with an override URL's download — only to that URL's own origin, never to another host a redirect leads to. |
+| `XANOSDK_ENGINE_HOME` | Moves everything the Xano Engine writes off `~/.xanosdk/local-engine`: the engine cache, the running-engine records, and the engine's own logs and runtime data — see [where the engine keeps its data](deploying.md#where-the-engine-keeps-its-data). |
+| `XANOSDK_ENGINE_RELEASES_URL` | A different engine release service for version lookups. Its engines are fetched fresh each deploy, the pin is not read or written, and `xanosdk local update` refuses while it is set. |
 
 **Escape hatches**
 
@@ -113,8 +113,8 @@ xanosdk env pull --from workspace --yes # and skip the confirmation
 ```
 
 The source is a backend that is running: `workspace`, `ephemeral[:<name>]`,
-`local-engine[:<name>]`, or `tenant:<name>` — the [backend grammar](cli.md#naming-a-backend)
-every command shares. Left off, it is the ephemeral or local engine this project last
+`local[:<name>]`, or `tenant:<name>` — the [backend grammar](cli.md#naming-a-backend)
+every command shares. Left off, it is the ephemeral or Xano Engine this project last
 deployed to. A bundle path is refused, because its env is whatever it was built with,
 which is the stale set this command exists to replace.
 
@@ -132,7 +132,7 @@ resolved env values in cleartext (see the `--bundle` note below).
 
 ```bash
 printf %s "$STRIPE_KEY" | xanosdk env set STRIPE_KEY --to workspace --yes  # value on stdin
-xanosdk env set FEATURE_FLAG on --to local-engine                          # or as the second argument
+xanosdk env set FEATURE_FLAG on --to local                          # or as the second argument
 xanosdk env unset STRIPE_KEY --to tenant:prod-eu                            # remove it
 ```
 
@@ -142,12 +142,12 @@ a deploy can't do that job. A merge deploy only adds names that aren't there yet
 `--replace` rewrites the whole workspace.
 
 The destination is `--to workspace`, `--to ephemeral[:<name>]`, `--to tenant:<name>`, or
-`--to local-engine[:<name>]` for a local engine. With none of these, the command writes to
-the ephemeral or local engine this project last deployed to. It never falls back to your
-workspace or a tenant, and a local engine needs no Xano account. A write to
+`--to local[:<name>]` for a Xano Engine. With none of these, the command writes to
+the ephemeral or Xano Engine this project last deployed to. It never falls back to your
+workspace or a tenant, and a Xano Engine needs no Xano account. A write to
 the workspace or a tenant asks for confirmation first, and `--yes` skips it; that flag is
 required when there is no terminal, including when the value is piped in. Ephemerals and the
-local engine are throwaway, so the command doesn't ask.
+Xano Engine are throwaway, so the command doesn't ask.
 
 The value is never printed. Pipe it on stdin to keep it out of shell history. One trailing
 newline is dropped, so `echo` works too. An empty value is refused unless

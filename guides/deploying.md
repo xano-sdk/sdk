@@ -89,15 +89,15 @@ processes at once.
 > **Upgrading:** a file written before profiles is read as the `default` profile with no
 > action needed. It is rewritten in the new shape the next time something writes to it.
 
-**Project-local credentials** — pass `--local` to `login` to cache tokens in a
+**Project-local credentials** — pass `--local-auth` to `login` to cache tokens in a
 **project-local** `./.xano/auth.json` instead (which `login` **auto-adds to `.gitignore`**),
 scoping the sign-in to that directory. Every command that **reads** credentials
 (`deploy`/`details`, `whoami`, token refresh) resolves them **project-local first, global
 as a fallback**: it uses `./.xano/auth.json` when present, otherwise `~/.xanosdk/auth.json` —
-so a `--local` project keeps working without repeating the flag. `login` and `logout` do
-**not** fall back: they target the shared global cache unless you pass `--local`. A `logout`
+so a `--local-auth` project keeps working without repeating the flag. `login` and `logout` do
+**not** fall back: they target the shared global cache unless you pass `--local-auth`. A `logout`
 naming a profile that only `./.xano/auth.json` holds exits 8 (not found in the shared file)
-and names `xanosdk logout --local -p <name>` — it does not report the session as gone. A
+and names `xanosdk logout --local-auth -p <name>` — it does not report the session as gone. A
 logout clears stored profiles only: with the `XANO_*` credential variables still set, it
 says so, and commands keep authenticating with them. An explicit
 `--config`/`$XANO_CONFIG` wins over both default file locations; only the three-variable
@@ -113,7 +113,7 @@ as JSON, while the human-readable progress (and the live URLs) echoes to stderr:
 
 ```jsonc
 {
-  "kind": "ephemeral",                  // or "local-engine"
+  "kind": "ephemeral",                  // or "local"
   "destination": {                     // the PARENT it was created under, then the environment itself
     "instance": "https://x.xano.io", "workspaceId": 1, "kind": "ephemeral",
     "label": "ezm0-xkdq-6564", "url": "https://x.xano.io/tenant/ezm0-xkdq-6564",
@@ -144,7 +144,7 @@ again, when the suite could not be run — exit 6 — and `unreachable`, the tes
 (as `test run` takes them), when it stopped answering part-way; the same `N passed, M failed,
 K not run` line `test run-all` prints closes the run), `landingRecord` (`{ destination, file,
 recorded, changed, cleared }`: what this deploy recorded as landed, the scope of a later
-`--prune`; `null` for a local engine), `staticRemoved` (`{ urls, verified }`: the frontends a replace took down, below),
+`--prune`; `null` for a Xano Engine), `staticRemoved` (`{ urls, verified }`: the frontends a replace took down, below),
 `notApplied` (flags accepted and not acted on — `--expires-hours` on an ephemeral that already
 exists), `unconfigured`, and `passwordHashesUnverifiable` (below). The raw
 workspace blob is deliberately never dumped: it carries per-tenant secrets that must not land
@@ -152,8 +152,8 @@ in shell history or CI logs.
 
 `xanosdk test run-all --json` (and `test run`, `test list`) writes the same per-test entries at
 the top level, beside the backend they ran on: `kind`, `env` (the ephemeral's or tenant's handle;
-`null` for a local engine or a workspace), `name` (the backend's own name whatever its kind — the
-same handle on an ephemeral or tenant, the engine's name on a local engine) and `display` (its display
+`null` for a Xano Engine or a workspace), `name` (the backend's own name whatever its kind — the
+same handle on an ephemeral or tenant, the engine's name on a Xano Engine) and `display` (its display
 name), each always present, `null` where the backend has none. When the suite stops answering
 part-way, the rest are not started and the run exits 6 with a failure document whose
 `details.results` is that document — `total` the whole suite, `notRun` and `unreachable` the tests
@@ -169,8 +169,8 @@ out and named (`--env-var GREETING`) — pass them again, or keep them in `xano/
 `xano/.secrets.json`, which a deploy reads. The same text is the `--json` error's `message`.
 
 **Where it goes** — the instance your **token is bound to** (the token's `aud`), never a
-flag. `xanosdk deploy` create-or-refreshes an **ephemeral**, which is the only environment it
-writes to. Reaching your real workspace is the separate release flow: cut a release from
+flag. `xanosdk deploy --ephemeral` create-or-refreshes an **ephemeral**; a bare `xanosdk deploy`
+runs the code on the Xano Engine on this machine instead ([below](#deploying-locally)). Reaching your real workspace is the separate release flow: cut a release from
 what ran, then `xanosdk promote <release>` lands it there as a new branch, leaving live
 untouched until you say otherwise.
 
@@ -250,10 +250,10 @@ step, without re-importing the backend.
 directory and nothing else: no compile, no backend import. `--to` picks the destination —
 `ephemeral[:<name>]`, `workspace`, or `tenant:<name>`; left off, the backend this project last
 deployed to — and a workspace or tenant asks before replacing what its users are served
-(`--yes` in CI). `publish` does not reach a local engine, so after a local-engine deploy it
-refuses the tracked engine and names `--to ephemeral`; the engine takes a frontend through
-`xanosdk deploy --local-engine --static <dir>` instead (below). Scaffolded projects carry it as `npm run xano:deploy:frontend`,
-which rebuilds first.
+(`--yes` in CI). After a local deploy it publishes to that engine (`--to local`
+names it), server half included — the upload `xanosdk deploy --local --static <dir>`
+makes, without re-importing the backend (below). Scaffolded projects carry it as
+`npm run xano:deploy:frontend`, which rebuilds first.
 
 ```bash
 xanosdk promote v2 --set-live                     # the backend, landed and live
@@ -402,6 +402,12 @@ Add your own public config (base URLs, *publishable* keys) with `--static-env KE
 verbatim to the browser, so everything injected is **public** — never put secrets here;
 those belong in backend env, read server-side via `env(name)`.
 
+**Your dev server follows the deploy.** In a scaffolded project, a deploy that publishes no static site writes the backend
+URL into the project's gitignored `.env.local` as `VITE_XANO_HOST`, in a marked block that leaves your own values alone and
+is replaced rather than repeated next time. **Restart the dev server to pick it up.** `--no-dev-env` turns it off, and so
+do `--static <dir>` and a site an earlier deploy published there that still serves — a frontend reads the URL at runtime. A `.env.local` your repo does not ignore is
+reported, never written.
+
 **Showing a stored file.** A file column comes back as `{ path, name, type, size, meta,
 access, url }`. Don't use its `url`: on a tenant-scoped environment that field addresses the
 instance host *without* the `/tenant/<name>` segment and 404s — as a broken `<img>`, while
@@ -425,20 +431,20 @@ retrying the bare URL.
 
 ## Deploy targets, and what a release changes
 
-**Two targets**, so the dev loop and the production step stay distinct:
+**Disposable targets and real ones**, so the dev loop and the production step stay distinct:
 
 | Command | Where it goes |
 |---|---|
-| `xanosdk deploy` | A disposable **ephemeral** environment — create-or-refreshed each run, auto-expiring, with its own URL. This is the default and needs no flag. |
+| `xanosdk deploy` | The **Xano Engine** on this machine — the default, with no flag and no Xano account needed ([below](#deploying-locally)). `--local` spells it out. |
+| `xanosdk deploy --ephemeral` | A disposable **ephemeral** environment on Xano's cloud — create-or-refreshed each run, auto-expiring, with its own URL. |
 | `xanosdk promote <release>` | Your **main Xano instance** workspace — the production target. Lands a release on a branch named for it (`--set-live` serves it). Its table changes reach live as it lands — see [what a landing does to tables](#what-a-landing-does-to-tables). |
 | `xanosdk tenant deploy <tenant> <release>` | A **customer tenant** — the same release, landed on someone else's deployment. It **replaces** what the tenant serves: anything the release does not carry is removed. Static hosting is kept. |
 | `xanosdk deploy --to <dest>` | The **escape hatch**: merges a local build straight into `workspace` or `tenant:<name>`, skipping the release record. |
-| `xanosdk deploy --local-engine` | A **local engine** on this machine — no Xano account needed ([below](#deploying-to-a-local-engine)). |
-| `xanosdk test` | Nothing — it only reads. Runs the tests an already-deployed backend carries; `--on` picks which one, `local-engine` and `workspace` included. |
+| `xanosdk test` | Nothing — it only reads. Runs the tests an already-deployed backend carries; `--on` picks which one, `local` and `workspace` included. |
 
-Not every instance has ephemeral environments enabled. Where they are off, `deploy` says so
-and names who can turn them on — there is no second destination to fall back to. `xanosdk
-export` and `xanosdk preflight` still work meanwhile.
+Not every instance has ephemeral environments enabled. Where they are off, `deploy --ephemeral`
+says so and names who can turn them on. A bare `deploy` (the Xano Engine), `xanosdk export` and
+`xanosdk preflight` still work meanwhile.
 
 Every `deploy` is a **full replace** of the disposable environment — always fresh — unless
 you pass `--keep-data`. Landing somewhere real is the opposite by design: it changes what
@@ -454,7 +460,7 @@ object in `details.outOfScope`, and the rerun with `--yes` printed).
 
 ### Keeping your data between deploys
 
-`xanosdk deploy --keep-data` redeploys to your ephemeral or local engine by **merging** into
+`xanosdk deploy --keep-data` redeploys to your ephemeral or Xano Engine by **merging** into
 what an earlier deploy put there, instead of replacing it. Code and schema changes land,
 objects removed from the project are deleted, and the rows already in the tables stay. Seed
 rows are not written again.
@@ -469,7 +475,7 @@ and exits 0, as any declined confirmation does). Without one the
 merge is refused before it writes, as `--prune` refuses the same deletion:
 `SDK_PRUNE_OUT_OF_SCOPE`, exit 2, each object in `details.outOfScope` as `{ type, name, label }`
 (the shape `deploy --to --prune` uses), and the rerun with `--yes` printed. A merge that goes ahead names them in `--json`'s `notLanded`. The scaffolded
-`npm run xano:deploy:local-engine` passes it, so the rows you enter through your app survive
+`npm run xano:deploy` passes it, so the rows you enter through your app survive
 every code change.
 
 It merges only into an environment an earlier deploy **finished** filling. Otherwise it
@@ -535,7 +541,7 @@ the name back restores them. Columns are named
 The limits, in one place: rows survive only in tables and columns that keep their identity
 (a table renamed through `xanosdk lock rename` keeps its rows; an unrecorded rename is refused,
 below); changed env values and a new table's seeds need `--reset`;
-a local engine's rows last as long as its process (an engine update restarts it empty, and the
+a Xano Engine's rows last as long as its process (an engine update restarts it empty, and the
 next run seeds); and a test whose `datasource` is `"live"`
 sees the kept rows, not only the seed fixtures.
 
@@ -602,24 +608,24 @@ Another import already running on the instance is not a refusal of the project: 
 `--to` already merges, so `--keep-data --to` is refused; the flags that only mean something
 with `--to` (`--seed`, `--prune`, `--dry-run`, …) stay refused alongside it.
 
-### Deploying to a local engine
+### Deploying locally
 
-`xanosdk deploy --local-engine` deploys to an engine running on this machine instead of an
+`xanosdk deploy --local` deploys to an engine running on this machine instead of an
 ephemeral — no network round-trip per deploy. It needs nothing configured:
 
 - **The first run** resolves the latest published engine for this machine's platform,
   downloads it, checks it against the sha256 its release recorded, and **pins** that version in
-  your `package.json` under `"xanosdk": { "@xano/sdk": { "localEngine": "vX.Y.Z" } }` —
+  your `package.json` under `"xanosdk": { "@xano/sdk": { "engine": "vX.Y.Z" } }` —
   creating a `package.json` holding only that pin when the project has none. Commit that change —
   every checkout of the project then runs the same engine.
 - **Every later run** uses the pinned version, whatever is newest. Each version downloads once
   per machine and is shared by every project on it (`~/.xanosdk/local-engine`, or
-  `XANOSDK_LOCAL_ENGINE_HOME`); a cached pin deploys with no network access.
+  `XANOSDK_ENGINE_HOME`); a cached pin deploys with no network access.
 - **A newer engine** is announced on each deploy (checked at most once an hour; opt out with
   `XANOSDK_NO_UPDATE_CHECK=1`). In an interactive terminal the deploy asks whether to update,
   defaulting to no — a version you declined is only noted afterwards, not asked again. In CI,
   piped output or `--json` it prints a one-line notice and keeps the pin. The pin never moves
-  without a yes or an explicit `xanosdk local-engine update`.
+  without a yes or an explicit `xanosdk local update`.
 - **A running engine on a different version** than the one the project now resolves to — after
   an update, or after a teammate moved the pin — is stopped and replaced, and the deploy says
   so.
@@ -629,33 +635,32 @@ ephemeral — no network round-trip per deploy. It needs nothing configured:
   keeps the one-hour default; its `--ttl <duration>` flag changes it.
 
 An engine update restarts the engine, and a restarted engine starts **empty**: the next
-`--keep-data` run (which the scaffolded `npm run xano:deploy:local-engine` passes) seeds it
+`--keep-data` run (which the scaffolded `npm run xano:deploy` passes) seeds it
 rather than merging, so rows entered through your app do not survive the upgrade.
 
-**Operating on it.** After a local-engine deploy, the engine is the backend this project
+**Operating on it.** After a local deploy, the engine is the backend this project
 tracks, so bare `xanosdk test run-all`, `env set`, `env pull`, `tables`, `impersonate` and
-`status` reach it — none of them needs a Xano account. Name it explicitly as `local-engine`,
-or `local-engine:<name>` for another one from `xanosdk local-engine list` (the full grammar is in
-[the CLI guide](cli.md#naming-a-backend)). Two commands cannot serve it and refuse it by name:
-`publish` (a local engine takes its frontend from `deploy --local-engine --static`; or pass
-`--to ephemeral`) and `release create`
+`status` reach it — none of them needs a Xano account. Name it explicitly as `local`,
+or `local:<name>` for another one from `xanosdk local list` (the full grammar is in
+[the CLI guide](cli.md#naming-a-backend)). `publish` puts a built frontend on it without
+re-importing the backend. One command cannot serve it and refuses it by name: `release create`
 (the cut runs on the instance — pass `--from ephemeral`).
 
 | Command | What it does |
 |---|---|
-| `xanosdk local-engine update` | Moves the pin to the latest engine (`--version <v>`: that one, downgrades included), downloads it, and restarts the project's running engine on it. Commit `package.json`. |
-| `xanosdk local-engine cache list` | Each cached engine version, its size on disk, and the engines running on it. |
-| `xanosdk local-engine cache clear` | Removes every cached engine (`--version <v>`: just that one). An engine running on a removed version is stopped first; the next deploy fetches it again. |
+| `xanosdk local update` | Moves the pin to the latest engine (`--version <v>`: that one, downgrades included), downloads it, and restarts the project's running engine on it. Commit `package.json`. |
+| `xanosdk local cache list` | Each cached engine version, its size on disk, and the engines running on it. |
+| `xanosdk local cache clear` | Removes every cached engine (`--version <v>`: just that one). An engine running on a removed version is stopped first; the next deploy fetches it again. |
 
-#### A frontend on the local engine, and server rendering
+#### A frontend on the Xano Engine, and server rendering
 
-`xanosdk deploy <entry> --local-engine --static <dir>` publishes a built frontend to the
+`xanosdk deploy <entry> --local --static <dir>` publishes a built frontend to the
 engine's own static host after the import, as on an ephemeral, and reports it as `static.url`:
 `http://<prefix>.localhost:<port>`. Chrome, Firefox and Safari 26 resolve `*.localhost` to this
 machine by themselves (Safari on macOS 15 and earlier does not); a tool that does not resolve it
 can call the engine's own URL with a `Host: <prefix>.localhost:<port>` header. The engine needs a release
 that hosts static sites: an older one answers the upload with a 501, which the deploy reports
-without failing the backend (exit `3`), and `xanosdk local-engine update` moves the pin on.
+without failing the backend (exit `3`), and `xanosdk local update` moves the pin on.
 
 The engine hosts built output only, and refuses a build of more than 20,000 files or 256 MB unpacked.
 The deploy checks both before the import, so an oversize directory stops the run with nothing
@@ -681,7 +686,7 @@ that keeps a `svelte.config.js`.
 
 `vite build` then writes the client assets and prerendered pages at the output's root, a
 `404.html` fallback shell, and the server half in `.xano-ssr/`. Deployed with
-`--local-engine --static <that directory>`, the engine serves the files as files and renders every other
+`--local --static <that directory>`, the engine serves the files as files and renders every other
 path (a dynamic route, `__data.json`, a form action) through the server half, so a crawler that
 fetches `/products/lamp` gets that product's own `<title>` and meta tags. A server `load` reads
 the engine's own URL as `XANO_HOST` from `$env/dynamic/private`:
@@ -718,20 +723,20 @@ there instead (and says so in the build log), so that route boots — an unknown
 
 The cache above holds the engine **binaries**. A running engine keeps its own **runtime data** —
 its unpacked runtime files, its logs, and the records of running engines — beside them, under
-`engine/` in the same directory (`~/.xanosdk/local-engine`, or `XANOSDK_LOCAL_ENGINE_HOME`): in
+`engine/` in the same directory (`~/.xanosdk/local-engine`, or `XANOSDK_ENGINE_HOME`): in
 `engine/Library/Caches` on macOS and `engine/.cache` on Linux, the directory holding `dist`,
 `instances` and `logs` folders. Its `logs` folder holds one file per engine start; a start that
 fails names it.
 
 Expect it to reach roughly 600 MB after the first deploy, and to grow by a similar amount for
-each engine version you run, since every version unpacks its own copy. `xanosdk local-engine cache
-list` shows its size, and `xanosdk local-engine cache clear` (with no `--version`) removes it with the
+each engine version you run, since every version unpacks its own copy. `xanosdk local cache
+list` shows its size, and `xanosdk local cache clear` (with no `--version`) removes it with the
 engines once none is running — it names any engine still up; stop it and clear again. The next
 deploy recreates what it needs.
 
 Versions before this layout unpacked the same runtime into your own per-user cache directory.
 Nothing runs from that copy now; `cache list` shows it when it is there, and
-`xanosdk local-engine cache clear --legacy-runtime` removes it after asking (`--yes` without a
+`xanosdk local cache clear --legacy-runtime` removes it after asking (`--yes` without a
 terminal).
 
 #### Running a different engine without moving the pin
@@ -739,9 +744,9 @@ terminal).
 To try an experimental build, or a published version the project hasn't moved to, override the
 pin for your own runs instead of editing `package.json`:
 
-- `--local-engine=<value>` for one deploy;
-- `XANOSDK_LOCAL_ENGINE_OVERRIDE=<value>` for every deploy in this shell, including
-  `npm run xano:deploy:local-engine`, which passes a bare flag.
+- `--local=<value>` for one deploy;
+- `XANOSDK_ENGINE_OVERRIDE=<value>` for every deploy in this shell, including
+  `npm run xano:deploy`, which passes a bare flag.
 
 Both take a **version** (`v0.1.8`, or `0.1.8`: that release from the release manager), an
 **`https` URL** to an engine archive, or the **path** to an engine archive on this machine. A
@@ -758,24 +763,24 @@ next `--keep-data` run seeds it); unset the variable and the next deploy goes ba
 engine the same way.
 
 ```bash
-export XANOSDK_LOCAL_ENGINE_OVERRIDE=~/Downloads/engine-experimental.tar.gz
-npm run xano:deploy:local-engine          # runs the experimental build; package.json untouched
-unset XANOSDK_LOCAL_ENGINE_OVERRIDE        # next deploy is back on the pinned version
+export XANOSDK_ENGINE_OVERRIDE=~/Downloads/engine-experimental.tar.gz
+npm run xano:deploy          # runs the experimental build; package.json untouched
+unset XANOSDK_ENGINE_OVERRIDE        # next deploy is back on the pinned version
 ```
 
-`XANOSDK_LOCAL_ENGINE_TOKEN`, when set, is sent only to an override URL's host.
+`XANOSDK_ENGINE_TOKEN`, when set, is sent only to an override URL's host.
 `XANOSDK_ENGINE_RELEASES_URL` points version lookups at a different engine release service. Its
 engines are downloaded fresh on every deploy and kept apart from the version cache, and the
 deploy runs its latest without reading or writing the pin or checking for updates;
-`xanosdk local-engine update` refuses while it is set.
+`xanosdk local update` refuses while it is set.
 
 ### The release flow
 
 This is the path to a real destination. Each step leaves something the next one can name:
 
 ```bash
-xanosdk deploy ./xano/index.ts --test   # 1. stand it up on an ephemeral, run its tests
-xanosdk release create v1               # 2. cut a release from what just ran (after a local-engine deploy: --from ephemeral)
+xanosdk deploy ./xano/index.ts --ephemeral --test   # 1. stand it up on an ephemeral, run its tests
+xanosdk release create v1               # 2. cut a release from what just ran (after a local deploy: --from ephemeral)
 xanosdk promote v1                      # 3. land it in your workspace, on a branch named for it
 xanosdk tenant deploy acme v1           #    …or on a customer tenant
 ```
@@ -982,7 +987,7 @@ instead, so stdout is never empty. Branch on `code`, not on the message:
 | `SDK_EXPORT_INVALID` | The workspace failed an export check, or `--strict` promoted a warning. | `details.diagnostics`: `{ severity, code, message }` per failed check; under `--strict`, every warning that fails it; `code` names the check, e.g. `seed.public-seed`; `details.warnings` beside it, empty when the run printed none |
 | `SDK_CREDENTIAL_REJECTED` | The instance, or its sign-in server, refused the credential this run used: exit 1. The message names the sign-in that fixes it. | `details`: `{ profile, credentialType, instance, workspaceId, signIn }` (`profile` is `null` for an environment credential; `instance` and `workspaceId` are `null` for a refused `XANO_REFRESH_TOKEN`; `signIn` is `null` when the fix is a variable or an upgrade rather than a command) |
 | `SDK_USAGE` | The command line was mistyped or incomplete — an unknown flag, a value on a flag that takes none, a flag without the one it needs (`--dry-run` without `--to`), a missing argument, a confirmation with no terminal to ask on, a local file or directory it names that does not exist: exit 1. | `suggestion`: the closest match, when one is close enough |
-| `SDK_ERROR` | Any failure without a code of its own yet — including a NAMED thing that cannot be found (a backend, release, branch, static host, test, profile or local-engine version: exit 8). A network failure or a server error (5xx) is exit 8 before anything is written — the backend's lookup, a read-only command's read (`tables`, `test list`, `env pull`, `status`, `whoami`, `workspace details`, `workspace branch`'s list), a local engine's release lookup or download, and `--keep-data`'s reads ahead of its merge (whether the environment can merge, its live read, the merge preview) got no answer or a 5xx; rerun as printed — and exit 1 at a later step that never reached it (an import that was not sent: nothing was written — retry). A `501` on `--keep-data`'s check is an answer, not an outage: that backend cannot merge, so it is exit 1 with the deploy that replaces instead. | `suggestion`: the near name a not-found one is one slip from, when there is one (`suggestions`: every one, when a command missed several) |
+| `SDK_ERROR` | Any failure without a code of its own yet — including a NAMED thing that cannot be found (a backend, release, branch, static host, test, profile or Xano Engine version: exit 8). A network failure or a server error (5xx) is exit 8 before anything is written — the backend's lookup, a read-only command's read (`tables`, `test list`, `env pull`, `status`, `whoami`, `workspace details`, `workspace branch`'s list), a Xano Engine's release lookup or download, and `--keep-data`'s reads ahead of its merge (whether the environment can merge, its live read, the merge preview) got no answer or a 5xx; rerun as printed — and exit 1 at a later step that never reached it (an import that was not sent: nothing was written — retry). A `501` on `--keep-data`'s check is an answer, not an outage: that backend cannot merge, so it is exit 1 with the deploy that replaces instead. | `suggestion`: the near name a not-found one is one slip from, when there is one (`suggestions`: every one, when a command missed several) |
 
 A piped stdout gets the document too, without `--json`, so a script reading the pipe never gets
 an empty stdout. The exception is a command whose stdout is the data itself (`export` to stdout,

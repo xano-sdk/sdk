@@ -26,7 +26,7 @@
  * environment you were asking about — the next `xanosdk status` would report
  * "none tracked" and lose the name you came to look up.
  *
- * The same rule covers the local engine: its liveness is asked of the
+ * The same rule covers the Xano Engine: its liveness is asked of the
  * engine's own enumeration, and a stale record is REPORTED as not running
  * rather than cleared the way a resolve clears it.
  *
@@ -34,7 +34,7 @@
  *
  * `deployed` is the answer the tracked-backend resolver gives — pointer, then
  * fallback — or the reason a bare command would refuse, word for word. It and
- * `localEngine` are read before the credential, so a signed-out agent still
+ * `engine` are read before the credential, so a signed-out agent still
  * learns where a bare command goes; neither makes a network call.
  *
  * Node-only and lazily imported (like `whoami`/`login`) so the browser-safe
@@ -188,11 +188,11 @@ export interface Status {
    */
   deployed: TrackedAnswer;
   /**
-   * The local engine recorded for this directory, or null when none is. `url`
+   * The Xano Engine recorded for this directory, or null when none is. `url`
    * is the one the engine serves now when it is running, else the recorded one.
    * Never carries the engine's bearer or sign-in url.
    */
-  localEngine: {
+  engine: {
     name: string;
     url: string;
     /**
@@ -207,7 +207,7 @@ export interface Status {
 
 /** Seams the tests replace; production passes nothing. */
 export interface StatusDeps {
-  /** Where local-engine records and the engine cache live. Defaults to the process env. */
+  /** Where Xano Engine records and the engine cache live. Defaults to the process env. */
   env?: NodeJS.ProcessEnv;
   /** The engine's own enumeration; see `ResolveDeps.listEngines`. */
   listEngines?: ResolveDeps["listEngines"];
@@ -306,7 +306,7 @@ async function readEnvironment(auth: ResolvedAuth, cwd: string): Promise<Status[
   if (tracked === undefined) return null;
   // A lookup that got no answer — a network failure, a server error — proves
   // nothing about the ephemeral: reported as unknown with the reason, and the
-  // rest of the report still prints, as an unreadable local engine's does
+  // rest of the report still prints, as an unreadable Xano Engine's does
   // (E2E pass 30: a 5xx here failed the whole status).
   let summary: Awaited<ReturnType<typeof lookupEphemeral>>;
   try {
@@ -351,7 +351,7 @@ async function readEnvironment(auth: ResolvedAuth, cwd: string): Promise<Status[
  * impossible enumeration is `unknown`, not an error: it proves nothing about
  * the engine, and the rest of the report still prints.
  */
-async function readLocalEngine(cwd: string, deps: StatusDeps): Promise<Status["localEngine"]> {
+async function readLocalEngine(cwd: string, deps: StatusDeps): Promise<Status["engine"]> {
   const env = deps.env ?? process.env;
   const record = getEngineRecord(cwd, env);
   if (record === undefined) return null;
@@ -395,7 +395,7 @@ function isNamed(args: ParsedArgs, err: NotSignedInError): boolean {
  */
 function signInCommand(err: unknown, args: ParsedArgs): string {
   const stored = err instanceof NotSignedInError ? err.storedProfiles : [];
-  // Carrying `--config`/`--local`: a bare fix would act on the shared file,
+  // Carrying `--config`/`--local-auth`: a bare fix would act on the shared file,
   // not the one this run read.
   const flag = readFileFlag(args);
   if (stored.length === 0) return `xanosdk login${flag}`;
@@ -464,7 +464,7 @@ export async function readStatus(
         environment: null,
         environmentTrackedUnder: null,
         deployed: deployedHere(cwd, env, undefined),
-        localEngine,
+        engine: localEngine,
       };
     }
     // Not signed in is the ANSWER, not a failure — see the module header.
@@ -487,7 +487,7 @@ export async function readStatus(
         environment: null,
         environmentTrackedUnder: null,
         deployed: deployedHere(cwd, env, undefined),
-        localEngine,
+        engine: localEngine,
       };
     }
     // Signed out, the project's ephemeral is still recorded under SOME
@@ -509,7 +509,7 @@ export async function readStatus(
       environmentTrackedUnder: tracked.length > 0 ? tracked : null,
       // No credential: the fallback skips the ephemeral check, as a bare command's does.
       deployed: deployedHere(cwd, env, undefined),
-      localEngine,
+      engine: localEngine,
     };
   }
 
@@ -544,7 +544,7 @@ export async function readStatus(
         environment: null,
         environmentTrackedUnder: null,
         deployed: deployedHere(cwd, env, auth),
-        localEngine,
+        engine: localEngine,
       };
     }
     throw err;
@@ -565,7 +565,7 @@ export async function readStatus(
     workspace: await readWorkspace(auth),
     ...(await environmentBlock(auth, cwd, project)),
     deployed: deployedHere(cwd, env, auth),
-    localEngine,
+    engine: localEngine,
   };
 }
 
@@ -734,15 +734,15 @@ function trackedRows(status: Status, s: ReturnType<typeof stdoutStyle>): Array<[
       d.kind === null ? `none ${s.dim(`· ${d.reason}`)}` : `${d.kind} ${s.dim(`· ${d.via === "pointer" ? "last deployed" : "recorded"}`)}`,
     ]);
   }
-  const e = status.localEngine;
+  const e = status.engine;
   if (e !== null) {
     const hint =
       e.liveness === "not-running"
-        ? " · not running · `xanosdk deploy --local-engine` starts it"
+        ? " · not running · `xanosdk deploy --local` starts it"
         : e.liveness === "live"
           ? ""
           : ` · ${e.liveness}`;
-    rows.push(["Local engine", `${e.name} ${s.dim(`· ${e.url}${hint}`)}`]);
+    rows.push(["Xano Engine", `${e.name} ${s.dim(`· ${e.url}${hint}`)}`]);
   }
   return rows;
 }
@@ -763,7 +763,7 @@ function displayLabel(env: NonNullable<Status["environment"]>, s: ReturnType<typ
 
 /**
  * Render the status as an aligned, colorized summary for an interactive terminal.
- * `fileFlag` is the `--config`/`--local` this run read its credential through,
+ * `fileFlag` is the `--config`/`--local-auth` this run read its credential through,
  * carried onto the `xanosdk deploy` it suggests — a bare one reads the shared file.
  */
 function prettyStatus(status: Status, fileFlag = "", rerun = `xanosdk status${fileFlag}`): string {
@@ -823,29 +823,29 @@ function prettyStatus(status: Status, fileFlag = "", rerun = `xanosdk status${fi
     // workspace. "run `xanosdk deploy`" here would create a second one. The
     // credential that reaches the first is named HERE: the Deployed row names
     // it only when a bare command would go to the ephemeral, and a recorded
-    // local engine left "see Deployed" pointing at nothing.
+    // Xano Engine left "see Deployed" pointing at nothing.
     rows.push(["Environment", s.dim(trackedUnderText(status.environmentTrackedUnder, status.profile === null))]);
-  } else if (env === null && status.deployed.kind === "local-engine") {
-    // The project's tracked backend is a local engine: "none yet · run `xanosdk
-    // deploy`" beside "Deployed local-engine · last deployed" read as though it
+  } else if (env === null && status.deployed.kind === "local") {
+    // The project's tracked backend is a Xano Engine: "none yet · run `xanosdk
+    // deploy`" beside "Deployed local · last deployed" read as though it
     // had never deployed (E2E pass 25). The row is about the hosted ephemeral.
-    rows.push(["Environment", s.dim(`no ephemeral · \`xanosdk deploy${fileFlag}\` without --local-engine makes one`)]);
+    rows.push(["Environment", s.dim(`no ephemeral · \`xanosdk deploy${fileFlag}\` without --local makes one`)]);
   } else if (env === null && readDeployed(status.project)?.kind === "ephemeral") {
     // The project HAS deployed to an ephemeral, and no record of it is left —
     // `ephemeral delete` (or a gone one) cleared it. "none yet" read as though
     // it never had (E2E pass 28).
-    rows.push(["Environment", s.dim(`none tracked · the last one is gone (deleted or expired) · run \`xanosdk deploy${fileFlag}\` for a fresh one`)]);
+    rows.push(["Environment", s.dim(`none tracked · the last one is gone (deleted or expired) · run \`xanosdk deploy --ephemeral${fileFlag}\` for a fresh one`)]);
   } else if (env === null) {
     // Named as a next step rather than a gap: nothing is wrong with a project
     // that has not deployed yet, and this is the command that changes it.
-    rows.push(["Environment", s.dim(`none yet · run \`xanosdk deploy${fileFlag}\``)]);
+    rows.push(["Environment", s.dim(`none yet · run \`xanosdk deploy --ephemeral${fileFlag}\``)]);
   } else if (env.alive === null) {
     rows.push(["Environment", `${env.name}${displayLabel(env, s)} ${s.dim("· unknown — the lookup got no answer")}`]);
     if (env.note !== undefined) rows.push(["", s.dim(`${env.note}. Run \`${rerun}\` again once it answers.`)]);
   } else if (!env.alive) {
     rows.push([
       "Environment",
-      `${env.name}${displayLabel(env, s)} ${s.dim(`· gone or expired · run \`xanosdk deploy${fileFlag}\` for a fresh one`)}`,
+      `${env.name}${displayLabel(env, s)} ${s.dim(`· gone or expired · run \`xanosdk deploy --ephemeral${fileFlag}\` for a fresh one`)}`,
     ]);
   } else {
     const state = env.state === null ? "" : ` ${s.dim(`· ${env.state}`)}`;

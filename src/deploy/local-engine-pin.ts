@@ -1,10 +1,10 @@
 /**
- * The local-engine version a project runs, pinned in its own `package.json`.
+ * The Xano Engine version a project runs, pinned in its own `package.json`.
  *
  * ── Shape ───────────────────────────────────────────────────────────────────
  *
  *     "xanosdk": {
- *       "@xano/sdk": { "localEngine": "v0.1.5" }
+ *       "@xano/sdk": { "engine": "v0.1.5" }
  *     }
  *
  * The SDK's own entry in the project's `"xanosdk"` block — the map from package
@@ -32,7 +32,7 @@
  * newline, line endings) and every other package's settings, and refuses an
  * unparseable manifest rather than overwriting it.
  *
- * Node-only; reached from the local-engine deploy and its commands.
+ * Node-only; reached from the local deploy and its commands.
  */
 
 import { existsSync, writeFileSync } from "node:fs";
@@ -48,7 +48,7 @@ import { RELEASE_VERSION } from "./local-engine-cache.js";
 import { normalizeEngineVersion } from "./local-engine-releases.js";
 
 /** The field under the SDK's entry that holds the pinned engine version. */
-export const PIN_FIELD = "localEngine";
+export const PIN_FIELD = "engine";
 
 /**
  * A pin that is present but cannot be used: a value that is not a version, or
@@ -103,7 +103,7 @@ export function readPin(projectDir: string, opts: ReadPinOptions = {}): PinRead 
   const manifest = readProjectManifest(projectDir);
   if (manifest === null) {
     opts.warn?.(
-      `${path} could not be parsed as a JSON object, so its local engine pin was not read.`,
+      `${path} could not be parsed as a JSON object, so its Xano Engine pin was not read.`,
     );
     return { unusable: undefined };
   }
@@ -141,7 +141,7 @@ export function readPin(projectDir: string, opts: ReadPinOptions = {}): PinRead 
 export function writePin(projectDir: string, version: string): WritePinResult {
   if (!RELEASE_VERSION.test(version)) {
     throw new Error(
-      `cannot pin local engine version ${JSON.stringify(version)}: expected vMAJOR.MINOR.PATCH, like "v0.1.5".`,
+      `cannot pin Xano Engine version ${JSON.stringify(version)}: expected vMAJOR.MINOR.PATCH, like "v0.1.5".`,
     );
   }
   const path = join(projectDir, "package.json");

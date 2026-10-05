@@ -327,8 +327,7 @@ sources.
   increment statement exists. A genuinely safe counter needs the arithmetic in the database
   via `s.db.direct_query`, which in turn needs the table's *physical* Postgres name; that
   name is assigned at import and is not knowable from a `table()` def, so it has to be
-  hardcoded after inspecting the deployed table. A typed path requires an engine change
-  ([issue #35](https://github.com/xanots/sdk/issues/35)).
+  hardcoded after inspecting the deployed table. A typed path requires an engine change.
 - **A JavaScript body is written as a function, not a `c.text` string.** The lambda
   statement (`s.lambda`) and eight filters (`fl.map`/`filter`/`some`/`every`/`find`/
   `findIndex`/`reduce`/`lambda`) run JavaScript against a small, closed set of injected
@@ -402,13 +401,12 @@ sources.
     with a **literal specifier is not portable**: some instances bundle the body before
     running it and resolve every literal specifier ahead of time, so `await
     import("node:crypto")` comes back as the text `Could not resolve "node:crypto"` with
-    HTTP 200; others resolve it at run time and it works
-    ([issue #265](https://github.com/xanots/sdk/issues/265)).
+    HTTP 200; others resolve it at run time and it works.
   - `console` output goes to the **request log**, not stdout.
 
   A plain `c.text(...)` body is still accepted and gets the same build-time check — the
   guard sits at the call site, not inside `lam.*` — so an unknown `$identifier` fails
-  whichever way you write it ([issue #221](https://github.com/xanots/sdk/issues/221)).
+  whichever way you write it.
 - **`c.expression("…")` is carried through verbatim and NOT validated.** Xano SDK does not
   parse it or type-check it; nothing inside participates in `InferResponse`, so a var named
   there is invisible to a rename that updates every typed `ref()`. A malformed expression

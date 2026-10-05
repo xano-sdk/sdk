@@ -6,8 +6,8 @@
  *   workspace              the real workspace the credential is bound to
  *   ephemeral              the ephemeral this project last deployed to
  *   ephemeral:<name>       a named ephemeral environment
- *   local-engine           the local engine recorded for this project directory
- *   local-engine:<name>    a local engine on this machine, by its enumerated name
+ *   local           the Xano Engine recorded for this project directory
+ *   local:<name>    a Xano Engine on this machine, by its enumerated name
  *   release:<name>         a release stored on the instance
  *   tenant:<name>          a tenant
  *   <path>                 a bundle already on disk
@@ -47,7 +47,7 @@ import { suggest } from "../util/suggest.js";
 import { shellQuote } from "../util/shell-quote.js";
 
 /** The kinds an argument can name. The local project entry is absence, not a spelling. */
-export type SourceKind = "workspace" | "ephemeral" | "local-engine" | "release" | "tenant" | "file";
+export type SourceKind = "workspace" | "ephemeral" | "local" | "release" | "tenant" | "file";
 
 /** A backend as the command line names it, before any lookup. */
 export type Source =
@@ -55,7 +55,7 @@ export type Source =
   /** `name` absent means "whichever one this project last deployed to". */
   | { kind: "ephemeral"; readonly name?: string }
   /** `name` absent means "the engine recorded for this project directory". */
-  | { kind: "local-engine"; readonly name?: string }
+  | { kind: "local"; readonly name?: string }
   | { kind: "release"; readonly name: string }
   | { kind: "tenant"; readonly name: string }
   | { kind: "file"; readonly path: string };
@@ -80,16 +80,16 @@ export type Source =
 export const CUT_KINDS = ["workspace", "ephemeral", "tenant"] as const satisfies readonly SourceKind[];
 
 /**
- * Every running backend: the cut kinds plus a local engine.
+ * Every running backend: the cut kinds plus a Xano Engine.
  *
- * A local engine is absent from {@link CUT_KINDS} only because the cut runs on
+ * A Xano Engine is absent from {@link CUT_KINDS} only because the cut runs on
  * the instance, which cannot reach an engine on this machine. Every other
  * operation against a running backend takes it.
  */
 export const BACKEND_KINDS = [
   "workspace",
   "ephemeral",
-  "local-engine",
+  "local",
   "tenant",
 ] as const satisfies readonly SourceKind[];
 
@@ -115,19 +115,25 @@ const PREFIXED: Partial<Record<SourceKind, "required" | "optional">> = {
   release: "required",
   tenant: "required",
   ephemeral: "optional",
-  "local-engine": "optional",
+  "local": "optional",
 };
 
 /** Kinds that stand alone as a bare word. */
-export const BARE: readonly SourceKind[] = ["workspace", "ephemeral", "local-engine"];
+export const BARE: readonly SourceKind[] = ["workspace", "ephemeral", "local"];
+
+/** A kind as prose names it: the `local` kind is the Xano Engine, the rest are their own word. */
+function kindNoun(kind: string): string {
+  return kind === "local" ? "Xano Engine" : kind;
+}
 
 /**
  * True when `raw` is shaped like `kind:` — letters and hyphens before a colon.
  *
  * The one test for "this names a kind, not a path". Hyphens are in the class
- * because `local-engine` is a kind: a narrower test let `local-engine:x` fall
- * through to the path arm, the silent reinterpretation this module exists to
- * close. Anything that matches is resolved as a kind or refused.
+ * so a hyphenated word before a colon (`local-engine:x`) is refused as a kind
+ * rather than falling through to the path arm, the silent reinterpretation
+ * this module exists to close. Anything that matches is resolved as a kind or
+ * refused.
  */
 export function isKindShaped(raw: string): boolean {
   return /^[a-z][a-z-]*:/.test(raw);
@@ -140,8 +146,8 @@ function spellingsOf(kind: SourceKind): readonly string[] {
       return ["workspace"];
     case "ephemeral":
       return ["ephemeral", "ephemeral:<name>"];
-    case "local-engine":
-      return ["local-engine", "local-engine:<name>"];
+    case "local":
+      return ["local", "local:<name>"];
     case "release":
       return ["release:<name>"];
     case "tenant":
@@ -186,7 +192,7 @@ function refuse(
 
 /**
  * The corrected ARGUMENT for a mistyped keyword, spelled whole — `ephemerl:foo`
- * → `ephemeral:foo`, `locl-engine` → `local-engine` — drawn only from what this
+ * → `ephemeral:foo`, `locl-engine` → `local` — drawn only from what this
  * caller takes, so the did-you-mean never offers a spelling it then refuses.
  * `undefined` when nothing is close.
  */
@@ -248,7 +254,7 @@ export function parseSource<K extends SourceKind>(
         : refuse(raw, accepted, helpFor, `names no ${noun.singular} kind "${kind}"`, noun, keywordSuggestion(raw, accepted));
     }
     if (!(accepted as readonly SourceKind[]).includes(kind)) {
-      throw refuse(raw, accepted, helpFor, `names ${withArticle(kind.replace("-", " "))}, which this command does not take`, noun);
+      throw refuse(raw, accepted, helpFor, `names ${withArticle(kindNoun(kind))}, which this command does not take`, noun);
     }
     // Empty is refused for both arities: `ephemeral:` is a name the user began
     // and did not finish, which is not the same as the bare `ephemeral` that
@@ -328,7 +334,7 @@ export function verbBackendName(
   const other = shared && (typed === "tenant" || typed === "ephemeral") ? `xanosdk ${typed} ${helpFor.subcommand}` : undefined;
   const known = Object.hasOwn(PREFIXED, typed) || BARE.includes(typed as SourceKind);
   throw new UsageError(
-    `"${raw}" ${known ? `names ${withArticle(typed.replace("-", " "))}` : `names no backend kind "${typed}"`}, and \`${verb}\` takes ${withArticle(kind)} ` +
+    `"${raw}" ${known ? `names ${withArticle(kindNoun(typed))}` : `names no backend kind "${typed}"`}, and \`${verb}\` takes ${withArticle(kind)} ` +
       `name (\`${kind}:<name>\` or the bare name).` +
       (other !== undefined && name !== "" ? ` For ${withArticle(typed)}, run \`${other} ${shellQuote(name)}${flags}\`.` : ""),
     { hintFor: helpFor },

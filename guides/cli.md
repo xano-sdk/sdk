@@ -41,44 +41,46 @@ xanosdk login --scope "<list>"              # request these OAuth scopes instead
 xanosdk login --profile staging             # sign in as a second named credential, leaving the others alone
 xanosdk <command> --profile staging         # act as that profile for one run (-p is the short form)
 xanosdk workspace details                   # which instance/workspace am I bound to, and via which credential?
-xanosdk deploy ./xano/index.ts              # compile + import into a live ephemeral (the dev loop) → URL
-xanosdk deploy ./xano/index.ts --static ./frontend/dist   # also deploy a static frontend (onto the ephemeral)
-xanosdk deploy ./xano/index.ts --static ./frontend/dist --static-env PK=pk_live_1   # + extra public config
+xanosdk deploy ./xano/index.ts              # compile + import into the Xano Engine on this machine (the dev loop) → URL; no account needed
+xanosdk deploy ./xano/index.ts --ephemeral  # …or into a live ephemeral on Xano's cloud → URL
+xanosdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist   # also deploy a static frontend (onto the ephemeral)
+xanosdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-env PK=pk_live_1   # + extra public config
 xanosdk deploy --bundle ws.json             # deploy an already-exported bundle
 xanosdk deploy ./xano/index.ts --open       # …and open the deployed URL in your browser
-xanosdk deploy ./xano/index.ts --expires-hours 8   # the ephemeral's TTL when this deploy creates it: 1–24 hours (default: 1)
-xanosdk deploy ./xano/index.ts --keep-data --static ./frontend/dist --static-host docs   # publish to a named static host — merge only: a replace deletes it, and a deploy creates only `default` (create `docs` in the dashboard first)
-xanosdk deploy ./xano/index.ts --static ./frontend/dist --static-routing spa   # override URL resolution, spa|multipage (inferred from the bundle; rarely needed)
+xanosdk deploy ./xano/index.ts --ephemeral --expires-hours 8   # the ephemeral's TTL when this deploy creates it: 1–24 hours (default: 1)
+xanosdk deploy ./xano/index.ts --ephemeral --keep-data --static ./frontend/dist --static-host docs   # publish to a named static host — merge only: a replace deletes it, and a deploy creates only `default` (create `docs` in the dashboard first)
+xanosdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-routing spa   # override URL resolution, spa|multipage (inferred from the bundle; rarely needed)
 xanosdk deploy ./xano/index.ts --keep-data  # redeploy but keep table rows (merge instead of replace; seeds aren't re-written)
 xanosdk env set STRIPE_KEY --to workspace --yes   # set ONE env var on a running backend, value piped on stdin (no deploy; never printed)
-xanosdk env unset STRIPE_KEY --to local-engine # clear one (--to workspace|ephemeral[:<name>]|local-engine[:<name>]|tenant:<name>, default: last deployed)
+xanosdk env unset STRIPE_KEY --to local # clear one (--to workspace|ephemeral[:<name>]|local[:<name>]|tenant:<name>, default: last deployed)
 xanosdk publish ./frontend/dist             # publish a built frontend alone — no compile, no backend import (default: last deployed)
-xanosdk publish ./frontend/dist --to ephemeral   # …after a local-engine deploy: publish does not reach a local engine
-xanosdk deploy ./xano/index.ts --local-engine --static ./frontend/dist   # the engine serves the build at http://<prefix>.localhost:<port>
+xanosdk publish ./frontend/dist --to ephemeral   # …or onto an ephemeral instead (after a local deploy, bare publish goes to the engine)
+xanosdk deploy ./xano/index.ts --static ./frontend/dist   # on the Xano Engine, the engine serves the build at http://<prefix>.localhost:<port>
 xanosdk publish ./frontend/dist --to workspace --branch v2 --yes   # …onto the workspace, refused unless branch v2 is live
-xanosdk deploy ./xano/index.ts --local-engine   # deploy to a local engine on this machine instead of an ephemeral (runs the version pinned in package.json)
-xanosdk deploy ./xano/index.ts --local-engine=~/Downloads/engine.tar.gz   # override: run this archive, URL or version (v0.1.8), never touching the pin
-XANOSDK_LOCAL_ENGINE_OVERRIDE=v0.1.8 npm run xano:deploy:local-engine   # the same override for every deploy in the shell
-xanosdk local-engine list                   # local engines on this machine, marking the ones xanosdk started
-xanosdk local-engine token                  # print its meta API bearer: XANO_META_TOKEN=$(xanosdk local-engine token)
-xanosdk local-engine stop <name>            # stop one (--all: every one xanosdk started, and what a crashed one left running)
-xanosdk local-engine update                 # move this project's pinned engine to the latest (--version <v>: that one) and restart it — commit package.json
-xanosdk local-engine cache list             # each cached engine version, its size, and the engines running on it
-xanosdk local-engine cache clear            # remove every cached engine and its unpacked runtime (--version <v>: just that one); running ones are stopped first
+xanosdk deploy ./xano/index.ts --local   # the default, spelled out: the Xano Engine on this machine (runs the version pinned in package.json)
+xanosdk deploy ./xano/index.ts --local=~/Downloads/engine.tar.gz   # override: run this archive, URL or version (v0.1.8), never touching the pin
+XANOSDK_ENGINE_OVERRIDE=v0.1.8 npm run xano:deploy   # the same override for every deploy in the shell
+xanosdk local list                   # Xano Engines on this machine, marking the ones xanosdk started
+xanosdk local token                  # print its meta API bearer: XANO_META_TOKEN=$(xanosdk local token)
+xanosdk local stop <name>            # stop one (--all: every one xanosdk started, and what a crashed one left running)
+xanosdk local update                 # move this project's pinned engine to the latest (--version <v>: that one) and restart it — commit package.json
+xanosdk local cache list             # each cached engine version, its size, and the engines running on it
+xanosdk local cache clear            # remove every cached engine and its unpacked runtime (--version <v>: just that one); running ones are stopped first
 xanosdk ephemeral list                      # list your ephemeral environments (--all-workspaces spans every workspace; --json: { ephemerals: [...] })
 xanosdk ephemeral get <name>                # base URL, state, and expiry for one (<name> = the tenant name, e.g. ewap-8wz9-9e13, NOT the display name — `ephemeral list` shows it in bold)
 xanosdk ephemeral delete <name> --yes       # destroy one
 xanosdk tables                              # the last-deployed backend's tables: id, guid, name (for release create --seed)
 xanosdk tables tenant:acme                  # …or name one
 xanosdk test run-all                        # run the tests the last-deployed backend carries (exits 5 on a failure)
-xanosdk test run-all --on local-engine      # …or name one (--on ephemeral:<name>|tenant:<name>|workspace)
+xanosdk test run-all --on local      # …or name one (--on ephemeral:<name>|tenant:<name>|workspace)
 xanosdk test list                           # list the tests a backend carries, without running any
+xanosdk test run "<name>"                   # run one test by its name
 xanosdk test run-all --kind unit            # only one family (unit|workflow; default: both) — also on test list
 xanosdk test run-all --concurrency 4        # run 4 at once (default: 1); tests share the backend's database, so only when yours don't share state
 xanosdk impersonate                         # open what this project last deployed to in the builder (--guest = read-only; --url-only prints the URL; the URL is a session — treat it as a credential)
-xanosdk impersonate ephemeral:<tenant>      # …or name one: local-engine[:<name>] or tenant:<name> (open your workspace from the Xano dashboard)
+xanosdk impersonate ephemeral:<tenant>      # …or name one: local[:<name>] or tenant:<name> (open your workspace from the Xano dashboard)
 xanosdk deploy ./xano/index.ts --test        # THE RELEASE FLOW, step 1: stand it up and run its tests
-xanosdk release create v1                   # …2: cut a release from the ephemeral this project last deployed to (after a local-engine deploy: --from ephemeral)
+xanosdk release create v1                   # …2: cut a release from the ephemeral this project last deployed to (after a local deploy: --from ephemeral)
 xanosdk release create v1 --from ephemeral:e4f2-9ab1 --description "what shipped"   # …from a named source
 xanosdk release create v1 --from workspace --branch staging   # …or from a branch of your workspace (default: what it serves)
 xanosdk release list                        # every release in this workspace, newest first, a description cut to one line (--json: { releases: [...] }, each with the origin show names)
@@ -94,7 +96,7 @@ xanosdk tenant list                         # every tenant under this workspace 
 xanosdk tenant get acme                     # base URL and state for one
 xanosdk tenant deploy acme v1               # …or 3: land it on a customer tenant instead
 xanosdk tenant delete acme --yes            # destroy one (by its NAME — a display name fails with exit 8 and names the tenant it belongs to)
-xanosdk pull release:v1                     # refresh xano/ from a release: rewrites decoded files, keeps and names files you added, lists and confirms (also workspace, ephemeral[:<name>], local-engine, tenant:<name>)
+xanosdk pull release:v1                     # refresh xano/ from a release: rewrites decoded files, keeps and names files you added, lists and confirms (also workspace, ephemeral[:<name>], local, tenant:<name>)
 xanosdk pull release:v1 --yes               # …skip the confirmation and the dirty-tree refusal (CI)
 xanosdk pull workspace --backend-dir ./backend   # …when this project keeps its backend somewhere other than xano/ and nothing on disk says so (also on env pull)
 xanosdk generate release:v1 --out ./backend # write ONLY the decoded xano/ tree, no project around it (any source above, or a bundle path; --force replaces the files an earlier generate wrote, asks first when that loses your edits (--yes answers), and keeps and lists any others)
@@ -155,7 +157,7 @@ Every command that reads, writes or opens a running backend names it with one gr
 |---|---|
 | `workspace` | Your real workspace — the one your login is scoped to |
 | `ephemeral` / `ephemeral:<name>` | The ephemeral this project deployed to, or a named one — by its name (`e4f2-9ab1`, from `xanosdk ephemeral list`), not its display name |
-| `local-engine` / `local-engine:<name>` | The engine this project deployed to, or a named one from `xanosdk local-engine list`. Needs no Xano account |
+| `local` / `local:<name>` | The engine this project deployed to, or a named one from `xanosdk local list`. Needs no Xano account |
 | `tenant:<name>` | A tenant on your instance |
 | `release:<name>` | A stored release — where a command reads one (`deploy`, `pull`, `generate`, `init --from`) |
 | a bundle path | Where a command takes a file (`deploy`, `generate`, `init --from`) |
@@ -166,20 +168,20 @@ takes **`--on`**, and a command whose subject IS the backend takes it positional
 `pull`, `generate`, `tables`, `impersonate`).
 
 **Leave it off and a command follows the backend this project last deployed to** — recorded
-in `.xano/deployed.json` by an ephemeral or local-engine deploy, and never by a deploy to your
+in `.xano/deployed.json` by an ephemeral or local deploy, and never by a deploy to your
 workspace or a tenant, so a bare command cannot reach something real unasked. With no record,
 it falls back to the ephemeral recorded under your current credential, then to the engine
 recorded for this directory, and otherwise refuses naming the flag, `xanosdk deploy` and
-`xanosdk deploy --local-engine`.
+`xanosdk deploy --local`.
 `deploy` is the exception: bare, it compiles the project and stands it up on an ephemeral
-unless `--to` or `--local-engine` says otherwise, so it writes that record rather than
+unless `--to` or `--local` says otherwise, so it writes that record rather than
 reading it. `generate` and `init --from` need a backend named.
 
 A command that cannot serve a backend refuses it, whether you typed it or it came from the
-record, with the reason and the spellings it does take: `publish` refuses a local engine (no
+record, with the reason and the spellings it does take: `publish` refuses a Xano Engine (no
 static host — pass `--to ephemeral`), and so does `release create` (the cut runs on the
 instance — pass `--from ephemeral`). A write to your workspace or a tenant confirms first,
-or needs `--yes` off a terminal; an ephemeral or local engine never asks.
+or needs `--yes` off a terminal; an ephemeral or Xano Engine never asks.
 
 ## Bundle key names vs. the names everything else uses
 
@@ -253,7 +255,7 @@ layer raised it — is `SDK_EXPORT_INVALID`, with its checks in `error.details.d
 `destination`, a read's `kind`/`name` (`tables`, `test`), `status`, `ephemeral get`,
 `workspace details`, `impersonate`, and each `tenant list`/`ephemeral list` row — also carries
 `selector`, the spelling the next command's backend slot takes (`"ephemeral:e4f2-9ab1"`,
-`"tenant:acme"`, `"local-engine:<name>"`, `"workspace"`; `ephemeral get|delete|export` and
+`"tenant:acme"`, `"local:<name>"`, `"workspace"`; `ephemeral get|delete|export` and
 `tenant get|deploy|delete` take it as well as the bare name), and `workspaceId`, the numeric workspace it acts on (for an ephemeral or tenant,
 the workspace it lives under). The fields each command already had stay. `export --out --json`
 carries `written: true`, as `export --check` carries `written: false`. `help --json` lists each
@@ -264,7 +266,7 @@ string, `values` its whole closed set, `examples` a few values of a flag that ta
 ## Shell completion
 
 `xanosdk completion <bash|zsh|fish>` prints a completion script covering every command, verb, flag,
-and closed value set (`--on workspace|ephemeral|local-engine`, `--format json|multidoc`, `--icons lucide|tabler|phosphor`).
+and closed value set (`--on workspace|ephemeral|local`, `--format json|multidoc`, `--icons lucide|tabler|phosphor`).
 A flag's value completes as what it takes: its closed set, file names for a path (`--config`,
 `--secrets-file`), directories for a directory (`--backend-dir`), stored profile names for
 `--profile`/`--to-profile`, and nothing for a free-form value (`--name`, `--expires-hours`).

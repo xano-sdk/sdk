@@ -1,6 +1,6 @@
 {
   "name": "@xano/sdk",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Xano SDK — your Xano backend as TypeScript. `xanosdk deploy` ships your typed workspace (and an optional static frontend) to a live, auto-expiring ephemeral environment and prints its URL. init → deploy → URL.",
   "keywords": [
     "xanosdk",
@@ -12,13 +12,13 @@
     "preview-environments",
     "infrastructure-as-code"
   ],
-  "homepage": "https://github.com/xanots/sdk#readme",
+  "homepage": "https://github.com/xano-sdk/sdk#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xanots/sdk.git"
+    "url": "git+https://github.com/xano-sdk/sdk.git"
   },
   "bugs": {
-    "url": "https://github.com/xanots/sdk/issues"
+    "url": "https://github.com/xano-sdk/sdk/issues"
   },
   "type": "module",
   "license": "MIT",

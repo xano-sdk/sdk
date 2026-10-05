@@ -70,7 +70,7 @@ const TIMEOUT_MS = 120_000;
 function goneError(name: string, clearedState: boolean, liveness: Liveness = "gone", flags = ""): Error {
   const tail = clearedState ? " (cleared its local record)" : "";
   return new SourceError(
-    `Ephemeral "${name}" has expired or no longer exists. Run \`xanosdk deploy${flags}\` to create a fresh one.${tail}`,
+    `Ephemeral "${name}" has expired or no longer exists. Run \`xanosdk deploy --ephemeral${flags}\` to create a fresh one.${tail}`,
     liveness,
     "ephemeral",
   );

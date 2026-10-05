@@ -133,32 +133,36 @@ export function renderPackageJson(
       // Scaffolds written before the default flipped still pass `--lock`, and
       // it stays accepted for exactly that reason.
       "xano:export": `npm run xano:routes && ${check} && xanosdk export ./xano/index.ts --out workspace.json`,
-      // Runs `build` rather than `check` directly: `--static ./frontend/dist`
-      // needs that directory to EXIST, and only `vite build` writes it. Pointing
-      // the flag at a directory the script never produced meant a fresh clone
-      // running the one documented command had no `dist` to ship.
-      // `build` already prefixes the same typecheck, so this is one check, not
-      // two.
-      "xano:deploy": `npm run build && xanosdk deploy ./xano/index.ts --static ./frontend/dist`,
-      // The tight loop: redeploy the backend to an engine on this machine.
+      // The default deploy, and the tight loop: redeploy the backend to the
+      // Xano Engine on this machine. It needs no Xano account, so a fresh
+      // scaffold runs it before anyone signs in.
       //
       // No `--static` and no `npm run build`, and both omissions are the point
       // rather than an economy: there is no frontend to ship here. The dev
       // server is still serving it, and the deploy points that server at the
       // engine on its way past, so the loop is backend-only by design.
-      // (`--static` does work on a local engine, for a built frontend the
+      // (`--static` does work on a Xano Engine, for a built frontend the
       // engine itself should serve; this loop has none.)
       //
-      // The flag is bare deliberately. The engine's download URL is passed by
-      // hand once and cached for every run after; baking one into a scaffolded
-      // project would ship a coordinate that is not this project's to carry.
+      // No `--local`: the Xano Engine is where a bare deploy goes, and the
+      // project's pinned version is what it runs. Baking an engine version or
+      // URL into a scaffolded project would ship a coordinate that is not this
+      // project's to carry.
       //
       // `--keep-data`, because the engine is the developer's own backend and
       // this loop runs once per code change: each run merges into what the last
       // one left, so rows entered through the app survive the edit. The first
       // run, and the first after the engine restarts, replaces and seeds.
       // `--reset` on the command line still gives a clean slate.
-      "xano:deploy:local-engine": `npm run xano:routes && ${check} && xanosdk deploy ./xano/index.ts --local-engine --keep-data`,
+      "xano:deploy": `npm run xano:routes && ${check} && xanosdk deploy ./xano/index.ts --keep-data`,
+      // The cloud deploy: backend and built frontend to an ephemeral.
+      // Runs `build` rather than `check` directly: `--static ./frontend/dist`
+      // needs that directory to EXIST, and only `vite build` writes it. Pointing
+      // the flag at a directory the script never produced meant a fresh clone
+      // running the documented command had no `dist` to ship.
+      // `build` already prefixes the same typecheck, so this is one check, not
+      // two.
+      "xano:deploy:ephemeral": `npm run build && xanosdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist`,
       // The frontend-only loop: rebuild and republish to the environment this
       // project last deployed to, without recompiling or re-importing the
       // backend. `build` runs first because publish ships only what is on disk.
@@ -300,10 +304,10 @@ export function renderViteConfig(preset: FrontendPreset): string {
       ? `// Vite's root is the project root. The framework resolves its own file
 // locations from the plugin config below — this file is the ONLY place that
 // config lives — and routes the build through its adapter, which writes
-// frontend/dist, the directory \`npm run xano:deploy\` ships as the frontend.`
+// frontend/dist, the directory \`npm run xano:deploy:ephemeral\` ships as the frontend.`
       : `// Vite's root is the ${root}/ folder, so index.html and the app live there
 // while the Xano SDK backend sits in xano/ as a peer. The build lands in
-// ${root}/dist, which \`npm run xano:deploy\` ships as the static frontend.`;
+// ${root}/dist, which \`npm run xano:deploy:ephemeral\` ships as the static frontend.`;
 
   // Vite resolves `.env` files against `root`, so with root at frontend/ a
   // `.env.local` placed beside `.env.example` at the project root is silently
@@ -650,10 +654,29 @@ ${version === undefined ? "" : `        with:\n          bun-version: '${version
 
 export function renderEnvExample(): string {
   return `# Point the frontend at a deployed Xano backend. Leave unset to run the UI
-# with no backend. When you \`npm run xano:deploy\`, the backend URL is injected
-# as window.XANO_HOST at runtime instead — no rebuild needed.
+# with no backend. \`npm run xano:deploy\` writes the Xano Engine's URL to
+# .env.local for you. After \`npm run xano:deploy:ephemeral\`, the backend URL is
+# injected as window.XANO_HOST at runtime instead — no rebuild needed.
 VITE_XANO_HOST=https://your-instance.xano.io
 `;
+}
+
+/** The badge every scaffolded README opens with: this project runs on Xano. */
+const XANO_BADGE = "[![Built on Xano](https://img.shields.io/badge/built_on-Xano-0055FF)](https://xano.com)";
+
+/**
+ * The closing section both scaffolded READMEs share: where the rest of the
+ * documentation is, for the SDK and for the platform under it. A project's
+ * README is what a visitor to its repository reads, so it says what Xano is.
+ */
+function renderReadmeLearnMore(): string {
+  return `## Learn more
+
+- [Xano SDK guides](https://github.com/xano-sdk/sdk/blob/main/guides/README.md) — signing in
+  and deploying, releasing to production, the typed frontend, every CLI command.
+- [Xano](https://xano.com) is the platform this app deploys to: the database, APIs, auth,
+  background tasks, realtime, file storage and AI agents behind \`xano/\`, with
+  [docs](https://docs.xano.com) and a [community](https://community.xano.com).`;
 }
 
 export function renderReadme(
@@ -663,61 +686,80 @@ export function renderReadme(
 ): string {
   return `# ${appName}
 
-A [Xano SDK](https://www.npmjs.com/package/@xano/sdk) project: a Xano
-backend authored in TypeScript under [\`xano/\`](xano/), and a ${preset.label}
-frontend under [\`frontend/\`](frontend/) that derives its request paths and
-types from the backend defs — so the two can't drift.
+${XANO_BADGE}
+
+A full-stack app on [Xano](https://xano.com). The backend is TypeScript under
+[\`xano/\`](xano/), authored with the [Xano SDK](https://github.com/xano-sdk/sdk). It runs on
+your machine on the **Xano Engine**, and one command deploys it to Xano's cloud. The
+${preset.label} frontend under [\`frontend/\`](frontend/) takes its request paths and types
+from the backend defs, so the two can't drift.
 
 ## Quick start
 
 \`\`\`bash
 ${install?.manager ?? "npm"} install${install?.ignoreWorkspace === true ? " --ignore-workspace" : ""}
-npm run dev          # run the frontend (no backend needed yet)
+npm run xano:deploy   # run the backend on the Xano Engine, on this machine
+npm run dev           # run the frontend, already pointed at it
 \`\`\`
 
-Then author your backend in [\`xano/index.ts\`](xano/index.ts) — start with the
-walkthrough in [\`xano/EXAMPLE.md\`](xano/EXAMPLE.md).
+No Xano account needed. Then author your backend in [\`xano/index.ts\`](xano/index.ts),
+starting with the walkthrough in [\`xano/EXAMPLE.md\`](xano/EXAMPLE.md), and rerun
+\`npm run xano:deploy\` after each change.
 
-## Deploy
+## Run it on your machine
+
+The Xano Engine is Xano running on your machine. \`npm run xano:deploy\` typechecks the
+backend and deploys it to the engine: no sign-in, and no network round-trip.
+It prints the backend URL, a link that opens Xano's visual builder on the engine, and
+points \`npm run dev\` at it through \`.env.local\` (restart the dev server if it was already
+running).
+
+- **It works on a fresh machine with nothing set.** The first run downloads the latest
+  engine once per machine and pins its version in \`package.json\`. Commit that change, so
+  everyone on the project runs the same engine.
+- **It keeps your table rows across redeploys** (\`--keep-data\`). The first run seeds and
+  later runs merge your changes in without re-seeding. Rows survive only in tables and columns that keep
+  their names (a rename drops the old one with its rows), and only while the engine runs. An
+  engine update or restart starts it empty and the next run seeds again.
+  \`npm run xano:deploy -- --reset\` gives a clean, re-seeded slate.
+- **Updates are yours to take.** When a newer engine ships, a deploy offers it and never
+  applies it without a yes. \`npx xanosdk local update\` moves the pin on purpose,
+  and \`npx xanosdk local cache clear\` reclaims the disk space. To try another engine
+  without moving the pin, export \`XANOSDK_ENGINE_OVERRIDE\` with a version (\`v0.1.5\`)
+  or an engine archive path.
+- **The rest of the CLI follows.** After a local deploy, \`npm run xano:test\`,
+  \`npx xanosdk tables\` and \`npx xanosdk status\` reach the engine with no flag.
+  \`npx xanosdk local stop <name>\` shuts it down.
+
+## Deploy to Xano's cloud
 
 \`\`\`bash
-npx xanosdk login        # once, to authenticate against your Xano account
-npm run xano:deploy     # build the frontend, then ship it with the backend
+npx xanosdk login               # once, to authenticate against your Xano account
+npm run xano:deploy:ephemeral   # build the frontend, then ship it with the backend
 \`\`\`
 
-- \`npm run xano:deploy:local-engine\` redeploys just the backend to a local engine,
-  for a tight loop with no network round-trip. Keep \`npm run dev\` running — the
-  deploy points it at the engine. It works on a fresh machine with nothing set: the
-  first run downloads the latest engine once per machine and pins its version in
-  \`package.json\` (commit that change, so everyone on the project runs the same
-  engine). When a newer engine ships, a deploy offers it and never applies it without
-  a yes; \`npx xanosdk local-engine update\` moves the pin on purpose, and
-  \`npx xanosdk local-engine cache clear\` reclaims the disk space. To try another engine
-  without moving the pin, export \`XANOSDK_LOCAL_ENGINE_OVERRIDE\` with a version
-  (\`v0.1.5\`) or an engine archive path. It keeps the engine's
-  table rows across redeploys (\`--keep-data\`): the first run seeds, later runs merge
-  your changes in without re-seeding. Rows survive only in tables and columns that
-  keep their names — a rename drops the old one with its rows — and only while the
-  engine runs; an engine update or restart starts it empty and the next run seeds
-  again. \`npm run xano:deploy:local-engine -- --reset\` gives a clean, re-seeded slate.
+That deploys the backend and the built frontend to a live **ephemeral** environment on
+Xano and prints its URL. Run it again to refresh the same environment; if it expired, a
+fresh one is created and the new URL is called out. \`npx xanosdk status\` says who you
+are signed in as, which workspace you are bound to, and which environment this project
+last deployed to — its URL, and when it expires — so you never have to remember the
+environment's name. Your **workspace** is reached through a release (\`deploy --ephemeral --test\`,
+\`release create\`, \`promote\`); see the
+[deploying guide](https://github.com/xano-sdk/sdk/blob/main/guides/deploying.md).
+
+The other scripts:
+
 - \`npm run xano:deploy:frontend\` rebuilds the frontend and republishes it to the
   environment this project last deployed to — no backend compile or import, so it
-  is the quick loop for UI-only changes. \`publish\` does not reach a local engine, so after
-  a local-engine deploy run it as \`npm run xano:deploy:frontend -- --to ephemeral\`, or
-  have the engine serve a build with \`--static ./frontend/dist\` on the local deploy.
-  \`npx xanosdk publish ./frontend/dist --to workspace\` puts the same build in front of
-  your real workspace instead.
-- \`npm run xano:export\` compiles the backend to \`workspace.json\` (don't commit it).
-- \`npm run xano:deploy\` deploys the backend and the built frontend to a live
-  **ephemeral** environment and prints its URL. Run it again to refresh the same
-  environment; if it expired, a fresh one is created and the new URL is called out.
-- \`npx xanosdk status\` says who you are signed in as, which workspace you are bound to, and
-  which environment this project last deployed to — its URL, and when it expires. You
-  never have to remember the environment's name.
+  is the quick loop for UI-only changes. After \`npm run xano:deploy\` the engine serves
+  it; \`npm run xano:deploy:frontend -- --to ephemeral\` sends it to an ephemeral instead,
+  and \`npx xanosdk publish ./frontend/dist --to workspace\` puts the same build in front
+  of your real workspace.
 - \`npm run xano:test\` runs the tests the DEPLOYED environment carries — the \`tests\`
   on a query/function/middleware and any \`workflowTest()\`. It compiles nothing, so
   deploy first. A failing suite exits 5, distinct from a crash. \`npx xanosdk deploy
   ./xano/index.ts --test\` does both in one step.
+- \`npm run xano:export\` compiles the backend to \`workspace.json\` (don't commit it).
 
 ## \`xano.lock\` — commit it
 
@@ -791,9 +833,10 @@ Xano SDK is composable with other \`@xano-sdk/*\` packages:
 
 None of these ship with the scaffold. Install one only when you need it — an
 add-on you never register is weight in \`package.json\` for nothing.
+
+${renderReadmeLearnMore()}
 `;
 }
-
 export function renderXanoIndex({ appName }: TemplateVars): string {
   return `import { workspace } from "@xano/sdk";
 
@@ -915,7 +958,7 @@ xano/
    \`workflowTest({ name, stack })\` when the behavior spans several objects.
    They live beside the code they cover and ship with it. See "Testing" below.
 6. **Compile** with \`npm run xano:export\`, and **deploy** with
-   \`npm run xano:deploy\` (after \`npx xanosdk login\`). The first of either writes
+   \`npm run xano:deploy\` (it runs on the Xano Engine; no account needed). The first of either writes
    \`xano/xano.lock\` — **commit it**. It pins every object's identity, so a later
    rename renames the object instead of deleting and recreating it. See
    "\`xano.lock\` — commit it" in the project README.
@@ -974,7 +1017,7 @@ URL or a request body:
 /** Where a pulled tree came from, for the marker and the README. */
 export interface CodegenOrigin {
   /** Which command form produced the tree. */
-  readonly source: "workspace" | "ephemeral" | "local-engine" | "tenant" | "release" | "file";
+  readonly source: "workspace" | "ephemeral" | "local" | "tenant" | "release" | "file";
   /** The workspace id, backend or release name, or bundle path — whatever identifies the source. */
   readonly origin: string;
   /** The workspace branch read, when one was named (`--branch`). */
@@ -988,8 +1031,8 @@ export function describeOrigin(o: CodegenOrigin): string {
       return `workspace ${o.origin}`;
     case "ephemeral":
       return `ephemeral "${o.origin}"`;
-    case "local-engine":
-      return `local engine "${o.origin}"`;
+    case "local":
+      return `Xano Engine "${o.origin}"`;
     case "tenant":
       return `tenant "${o.origin}"`;
     case "release":
@@ -1092,16 +1135,21 @@ cleartext, which is why it is gitignored too.
 
   return `# ${appName}
 
-A [Xano SDK](https://www.npmjs.com/package/@xano/sdk) project pulled from
-${describeCommittedOrigin(origin)}. The Xano backend lives in [\`xano/\`](xano/) as readable
-TypeScript; the ${preset.label} frontend under [\`frontend/\`](frontend/) is a starter —
-the pull carries a backend, not a UI.
+${XANO_BADGE}
 
-## Deploy it
+A full-stack app on [Xano](https://xano.com), pulled from
+${describeCommittedOrigin(origin)} with the [Xano SDK](https://github.com/xano-sdk/sdk). The Xano
+backend lives in [\`xano/\`](xano/) as readable TypeScript; the ${preset.label} frontend
+under [\`frontend/\`](frontend/) is a starter — the pull carries a backend, not a UI.
+
+## Run it
 
 \`\`\`bash
-npx xanosdk login        # once, to authenticate against your Xano account
-npm run xano:deploy     # typecheck, build the frontend, ship both
+npm run xano:deploy                # on the Xano Engine, on this machine (no account needed)
+npm run dev                        # the starter frontend, pointed at it
+
+npx xanosdk login                  # once, to authenticate against your Xano account
+npm run xano:deploy:ephemeral      # typecheck, build the frontend, ship both to an ephemeral
 \`\`\`
 
 ## Read this before deploying
@@ -1109,10 +1157,11 @@ npm run xano:deploy     # typecheck, build the frontend, ship both
 - **\`xano/\` is your source now** — edit it and commit it. \`npx xanosdk pull\` (or re-running
   \`npx xanosdk init --from\`) refreshes it from a backend: it lists what will change and asks
   first, keeps files you added, and overwrites the files it decodes — commit first.
-- **\`npx xanosdk deploy\` is a full replace** of an **ephemeral** environment or a local engine
-  (\`npm run xano:deploy\`), unless \`--keep-data\` merges into the one an earlier deploy
-  filled. A real workspace is reached with \`npx xanosdk promote <release>\` or
-  \`npx xanosdk deploy --to workspace\`, which merge and leave table rows alone.
+- **\`npx xanosdk deploy\` is a full replace** of a Xano Engine or an **ephemeral** environment
+  (\`npm run xano:deploy:ephemeral\`), unless \`--keep-data\` merges into the one an earlier deploy
+  filled (\`npm run xano:deploy\` passes it). A real workspace is reached with
+  \`npx xanosdk promote <release>\` or \`npx xanosdk deploy --to workspace\`, which merge
+  and leave table rows alone.
 - **This is schema only.** Table rows are not carried, and neither are payload sections
   this SDK models no kind for. A deploy recreates the structure, not the data.
 
@@ -1130,6 +1179,8 @@ npm run xano:routes    # regenerate xano/routes.gen.ts, the frontend's paths
 
 [\`frontend/src/lib/api.ts\`](frontend/src/lib/api.ts) shows the one contract: paths
 from \`routePath()\` in \`xano/routes.gen.ts\`, types from the query defs in \`xano/\`.
+
+${renderReadmeLearnMore()}
 `;
 }
 
@@ -1219,7 +1270,7 @@ export function initLanding({ appName }: TemplateVars): LandingContent {
         { text: ")." },
       ],
       [{ text: "Wire it into the UI from " }, { code: "frontend/src/lib/api.ts" }, { text: "." }],
-      [{ text: "Ship it: " }, { code: "npm run xano:deploy" }, { text: "." }],
+      [{ text: "Run it on the Xano Engine: " }, { code: "npm run xano:deploy" }, { text: "." }],
     ],
     cta: UI_DOCS_CTA,
   };
@@ -1251,9 +1302,9 @@ export function codegenLanding({ appName }: TemplateVars, origin: CodegenOrigin)
         { text: "." },
       ],
       [
-        { text: "Ship it: " },
+        { text: "Run it on the Xano Engine: " },
         { code: "npm run xano:deploy" },
-        { text: " (a full replace of an ephemeral env)." },
+        { text: " (a full replace of the Xano Engine)." },
       ],
     ],
     cta: UI_DOCS_CTA,

@@ -744,7 +744,7 @@ async function resolveAccessToken(args: ParsedArgs): Promise<ResolvedAuth> {
  *   break a destination that never consulted it.
  * - **No unpinned-default warning.** Nothing was defaulted: the reader typed it.
  *
- * What it keeps: the credential FILE ladder (`--config`, `--local`), the same
+ * What it keeps: the credential FILE ladder (`--config`, `--local-auth`), the same
  * name validation `--profile` gets, the local-shadows-global warning (a
  * shadowed destination is the same wrong-target hazard), and the locked,
  * one-profile refresh — a stale destination rotates its own refresh token and
@@ -1053,7 +1053,7 @@ function refuseProfileDisplacedByEnv(args: ParsedArgs, variable: string): void {
 
 /**
  * `profile "p" in <file>` for each OAuth profile stored in the credential file
- * this run resolved (`--config`, `$XANO_CONFIG`, `--local`), the shared file or
+ * this run resolved (`--config`, `$XANO_CONFIG`, `--local-auth`), the shared file or
  * this project's — the places a sign-in writes a refresh token and its client
  * id. Advice only: an unreadable file lists nothing.
  */
@@ -1357,8 +1357,8 @@ function targetOf(credential: CredentialRecord): { instance: string; workspaceId
  * the same instance is just as damaging as a divergent instance.
  *
  * Only fires for the *default* resolution (no `--config`/`$XANO_CONFIG`, no
- * `--local`) that landed on the local file while a divergent global one also
- * exists. An explicit path or `--local` is a deliberate choice and stays quiet.
+ * `--local-auth`) that landed on the local file while a divergent global one also
+ * exists. An explicit path or `--local-auth` is a deliberate choice and stays quiet.
  */
 function warnIfLocalShadowsGlobal(
   args: ParsedArgs,

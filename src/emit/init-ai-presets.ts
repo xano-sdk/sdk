@@ -137,19 +137,18 @@ backend reads with \`env("NAME")\`; the VALUES live in \`xano/.env\`, which is g
  * Which backend a bare command reaches, echoed from the router's **Backends**
  * paragraph rather than restated: the grammar is owned there, and this names
  * only what the scaffolded scripts make an agent trip on. `xano:test` and
- * `xano:deploy:frontend` are bare, so after `xano:deploy:local-engine` the
- * first follows the engine and the second is refused (`publish` does not reach
- * a local engine; `deploy --local-engine --static` does), as is a release cut from it.
+ * `xano:deploy:frontend` are bare, so after `xano:deploy` both follow the
+ * engine; a release cut from it is refused.
  */
 const BACKENDS_GUIDANCE = `- A bare command (\`npm run xano:test\`, \`npx xanosdk env set\`, \`npx xanosdk tables\`,
-  \`npx xanosdk impersonate\`) reaches the ephemeral or local engine this project last
+  \`npx xanosdk impersonate\`) reaches the ephemeral or Xano Engine this project last
   deployed to, never the workspace; the grammar that names another is **Backends**
-  in \`node_modules/@xano/sdk/llms.txt\`. After a local-engine deploy, which
-  \`publish\` does not reach and which cannot be released from, publish with
-  \`npm run xano:deploy:frontend -- --to ephemeral\` (or add \`--static <dir>\` to the
-  local deploy to have the engine serve the build) and cut with
+  in \`node_modules/@xano/sdk/llms.txt\`. After a local deploy,
+  \`npm run xano:deploy:frontend\` publishes the build to the engine. A Xano Engine
+  cannot be released from, so stand the code up with \`npm run xano:deploy:ephemeral\`
+  and cut with
   \`npx xanosdk release create <name> --from ephemeral\`.
-- \`npm run xano:deploy:local-engine\` and every bare command after it need no Xano
+- \`npm run xano:deploy\` and every bare command after it need no Xano
   account — the local loop runs without \`npx xanosdk login\`.
 - \`npx xanosdk impersonate\` prints a session URL: treat it as a credential. \`--guest\`
   opens a read-only look.`;
@@ -268,8 +267,10 @@ ${frontendSection(frontend)}
 - \`npm run dev\` — run the frontend.
 - \`npm run typecheck\` / \`npm run build\` — must stay green.
 - \`npm run xano:export\` — compile the backend to \`workspace.json\` (never commit it).
-- \`npx xanosdk login\` then \`npm run xano:deploy\` — ship the backend + static
-  frontend to a disposable **ephemeral** environment.
+- \`npm run xano:deploy\` — deploy the backend to the Xano Engine on this machine
+  (no account needed; redeploys keep the rows). Run it after every backend change.
+- \`npx xanosdk login\` then \`npm run xano:deploy:ephemeral\` — ship the backend +
+  static frontend to a disposable **ephemeral** environment on Xano's cloud.
 - \`npm run xano:test\` — run the DEPLOYED environment's unit + workflow tests
   (exits 5 on a failure). See "Testing" below.
 ${BACKENDS_GUIDANCE}
@@ -283,7 +284,7 @@ ${ENV_GUIDANCE}
 A deploy targets a throwaway environment. Reaching a real one goes through a
 **release** — the stored record that code came up and answered:
 
-1. \`npm run xano:deploy\` — stand the current code up on an ephemeral.
+1. \`npm run xano:deploy:ephemeral\` — stand the current code up on an ephemeral.
 2. \`npx xanosdk release create <name>\` — cut a release from it. An existing name is
    refused; cut a new one.
 3. \`npx xanosdk promote <name>\` — land it in the workspace, or
@@ -354,9 +355,10 @@ drive a Xano workspace from code.
   re-running \`init --from\`) refreshes it from a backend: it lists what will change
   and asks first, keeps files you added, and overwrites the files it decodes. Commit
   before refreshing, so an overwritten edit is still in git.
-- **\`npx xanosdk deploy\` is a full replace** of a disposable **ephemeral** environment
-  (\`npm run xano:deploy\`), unless \`--keep-data\` merges into the one an earlier
-  deploy filled. A real workspace is reached with \`npx xanosdk promote <release>\` or
+- **\`npx xanosdk deploy\` is a full replace** of a Xano Engine or a disposable
+  **ephemeral** environment (\`npm run xano:deploy:ephemeral\`), unless \`--keep-data\`
+  merges into the one an earlier deploy filled (\`npm run xano:deploy\` passes it). A
+  real workspace is reached with \`npx xanosdk promote <release>\` or
   \`deploy --to workspace\`, which merge and leave table rows alone.
 
 Read \`xano/README.md\` first: it is the generated record of what did and did not
@@ -384,7 +386,8 @@ ${frontendSection(frontend)}
 - \`npm run dev\` — run the frontend.
 - \`npm run typecheck\` / \`npm run build\` — must stay green.
 - \`npm run xano:export\` — compile the backend to \`workspace.json\` (never commit it).
-- \`npx xanosdk login\` then \`npm run xano:deploy\` — ship the backend + static frontend to an ephemeral env.
+- \`npm run xano:deploy\` — deploy the backend to the Xano Engine on this machine (no account needed).
+- \`npx xanosdk login\` then \`npm run xano:deploy:ephemeral\` — ship the backend + static frontend to an ephemeral env.
 - \`npx xanosdk release create <name>\` then \`npx xanosdk promote <name>\` — the path to a real workspace.
 - \`npx xanosdk pull [source]\` — refresh \`xano/\` from a live backend; it REPLACES the directory.
 - \`npm run xano:test\` — run the DEPLOYED environment's unit + workflow tests (exits 5 on a failure). See "Testing" below.

@@ -1,5 +1,5 @@
 /**
- * What a local engine SAYS about itself, turned into a value this SDK is
+ * What a Xano Engine SAYS about itself, turned into a value this SDK is
  * willing to act on.
  *
  * The engine announces itself as one JSON object on stdout when it starts, and
@@ -18,12 +18,12 @@
  * REUSE arm too, not only on a fresh start.
  *
  * Pure: no filesystem, no network, no child processes. It is the half of the
- * local-engine surface that can be tested without an engine at all, which is
+ * local surface that can be tested without an engine at all, which is
  * why it is its own module rather than a section of the process one.
  */
 
 /**
- * The typed local engine — everything an import needs, and nothing shaped like
+ * The typed Xano Engine — everything an import needs, and nothing shaped like
  * a credential.
  *
  * The field names are load-bearing. A value carrying an instance origin and a
@@ -42,7 +42,7 @@ export interface LocalEngine {
   workspaceId: number;
   /**
    * The bearer. Never written to disk, never logged, never in a summary —
-   * printed only by `xanosdk local-engine token`, for a caller that asked.
+   * printed only by `xanosdk local token`, for a caller that asked.
    */
   token: string;
   /** The engine's process id. Recorded by nobody and signalled by nobody. */
@@ -70,7 +70,7 @@ const ALLOWED_PROTOCOLS: readonly string[] = ["http:", "https:"];
  *
  * Three conditions, all of them cheap and none of them skippable: an http(s)
  * scheme, a loopback host, and a numeric port. The port is required rather than
- * defaulted — a local engine binds an ephemeral one and always reports it, so a
+ * defaulted — a Xano Engine binds an ephemeral one and always reports it, so a
  * url without one is not a url this side produced, and treating it as port 80
  * would silently widen the destination.
  */
@@ -101,7 +101,7 @@ export function assertLoopbackUrl(url: string, what: string): void {
   if (isLoopbackUrl(url)) return;
   throw new Error(
     `${what} reports a url this SDK will not send a token to: ${url}\n` +
-      `A local engine has to serve loopback over http on a port of its own — ` +
+      `A Xano Engine has to serve loopback over http on a port of its own — ` +
       `${LOOPBACK_HOSTS.join(", ")} — and anything else is reachable from off this machine. ` +
       `Stop that engine and start a fresh one without binding it to all interfaces.`,
   );
@@ -126,7 +126,7 @@ function requireString(raw: Record<string, unknown>, key: keyof RawEngine, sourc
       `${source} is missing \`${key}\`, or gave it as something other than text.\n` +
         `That is not an engine this SDK knows how to drive — the engine on this machine is ` +
         `older or newer than the one it was built against. Move to a current one with ` +
-        `\`xanosdk local-engine update\`.`,
+        `\`xanosdk local update\`.`,
     );
   }
   return value;
@@ -139,7 +139,7 @@ function requireNumber(raw: Record<string, unknown>, key: keyof RawEngine, sourc
       `${source} is missing \`${key}\`, or gave it as something other than a number.\n` +
         `That is not an engine this SDK knows how to drive — the engine on this machine is ` +
         `older or newer than the one it was built against. Move to a current one with ` +
-        `\`xanosdk local-engine update\`.`,
+        `\`xanosdk local update\`.`,
     );
   }
   return value;
@@ -156,8 +156,8 @@ function readEngine(value: unknown, source: string): LocalEngine {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(
       `${source} did not print an engine description.\n` +
-        `Re-run, and if it happens again fetch a fresh copy with \`xanosdk local-engine cache clear\`, ` +
-        `then \`xanosdk deploy --local-engine\`.`,
+        `Re-run, and if it happens again fetch a fresh copy with \`xanosdk local cache clear\`, ` +
+        `then \`xanosdk deploy --local\`.`,
     );
   }
   const raw = value as Record<string, unknown>;
@@ -191,8 +191,8 @@ export function parseEngineHandshake(stdout: string): LocalEngine {
   } catch {
     throw new Error(
       `${HANDSHAKE_SOURCE} did not print an engine description.\n` +
-        `Re-run, and if it happens again fetch a fresh copy with \`xanosdk local-engine cache clear\`, ` +
-        `then \`xanosdk deploy --local-engine\`.`,
+        `Re-run, and if it happens again fetch a fresh copy with \`xanosdk local cache clear\`, ` +
+        `then \`xanosdk deploy --local\`.`,
     );
   }
   const engine = readEngine(value, HANDSHAKE_SOURCE);
@@ -204,7 +204,7 @@ export function parseEngineHandshake(stdout: string): LocalEngine {
  * Every running engine, as the engine itself reports them.
  *
  * Empty output reads as "none running" rather than as an error: that is the
- * overwhelmingly common case and `local-engine list` must answer it without
+ * overwhelmingly common case and `local list` must answer it without
  * failing.
  */
 export function parseEngineListing(stdout: string): LocalEngine[] {
@@ -216,15 +216,15 @@ export function parseEngineListing(stdout: string): LocalEngine[] {
   } catch {
     throw new Error(
       `${LISTING_SOURCE} was not readable.\n` +
-        `Re-run, and if it happens again fetch a fresh copy with \`xanosdk local-engine cache clear\`, ` +
-        `then \`xanosdk deploy --local-engine\`.`,
+        `Re-run, and if it happens again fetch a fresh copy with \`xanosdk local cache clear\`, ` +
+        `then \`xanosdk deploy --local\`.`,
     );
   }
   if (!Array.isArray(value)) {
     throw new Error(
       `${LISTING_SOURCE} was not a list.\n` +
-        `Re-run, and if it happens again fetch a fresh copy with \`xanosdk local-engine cache clear\`, ` +
-        `then \`xanosdk deploy --local-engine\`.`,
+        `Re-run, and if it happens again fetch a fresh copy with \`xanosdk local cache clear\`, ` +
+        `then \`xanosdk deploy --local\`.`,
     );
   }
   return value.filter((entry) => !isForeignEngine(entry)).map((entry) => readEngine(entry, LISTING_SOURCE));

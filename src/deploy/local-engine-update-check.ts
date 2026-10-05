@@ -2,7 +2,7 @@
  * "Is there a newer engine than the pin" — answered cheaply, and what to do about it.
  *
  * Shaped like `src/emit/update-check.ts`: the newest published engine per
- * platform is cached in `<local-engine home>/latest.json` and re-asked at most
+ * platform is cached in `<local home>/latest.json` and re-asked at most
  * once per {@link UPDATE_CHECK_TTL_MS}, the whole lookup (every page of it) is
  * bounded by {@link UPDATE_CHECK_TIMEOUT_MS}, a failed lookup is not retried
  * for {@link UPDATE_CHECK_FAILURE_BACKOFF_MS}, and every failure is swallowed —
@@ -15,7 +15,7 @@
  *
  * The branching is {@link decideUpdate}, a pure function, and the words are
  * {@link updatePromptText} / {@link updateNoticeText}, so the deploy and
- * `local-engine update` say the same thing. Node-only.
+ * `local update` say the same thing. Node-only.
  */
 import { envFlagSet } from "../util/env.js";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -258,5 +258,5 @@ export function updatePromptText(pin: string, latest: string): string {
 
 /** The one-line notice for a run that does not prompt. */
 export function updateNoticeText(pin: string, latest: string): string {
-  return `Engine ${withV(latest)} is available (pinned: ${withV(pin)}). Run \`xanosdk local-engine update\` to move to it.`;
+  return `Engine ${withV(latest)} is available (pinned: ${withV(pin)}). Run \`xanosdk local update\` to move to it.`;
 }

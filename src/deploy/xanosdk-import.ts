@@ -470,7 +470,7 @@ function undecidable(baseUrl: string, why: string, status?: number): Error {
  *   to us is not evidence that a route is missing.
  *
  * Takes a {@link BearerTarget}: the probe reads nothing but the bearer, and a
- * local engine has nothing else to hand over.
+ * Xano Engine has nothing else to hand over.
  */
 export async function detectXanoSdkImportRoute(auth: BearerTarget, target: XanoSdkImportTarget): Promise<boolean> {
   const key = detectionKey(target.baseUrl);
@@ -1157,7 +1157,7 @@ export function withDefaultBranchPointer(archive: Uint8Array): Uint8Array {
  * advance asks {@link detectXanoSdkImportRoute}.
  *
  * Takes a {@link BearerTarget}, not a full credential: the transport reads
- * nothing but the bearer, which is what lets a local engine hand in its
+ * nothing but the bearer, which is what lets a Xano Engine hand in its
  * own url and token without being widened into a credential.
  */
 export async function xanosdkImport(auth: BearerTarget, opts: XanoSdkImportRequest): Promise<XanoSdkImportResponse> {

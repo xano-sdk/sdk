@@ -9,11 +9,11 @@
  * set, its value), and nothing else on the backend moves.
  *
  * Where: `--to` with any backend kind (`workspace`, `ephemeral[:<name>]`,
- * `local-engine[:<name>]`, `tenant:<name>`), or — none given — the backend this
- * project last deployed to, an ephemeral or a local engine (never a workspace or
+ * `local[:<name>]`, `tenant:<name>`), or — none given — the backend this
+ * project last deployed to, an ephemeral or a Xano Engine (never a workspace or
  * a tenant: see `tracked-backend.ts`). A workspace or tenant is a real
- * deployment, so a write there confirms first; an ephemeral or a local engine is
- * throwaway and does not. A local engine is reached with its own bearer, so no
+ * deployment, so a write there confirms first; an ephemeral or a Xano Engine is
+ * throwaway and does not. A Xano Engine is reached with its own bearer, so no
  * Xano credential is fetched for it — a signed-out developer iterating locally
  * never meets a login prompt.
  *
@@ -69,7 +69,7 @@ interface EnvVarDestination {
   real: boolean;
   /** A hosted backend's name (an ephemeral's handle), to find what landed there. */
   name?: string;
-  /** Absent for the local engine, whose bearer is its own and bound to nothing. */
+  /** Absent for the Xano Engine, whose bearer is its own and bound to nothing. */
   binding?: BindingContext;
   /** The `--json` receipt's `destination`, in the shape `deploy` and `tenant deploy` report. */
   receipt: ReturnType<typeof writeTargetPayload> & { url?: string; display?: string };
@@ -244,7 +244,7 @@ export async function runEnvVarCommand(
  *
  * The workspace and a tenant take a MERGE by default, which adds new names and
  * never removes one — so a set can ride one, but only `--replace` clears. An
- * ephemeral or a local engine is fully replaced by a deploy without
+ * ephemeral or a Xano Engine is fully replaced by a deploy without
  * `--keep-data` (or with `--keep-data --reset`), env included, so the change is
  * made in what the deploy resolves; a `--keep-data` merge keeps the live value,
  * and `--replace` names nothing there. `envFile` is that file as THIS project keeps it, beside its backend.
@@ -269,8 +269,8 @@ function routeMissingHint(
       : `A merge deploy never removes a name; only a \`--replace\` deploy, which rewrites every env ` +
           `var from the deploy's own set, clears it.`;
   }
-  // A local engine takes no credential flags; an ephemeral's deploy reads the run's account.
-  const base = kind === "local-engine" ? "xanosdk deploy --local-engine" : `xanosdk deploy${file}${flags}`;
+  // A Xano Engine takes no credential flags; an ephemeral's deploy reads the run's account.
+  const base = kind === "local" ? "xanosdk deploy --local" : `xanosdk deploy${file}${flags}`;
   // A `--keep-data` merge never updates a value, so the redeploy that carries
   // the change is a replace — which rewrites the rows too, and says so (E2E
   // pass 27: "every deploy replaces the whole env set" sent a `--keep-data`
@@ -413,12 +413,12 @@ async function readValue(
 
 /**
  * What a printed `xanosdk env …` needs to act where THIS run did: its `--to`,
- * and its credential flags (see `contextFlags`) — except for a local engine,
+ * and its credential flags (see `contextFlags`) — except for a Xano Engine,
  * which refuses them.
  */
 function sameDestination(args: ParsedArgs): string {
   const to = args.to === undefined ? "" : ` --to ${shellQuote(args.to)}`;
-  return args.to !== undefined && /^local-engine\b/.test(args.to) ? to : `${to}${contextFlags(args)}`;
+  return args.to !== undefined && /^local\b/.test(args.to) ? to : `${to}${contextFlags(args)}`;
 }
 
 /**
@@ -427,7 +427,7 @@ function sameDestination(args: ParsedArgs): string {
  * The order is the point. The value was already read (a local mistake costs no
  * lookup); the pointer is read next, without a credential; the credential is
  * fetched only when the kind is hosted — the resolver never asks for one on a
- * local engine — and only then is the backend looked up. One memoized provider
+ * Xano Engine — and only then is the backend looked up. One memoized provider
  * serves the tracked lookup and the resolve, so an OAuth refresh happens once.
  */
 async function resolveDestination(
@@ -451,7 +451,7 @@ async function resolveDestination(
   const real = isRealDeployment(actualKind(resolved));
 
   if (resolved.backend.kind === "local") {
-    const disclosure: DisclosureTarget = { kind: "local-engine", url: resolved.backend.engine.url, workspaceId };
+    const disclosure: DisclosureTarget = { kind: "local", url: resolved.backend.engine.url, workspaceId };
     return {
       kind: resolved.kind,
       auth: resolved.bearer,
@@ -462,7 +462,7 @@ async function resolveDestination(
       real,
       // `kind` for every kind: the local payload's `local: true` answers "is
       // this hosted", a different question from which kind received the write.
-      receipt: { kind: "local-engine", ...writeTargetPayload(disclosure) },
+      receipt: { kind: "local", ...writeTargetPayload(disclosure) },
     };
   }
   const kind = actualKind(resolved) as "workspace" | "ephemeral" | "tenant";

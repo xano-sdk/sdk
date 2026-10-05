@@ -185,26 +185,26 @@ export function assertSafeCacheDir(dir: string, env: NodeJS.ProcessEnv = process
     }
     if (st.isSymbolicLink()) {
       throw new Error(
-        `The local engine cache path is a symlink, and a symlink points somewhere these ` +
+        `The Xano Engine cache path is a symlink, and a symlink points somewhere these ` +
           `checks never looked: ${current}\n` +
           `Replace it with a real directory, or point the cache elsewhere with ` +
-          `XANOSDK_LOCAL_ENGINE_HOME.`,
+          `XANOSDK_ENGINE_HOME.`,
       );
     }
     if ((st.mode & 0o022) !== 0) {
       throw new Error(
-        `The local engine cache is writable by other users on this machine: ${current}\n` +
+        `The Xano Engine cache is writable by other users on this machine: ${current}\n` +
           `Anything that can write there can replace the engine executable, and an executable ` +
           `this SDK spawns is not a file to leave open. Run \`chmod go-w\` on it, or point the ` +
-          `cache somewhere private with XANOSDK_LOCAL_ENGINE_HOME.`,
+          `cache somewhere private with XANOSDK_ENGINE_HOME.`,
       );
     }
     const uid = ownerUid();
     if (uid !== undefined && st.uid !== uid) {
       throw new Error(
-        `The local engine cache is owned by another user: ${current}\n` +
+        `The Xano Engine cache is owned by another user: ${current}\n` +
           `An executable this SDK spawns has to be one only you can replace. Take ownership of ` +
-          `it, or point the cache somewhere you own with XANOSDK_LOCAL_ENGINE_HOME.`,
+          `it, or point the cache somewhere you own with XANOSDK_ENGINE_HOME.`,
       );
     }
   }
@@ -398,7 +398,7 @@ export function verifiedEngineExecutable(
   } catch {
     throw new Error(
       `The cached engine is gone from ${entry.dir}.\n` +
-        `Re-run the same \`xanosdk deploy --local-engine\` and it is fetched again.`,
+        `Re-run the same \`xanosdk deploy --local\` and it is fetched again.`,
     );
   }
   const actual = sha256Hex(bytes);
@@ -407,7 +407,7 @@ export function verifiedEngineExecutable(
       `The cached engine's bytes do not match the digest recorded when it was fetched, so it ` +
         `will not be run: ${entry.dir}\n` +
         `Something replaced it after it was downloaded. Delete that directory and re-run the ` +
-        `same \`xanosdk deploy --local-engine\` to get it again.`,
+        `same \`xanosdk deploy --local\` to get it again.`,
     );
   }
   return entry.executable;

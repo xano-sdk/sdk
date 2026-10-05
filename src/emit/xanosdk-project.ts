@@ -49,7 +49,7 @@ export function projectDirFrom(start: string): string | undefined {
 export const RELATIVE_PATH_ARGS = ["out", "lockPath", "entryPath", "static", "bundle", "envFile", "secretsFile", "backendDir", "emit", "path"] as const;
 
 /** Path-valued variables read relative to the working directory, pinned for a run entered at its root. */
-const PATH_VARS = ["XANO_CONFIG", "XANO_GLOBAL_CONFIG", "XANO_CLIENT_FILE", "XANOSDK_UPDATE_CACHE", "XANOSDK_PROVE_DIFF", "XANOSDK_LOCAL_ENGINE_HOME", "XANOSDK_LOCAL_ENGINE_OVERRIDE"] as const;
+const PATH_VARS = ["XANO_CONFIG", "XANO_GLOBAL_CONFIG", "XANO_CLIENT_FILE", "XANOSDK_UPDATE_CACHE", "XANOSDK_PROVE_DIFF", "XANOSDK_ENGINE_HOME", "XANOSDK_ENGINE_OVERRIDE"] as const;
 
 type RootArgs = { [K in (typeof RELATIVE_PATH_ARGS)[number]]?: string | undefined } & {
   argv?: readonly string[] | undefined;
@@ -143,7 +143,7 @@ export function enterProjectRoot<A extends RootArgs>(
     }
   }
   if (args.authFile !== undefined) next.authFile = resolve(here, args.authFile);
-  // `--local-engine=<archive>`: a path only when it is not a URL or a version.
+  // `--local=<archive>`: a path only when it is not a URL or a version.
   const engine = args.localEngineUrl;
   if (engine !== undefined && isRelativePath(engine)) next.localEngineUrl = fromRoot(engine);
   const saved = PATH_VARS.map((name) => [name, process.env[name]] as const);

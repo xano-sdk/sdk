@@ -52,11 +52,12 @@ and every saved unit test — with `xanosdk test run-all` (the backend you last 
 
 ## The loop, end to end
 
-A deploy targets a disposable ephemeral. Reaching anything real goes through a
-**release** — the stored record that this code came up and answered:
+A bare deploy runs on the Xano Engine on this machine; `--ephemeral` stands it up on a
+disposable ephemeral on Xano's cloud. Reaching anything real goes through a **release** —
+the stored record that this code came up and answered, cut from an ephemeral:
 
 ```bash
-xanosdk deploy ./index.ts --test        # stand it up, run its tests
+xanosdk deploy ./index.ts --ephemeral --test   # stand it up on an ephemeral, run its tests
 xanosdk release create v1               # cut a release from what just ran
 xanosdk promote v1                      # land it, and read the branch back to check it arrived
 xanosdk tenant deploy acme v1           # or on a customer tenant
@@ -72,13 +73,14 @@ xanosdk workspace export --branch <label>            # or the whole bundle
 
 Going the other way — starting from a backend you did not author — is `pull`.
 It takes the backend grammar every command shares (`release:<name>`,
-`ephemeral[:<name>]`, `local-engine[:<name>]`, `tenant:<name>`, `workspace`; `init --from`
+`ephemeral[:<name>]`, `local[:<name>]`, `tenant:<name>`, `workspace`; `init --from`
 also takes a bundle path):
 
 ```bash
 xanosdk init app --from release:v1      # a whole project around a release
 xanosdk pull release:v1                 # or refresh xano/ in a project you have
-xanosdk deploy ./index.ts               # iterate
+xanosdk deploy ./index.ts               # iterate on the Xano Engine
+xanosdk deploy ./index.ts --ephemeral   # stand it up where a release can be cut
 xanosdk release create v2               # cut the next one
 ```
 

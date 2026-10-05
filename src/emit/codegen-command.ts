@@ -6,7 +6,7 @@
  *                                   is scoped to), `--branch` to read a branch
  *   --from ephemeral[:<name>]     an ephemeral; bare is the one this project
  *                                   last deployed to
- *   --from local-engine[:<name>]  a local engine; bare is the one recorded for
+ *   --from local[:<name>]  a Xano Engine; bare is the one recorded for
  *                                   this directory (no Xano credential)
  *   --from tenant:<name>          a tenant
  *   --from release:<name>         a release
@@ -150,8 +150,8 @@ const NO_BRANCH: Record<Exclude<CodegenSource["kind"], "workspace">, string> = {
   ephemeral:
     "an ephemeral environment holds the logic it was deployed with, not a branch you can " +
     "choose between afterwards — deploy from the branch you want, then read the ephemeral",
-  "local-engine":
-    "a local engine holds the logic it was deployed with, not a branch you can choose between " +
+  "local":
+    "a Xano Engine holds the logic it was deployed with, not a branch you can choose between " +
     "afterwards — deploy from the branch you want, then read the engine",
   tenant:
     "a tenant runs the release it was deployed with, not a branch you can choose between",
@@ -183,7 +183,7 @@ function assertBranchMatchesSource(args: ParsedArgs, source: CodegenSource): voi
 interface SourcedBundle {
   readonly bundle: ExportedBundle;
   readonly origin: CodegenOrigin;
-  /** Whether the read resolved a credential — a local engine's and a file's do not. */
+  /** Whether the read resolved a credential — a Xano Engine's and a file's do not. */
   readonly credentialRead?: boolean;
   /** The seed rows the archive carries (a release cut with `--seed`), which the tree does not. */
   readonly seed?: { rows: SeedRowsReport[]; label: string; provenance: string };
@@ -196,7 +196,7 @@ interface SourcedBundle {
  * tenant:acme` reads exactly what `generate tenant:acme` would. The one arm of
  * its own is the workspace, whose `--branch` probe that fetch does not carry.
  *
- * The credential is a provider, read only for a hosted kind: a local engine is
+ * The credential is a provider, read only for a hosted kind: a Xano Engine is
  * exported through its own bearer, so a signed-out developer can pull one.
  */
 async function fetchBundle(
@@ -215,7 +215,7 @@ async function fetchBundle(
       credentialRead,
     };
   }
-  // A bare tracked source (`local-engine`, `ephemeral`) is the one recorded for
+  // A bare tracked source (`local`, `ephemeral`) is the one recorded for
   // the PROJECT this run stands in — its root, from a subdirectory of it. Only
   // the lookup moves; the target directory stays relative to where it was typed.
   const { projectDirFrom } = await import("./xanosdk-project.js");
@@ -243,14 +243,14 @@ async function fetchBundle(
  * release or engine name.
  *
  * Read off the resolved provenance (`ephemeral:e4f2`), which carries the name
- * a bare `ephemeral` resolved to. A bare `local-engine` provenance carries no
+ * a bare `ephemeral` resolved to. A bare `local` provenance carries no
  * name, so it is the engine recorded for this directory — the record the
  * resolver itself read.
  */
 function originName(source: Exclude<CodegenSource, { kind: "file" | "workspace" }>, provenance: string, cwd: string): string {
   const colon = provenance.indexOf(":");
   if (colon !== -1) return provenance.slice(colon + 1);
-  if (source.kind === "local-engine") return getEngineRecord(cwd)?.name ?? "local-engine";
+  if (source.kind === "local") return getEngineRecord(cwd)?.name ?? "local";
   return provenance;
 }
 
@@ -1029,9 +1029,9 @@ export function missingDependency(err: unknown): "install" | "tsx" | undefined {
  * `--from`, so it never competes for an argument position.
  */
 export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource): Promise<void> {
-  // A local engine selects no credential, so a `--profile` beside one would
+  // A Xano Engine selects no credential, so a `--profile` beside one would
   // pick nothing — refused rather than dropped, before anything is read.
-  if (source.kind === "local-engine") {
+  if (source.kind === "local") {
     refuseProfileForLocal(args.profile, [source.kind], requireBackendSlot("init", undefined, "from"));
   }
   const pathArg = args.positionals[0] ?? ".";
@@ -1857,8 +1857,9 @@ function summarize(
     (install === "installed" || existsSync(join(out, "node_modules", "@xano", "sdk")) ? `` : `  npm install\n`) +
     // An unverified tree: the check the warning above asks for is a step.
     (verified === null ? `  npm run xano:check     # confirm the tree compiles and the lock agrees\n` : ``) +
+    `  npm run xano:deploy    # run it on the Xano Engine, on this machine\n` +
     loginNextStep(pin, out) +
-    `  npm run xano:deploy    # build the frontend, then deploy → live ephemeral URL`;
+    `  npm run xano:deploy:ephemeral   # build the frontend, then deploy → live ephemeral URL`;
   // Every line is indented, so `detail` leaves them where they are: nested
   // under the heading here, where plain `init` nests them too.
   detail(`Next steps:\n` + steps.replace(/^ {2}/gm, "    "));
@@ -1897,8 +1898,8 @@ export function refreshSelector(origin: CodegenOrigin): string | undefined {
       return undefined;
     case "workspace":
       return "workspace";
-    case "local-engine":
-      return origin.origin === "local-engine" ? "local-engine" : `local-engine:${origin.origin}`;
+    case "local":
+      return origin.origin === "local" ? "local" : `local:${origin.origin}`;
     default:
       return `${origin.source}:${origin.origin}`;
   }
@@ -1959,7 +1960,7 @@ export function seedRowsLanding(source: string, flags = ""): string {
     return `They stay on ${source}, and a table's \`seed\` option puts rows in code.`;
   }
   return (
-    `They stay on the release: \`xanosdk deploy ${shellQuote(`release:${release}`)}${flags}\` lands them on this ` +
+    `They stay on the release: \`xanosdk deploy ${shellQuote(`release:${release}`)} --ephemeral${flags}\` lands them on this ` +
     `project's ephemeral, and \`xanosdk tenant deploy <tenant> ${shellQuote(release)}${flags}\` on a tenant (a promote ` +
     `writes no rows). A table's \`seed\` option puts rows in code.`
   );

@@ -108,11 +108,11 @@ export async function resolveEphemeralName(
     );
     if (other !== undefined) throw await reachableFirst(other, auth);
     // A named thing that is not there: `SDK_ERROR`, exit 8 — what `generate
-    // local-engine` and `tables` exit with when nothing is tracked either.
+    // local` and `tables` exit with when nothing is tracked either.
     throw new CliError(
       "SDK_ERROR",
       `No ephemeral environment to target. Name one with \`ephemeral:<name>\` ` +
-        `(\`xanosdk ephemeral list${contextFlags()}\` shows the ones that exist), or run \`xanosdk deploy${contextFlags()}\` first — ` +
+        `(\`xanosdk ephemeral list${contextFlags()}\` shows the ones that exist), or run \`xanosdk deploy --ephemeral${contextFlags()}\` first — ` +
         `this project then remembers the env it deployed to, which is what bare ` +
         `\`ephemeral\` reads.`,
       { exitCode: EXIT_SOURCE_UNRESOLVABLE },
@@ -181,7 +181,7 @@ export function otherCredentialRefusal(
     known === undefined && runFile !== undefined && runFile !== "shared"
       ? ` (${profiles.length === 1 ? "it" : "they"} may live in another credential file than this run read — add that file's \`--config <path>\` if so)`
       : known === "shared" && runFile !== undefined && runFile !== "shared"
-        ? ` (without \`--config\`/\`--local\`: ${profiles.length === 1 ? "it lives" : "they live"} in this machine's shared credential file)`
+        ? ` (without \`--config\`/\`--local-auth\`: ${profiles.length === 1 ? "it lives" : "they live"} in this machine's shared credential file)`
         : "";
   const profileFlag = `${profiles.length === 1 ? `--profile ${profiles[0]}` : "--profile <name>"}${fileFlag}`;
   // A profile deleted since the deploy recorded it: `--profile <it>` exits 8
@@ -261,7 +261,7 @@ export function otherCredentialRefusal(
   if (sameHost.length === 0) {
     const hosts = [...new Set(others.map((k) => hostOfKey(k)!))].join(", ");
     return new UsageError(
-      `No ephemeral is tracked on ${here} — run \`xanosdk deploy${contextFlags()}\` to create one there, ${tail}. ` +
+      `No ephemeral is tracked on ${here} — run \`xanosdk deploy --ephemeral${contextFlags()}\` to create one there, ${tail}. ` +
         `(This project's record is for ${hosts}.)`,
       opts,
     );

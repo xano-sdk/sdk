@@ -70,7 +70,7 @@ export async function runLogoutCommand(args: ParsedArgs): Promise<void> {
     );
   }
   // "write" mode: like `login`, target a definite cache. Defaults to the shared
-  // global cache (the common sign-in); `--local` clears the project cache
+  // global cache (the common sign-in); `--local-auth` clears the project cache
   // instead. Never falls back between the two — the target is exactly the one
   // the flag (or its absence) names.
   const authFilePath = resolveAuthFilePath(args, "write");
@@ -429,7 +429,7 @@ function noteEnvCredential(): void {
 
 /**
  * The profile asked for is not in the file this logout targets, but IS in the
- * project-local `./.xano/auth.json` — where `login --local` and a bare read put
+ * project-local `./.xano/auth.json` — where `login --local-auth` and a bare read put
  * it. There is still no fallback (a logout clears exactly the file it names),
  * but answering "nothing to do" (`alreadyGone`) would tell a script the session
  * is gone while `whoami` still acts as it. Refused as not found IN THIS FILE
@@ -453,7 +453,7 @@ function refuseIfOnlyInProjectFile(
   if (held === null || !Object.prototype.hasOwnProperty.call(held.profiles, selection.name)) return;
   throw new ProfileNotFoundError(
     `Profile "${selection.name}" is not in ${authFilePath}, the file \`logout\` clears by default — ` +
-      `it is stored in this project's ${local}. Run \`xanosdk logout --local -p ${selection.name}\` to sign out of it there.`,
+      `it is stored in this project's ${local}. Run \`xanosdk logout --local-auth -p ${selection.name}\` to sign out of it there.`,
     selection,
     names,
   );

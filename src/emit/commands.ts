@@ -46,7 +46,7 @@ export type SelectorRole = "from" | "to" | "on" | "subject";
  * - `entry` — `deploy`'s source only: the project's own entry file, compiled.
  * - `none` — the slot supplies nothing when absent: `generate` and `init --from`
  *   need a source named, and `deploy --to` absent means the deploy's own
- *   ephemeral or local-engine path rather than any backend here.
+ *   ephemeral or local path rather than any backend here.
  */
 export type SelectorDefault = "tracked" | "entry" | "none";
 
@@ -250,7 +250,7 @@ export type HelpGroup = (typeof HELP_GROUP_ORDER)[number];
 
 /**
  * Every flag the CLI parses, described once. Commands reference these by key so
- * the shared ones (`--lock`, `--origin`, `--config`, `--local`) read identically
+ * the shared ones (`--lock`, `--origin`, `--config`, `--local-auth`) read identically
  * everywhere they appear.
  */
 export const FLAGS = {
@@ -300,10 +300,14 @@ export const FLAGS = {
   },
   "expires-hours": { spec: "--expires-hours <n>", summary: "Ephemeral TTL at create time, 1–24 (default: 1)" },
   static: { spec: "--static <dir>", summary: "Archive this built frontend and deploy it to the static host" },
-  "local-engine": {
-    spec: "--local-engine[=<version|url|path>]",
+  ephemeral: {
+    spec: "--ephemeral",
+    summary: "Deploy to a disposable ephemeral on Xano's cloud instead of the Xano Engine on this machine",
+  },
+  "local": {
+    spec: "--local[=<version|url|path>]",
     summary:
-      "Deploy to an engine on this machine instead of an ephemeral. Bare: runs the project's pinned engine version (the latest on first run, then pinned in package.json — commit it); a newer engine is offered, never applied without a yes. A version, URL or archive path (or XANOSDK_LOCAL_ENGINE_OVERRIDE, for every run in a shell) runs that engine as an override and never touches the pin; a URL must be https (plain http only from this machine). Not combinable with --to or --static",
+      "Deploy to the Xano Engine on this machine — the default, so the flag is needed only to name an engine. Bare: runs the project's pinned engine version (the latest on first run, then pinned in package.json — commit it); a newer engine is offered, never applied without a yes. A version, URL or archive path (or XANOSDK_ENGINE_OVERRIDE, for every run in a shell) runs that engine as an override and never touches the pin; a URL must be https (plain http only from this machine). Not combinable with --to or --ephemeral",
   },
   // Keyed apart from the global `version` row: that one is the first-argument
   // `xanosdk --version`, this one a value an engine verb takes after the verb.
@@ -402,7 +406,7 @@ export const FLAGS = {
     summary: "Xano OAuth host for `login` and a XANO_REFRESH_TOKEN exchange (default: $XANO_ORIGIN)",
   },
   config: { spec: "--config <path>", summary: "Explicit credential file (default: $XANO_CONFIG)" },
-  local: { spec: "--local", summary: "Use the project-local ./.xano/auth.json instead of the shared cache" },
+  "local-auth": { spec: "--local-auth", summary: "Use the project-local ./.xano/auth.json instead of the shared cache" },
   profile: {
     spec: "--profile, -p <name>",
     summary:
@@ -619,7 +623,7 @@ export const GLOBAL_FLAGS = [
 ] as const satisfies readonly FlagKey[];
 
 /** Flags every authenticated command accepts, via `getAccessToken`. */
-const AUTH = ["origin", "config", "local"] as const;
+const AUTH = ["origin", "config", "local-auth"] as const;
 
 /**
  * The credential-FILE flags alone, for the commands that manage stored profiles
@@ -628,7 +632,7 @@ const AUTH = ["origin", "config", "local"] as const;
  * commands do neither — a revoke goes to the host stored with the profile — so
  * advertising it there was a flag accepted and ignored.
  */
-const CREDENTIAL_FILE = ["config", "local"] as const;
+const CREDENTIAL_FILE = ["config", "local-auth"] as const;
 
 /**
  * Does this command reach a credential at all?
@@ -665,7 +669,7 @@ export function takesProfileFlag(command: string | undefined, subcommand: string
  * drift.
  */
 const CUT = ["workspace", "ephemeral", "tenant"] as const satisfies readonly SourceKind[];
-const BACKEND = ["workspace", "ephemeral", "local-engine", "tenant"] as const satisfies readonly SourceKind[];
+const BACKEND = ["workspace", "ephemeral", "local", "tenant"] as const satisfies readonly SourceKind[];
 
 /**
  * `test`'s one slot: which backend a suite runs on. Running a test only reads
@@ -739,8 +743,8 @@ const ENV_VALUE_FLAGS = [
 /**
  * Where `env set` / `env unset` write: the backend named with `--to`, or the
  * one this project last deployed to. Shared so the two verbs cannot drift into
- * different spellings. A local engine is `--to local-engine` — the boolean
- * `--local-engine` these verbs once took is a rename error in the parser.
+ * different spellings. A Xano Engine is `--to local` — the boolean
+ * `--local` these verbs once took is a rename error in the parser.
  */
 const ENV_VAR_TARGET_FLAGS: readonly FlagRef[] = [
   {
@@ -1074,7 +1078,7 @@ export const COMMANDS = {
   deploy: {
     group: "Deploy",
     display: "deploy [source]",
-    summary: "Ship to a live ephemeral env → URL",
+    summary: "Deploy to the Xano Engine on this machine (default) or an ephemeral (--ephemeral) → URL",
     // Optional: a bare `deploy` inside a project compiles its entry, and the
     // argument may name a backend to take the bytes FROM instead of a path.
     args: [
@@ -1095,8 +1099,8 @@ export const COMMANDS = {
       {
         key: "to",
         summary:
-          "Merge into a real destination instead of replacing an ephemeral. The escape hatch from the release flow",
-        // An ephemeral and a local engine are where a deploy goes WITHOUT
+          "Merge into a real destination instead of replacing the Xano Engine or an ephemeral. The escape hatch from the release flow",
+        // An ephemeral and a Xano Engine are where a deploy goes WITHOUT
         // `--to`; naming one here is the other path spelled wrong, and the
         // reason says which flag that path is.
         selector: {
@@ -1104,14 +1108,15 @@ export const COMMANDS = {
           role: "to",
           default: "none",
           refused: {
-            "local-engine": "a deploy to a local engine is `--local-engine`, which also downloads, pins and starts one",
+            "local": "a deploy to a Xano Engine is `--local`, which also downloads, pins and starts one",
             ephemeral:
-              "a deploy with no `--to` already replaces an ephemeral. To merge into one instead, name it as the " +
+              "`--ephemeral` already replaces an ephemeral. To merge into one instead, name it as the " +
               "tenant it is: `--to tenant:<ephemeral name>`",
           },
         },
       },
-      "local-engine",
+      "local",
+      "ephemeral",
       withToOnly("dry-run"),
       withToOnly("prune"),
       withToOnly("reset-data"),
@@ -1226,7 +1231,7 @@ export const COMMANDS = {
         args: [{ name: "name", required: true }],
         flags: [
           // A release is cut from something that RAN, so a path is not in the
-          // set, and the cut runs on the instance, so a local engine is refused
+          // set, and the cut runs on the instance, so a Xano Engine is refused
           // with that reason rather than left unknown.
           {
             key: "from",
@@ -1237,7 +1242,7 @@ export const COMMANDS = {
               role: "from",
               default: "tracked",
               refused: {
-                "local-engine": "the cut runs on the instance, which cannot reach an engine on this machine",
+                "local": "the cut runs on the instance, which cannot reach an engine on this machine",
               },
             },
           },
@@ -1428,10 +1433,9 @@ export const COMMANDS = {
         key: "to",
         summary: "Where to publish, instead of the backend this project last deployed to",
         selector: {
-          accepted: CUT,
+          accepted: BACKEND,
           role: "to",
           default: "tracked",
-          refused: { "local-engine": "a local engine takes a frontend only through `xanosdk deploy --local-engine --static <dir>`" },
         },
       },
       "release",
@@ -1608,36 +1612,36 @@ export const COMMANDS = {
       },
     },
   },
-  "local-engine": {
+  "local": {
     group: "Environments",
-    display: "local-engine",
-    // The handles that ship with `deploy --local-engine`: a local engine has no
+    display: "local",
+    // The handles that ship with `deploy --local`: a Xano Engine has no
     // TTL and nothing reclaims it, and its binary is never on `PATH`, so these
-    // verbs are the only way to see or stop one (`impersonate local-engine`
+    // verbs are the only way to see or stop one (`impersonate local`
     // opens one, like any other backend).
     summary:
-      "See, authenticate against and stop local engines on this machine; move the " +
+      "See, authenticate against and stop Xano Engines on this machine; move the " +
       "project's engine pin and manage cached engine versions",
     subcommands: {
       list: {
-        summary: "List local engines on this machine, marking the ones xanosdk started",
-        example: "xanosdk local-engine list",
+        summary: "List Xano Engines on this machine, marking the ones xanosdk started",
+        example: "xanosdk local list",
       },
       token: {
         // The engine's meta API accepts only its own bearer, and no summary
         // carries it — so this verb is the only way a suite gets one. Bare on
         // stdout even when piped, because `$(…)` is the form it exists for.
         summary:
-          "Print a local engine's meta API bearer — the local XANO_META_TOKEN; `--json` adds its url " +
+          "Print a Xano Engine's meta API bearer — the local XANO_META_TOKEN; `--json` adds its url " +
           "and workspace id. Re-run after a restart, which re-mints it " +
           "(default: the engine this project deployed to)",
         args: [{ name: "name", required: false }],
-        example: "XANO_META_TOKEN=$(xanosdk local-engine token)",
+        example: "XANO_META_TOKEN=$(xanosdk local token)",
       },
       stop: {
         // The name is optional because `--all` stands in for it — and `--all`
         // is the form most runs want, since it covers every project.
-        summary: "Stop one local engine by name, or every one xanosdk started on this machine",
+        summary: "Stop one Xano Engine by name, or every one xanosdk started on this machine",
         args: [{ name: "name", required: true, satisfiedBy: ["all"] }],
         flags: [
           {
@@ -1645,7 +1649,7 @@ export const COMMANDS = {
             summary: "Every engine xanosdk started on this machine, across projects (foreign ones are reported, not stopped)",
           },
         ],
-        example: "xanosdk local-engine stop --all",
+        example: "xanosdk local stop --all",
       },
       update: {
         // Running it IS the confirmation, so it never prompts — the deploy only
@@ -1660,7 +1664,7 @@ export const COMMANDS = {
             summary: "Pin this engine version instead of the latest, like v0.1.5 — or `latest`, the default",
           },
         ],
-        example: "xanosdk local-engine update",
+        example: "xanosdk local update",
       },
       cache: {
         // One verb with an action argument, not two top-level verbs: both act on
@@ -1681,7 +1685,7 @@ export const COMMANDS = {
           },
           { key: "yes", summary: "Skip the `--legacy-runtime` confirmation (required when there is no terminal)" },
         ],
-        example: "xanosdk local-engine cache clear --version v0.1.5",
+        example: "xanosdk local cache clear --version v0.1.5",
       },
     },
   },
@@ -1752,7 +1756,7 @@ export const COMMANDS = {
         name: "backend",
         required: false,
         selector: {
-          accepted: ["ephemeral", "local-engine", "tenant"],
+          accepted: ["ephemeral", "local", "tenant"],
           role: "subject",
           default: "tracked",
           refused: {
@@ -1775,9 +1779,9 @@ export const COMMANDS = {
   login: {
     group: "Account",
     display: "login",
-    summary: "OAuth sign-in — shared cache, or --local per project",
+    summary: "OAuth sign-in — shared cache, or --local-auth per project",
     flags: [
-      "local",
+      "local-auth",
       "paste",
       "port",
       "scope",
@@ -1785,13 +1789,13 @@ export const COMMANDS = {
       "config",
       { key: "force", summary: "Overwrite the cached credential — sign in again even when one is already there" },
     ],
-    example: "xanosdk login --local",
+    example: "xanosdk login --local-auth",
   },
   logout: {
     group: "Account",
     display: "logout",
     summary: "Revoke the active profile and remove it from the credential file",
-    flags: ["all", "yes", "local", "config"],
+    flags: ["all", "yes", "local-auth", "config"],
     example: "xanosdk logout --profile staging",
   },
   status: {
@@ -2030,7 +2034,7 @@ export function selectorValues(selector: SelectorSpec): string[] {
 }
 
 /** The kinds that stand alone as a bare word (`BARE` in `source-selector.ts`; pinned by test). */
-const SELECTOR_BARE = ["workspace", "ephemeral", "local-engine"] as const satisfies readonly SourceKind[];
+const SELECTOR_BARE = ["workspace", "ephemeral", "local"] as const satisfies readonly SourceKind[];
 
 /** The closed set a positional accepts: its own `values`, else its selector's bare kinds. */
 export function argValues(arg: ArgSpec): readonly string[] | undefined {

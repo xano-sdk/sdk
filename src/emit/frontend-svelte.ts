@@ -363,7 +363,7 @@ export {};
  */
 function renderLayoutTs(): string {
   return `// There is no server. The backend is Xano, reached through $lib/api.ts,
-// and \`npm run xano:deploy\` ships this app to a static host with no runtime.
+// and \`npm run xano:deploy:ephemeral\` ships this app to a static host with no runtime.
 //
 // prerender: true — every route is rendered to its own HTML file AT BUILD TIME
 // and served as a real document. That is what makes each page load as itself
@@ -909,7 +909,7 @@ becomes its own HTML document at build time, so a page loads as itself rather
 than as a shell that fills in afterwards, and an unmatched path returns a real
 404 from [\`+error.svelte\`](frontend/src/routes/+error.svelte).
 
-> **There is no server.** \`npm run xano:deploy\` ships this app to a static host
+> **There is no server.** \`npm run xano:deploy:ephemeral\` ships this app to a static host
 > with no runtime of its own; Xano is the backend, reached through
 > [\`frontend/src/lib/api.ts\`](frontend/src/lib/api.ts). So \`+page.server.ts\`,
 > form actions, and server \`load\` have nothing to run on — and **nothing warns

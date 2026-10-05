@@ -1,7 +1,7 @@
 /**
  * The two fields a `--json` reader acts on next, added to every document that
  * names a backend: `selector`, the spelling any command's backend slot takes
- * (`ephemeral:e4f2-9ab1`, `tenant:acme`, `local-engine:<name>`, `workspace`),
+ * (`ephemeral:e4f2-9ab1`, `tenant:acme`, `local:<name>`, `workspace`),
  * and `workspaceId`, the numeric workspace it acts on — for an ephemeral or a
  * tenant, the workspace it lives under.
  *
@@ -13,7 +13,7 @@
 
 type Doc = Record<string, unknown>;
 
-const BACKEND_KINDS: ReadonlySet<string> = new Set(["workspace", "ephemeral", "tenant", "local-engine"]);
+const BACKEND_KINDS: ReadonlySet<string> = new Set(["workspace", "ephemeral", "tenant", "local"]);
 
 const isObject = (v: unknown): v is Doc => typeof v === "object" && v !== null && !Array.isArray(v);
 const text = (v: unknown): string | undefined => (typeof v === "string" && v !== "" ? v : undefined);
@@ -42,7 +42,7 @@ function derive(doc: Doc): { selector?: string; workspaceId?: number } {
     const kind = doc.deployed.kind;
     const env = isObject(doc.environment) ? doc.environment.name : undefined;
     if (kind === "ephemeral" && text(env) !== undefined) out.selector = `ephemeral:${env as string}`;
-    else if (kind === "local-engine") out.selector = "local-engine";
+    else if (kind === "local") out.selector = "local";
   }
   if (out.workspaceId === undefined && isObject(doc.workspace) && typeof doc.workspace.id === "number") {
     out.workspaceId = doc.workspace.id;

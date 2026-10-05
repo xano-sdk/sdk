@@ -323,7 +323,7 @@ export function staticRetryCommand(
   err: unknown,
 ): string {
   const badHost = err instanceof Error && err.name === "StaticHostNotFoundError";
-  // With this run's `--config`/`--local`/`--profile`: a bare `publish` reads
+  // With this run's `--config`/`--local-auth`/`--profile`: a bare `publish` reads
   // the machine's default account, which may not reach the target at all.
   return (
     // Spelled from where the user typed: a run moved to its project's root

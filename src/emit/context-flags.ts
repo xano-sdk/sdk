@@ -21,10 +21,10 @@ import { shellQuote } from "../util/shell-quote.js";
 import type { ParsedArgs } from "./cli.js";
 
 /**
- * The `--origin` refusal's remedy on a local-engine backend. Not "or deploy
+ * The `--origin` refusal's remedy on a local backend. Not "or deploy
  * from a hosted backend that reads it": a hosted run refuses `--origin` too
  * unless it exchanges XANO_REFRESH_TOKEN — the one arm that picks its OAuth
- * host per run. Shared with the other local-engine commands' refusal.
+ * host per run. Shared with the other `local` commands' refusal.
  */
 export const ORIGIN_READ_ONLY_BY_REFRESH =
   "Drop `--origin` — only a XANO_REFRESH_TOKEN exchange reads it; a stored profile refreshes at the " +
@@ -51,7 +51,7 @@ export function setHintContext(args: (ContextArgs & { authHost?: string }) | und
 
 /**
  * The credential flags this run was TYPED with, for a refusal made below any
- * `args`: a local engine takes none, and each was otherwise accepted and
+ * `args`: a Xano Engine takes none, and each was otherwise accepted and
  * dropped. `{}` outside a dispatched run.
  */
 export function typedCredentialFlags(): { authFile?: string; local?: boolean; authHost?: string; profile?: string } {
@@ -81,7 +81,7 @@ export function credentialFileOf(args: ContextArgs | undefined = ambient): strin
 
 /**
  * The flag that reads the credential file {@link credentialFileOf} recorded:
- * `""`, ` --local`, or ` --config '<p>'` — by {@link credentialFileFlag}'s rule,
+ * `""`, ` --local-auth`, or ` --config '<p>'` — by {@link credentialFileFlag}'s rule,
  * so under `$XANO_CONFIG` naming another file a `shared`/`local` record still
  * gets the `--config` that reaches it.
  */
@@ -90,7 +90,7 @@ export function credentialFileFlagFor(recorded: string): string {
 }
 
 /**
- * ` --profile <p> --config '<path>'` / ` --local`, as this run used them, with
+ * ` --profile <p> --config '<path>'` / ` --local-auth`, as this run used them, with
  * a leading space — or `""` when the run used the defaults. Spliced straight
  * after the verb: `` `xanosdk ephemeral get ${name}${contextFlags(args)}` ``.
  *
@@ -113,7 +113,7 @@ export function contextFlags(
   try {
     file = credentialFileFlag(resolveAuthFilePath(args));
   } catch {
-    file = args.local ? " --local" : args.authFile !== undefined ? ` --config ${shellQuote(args.authFile)}` : "";
+    file = args.local ? " --local-auth" : args.authFile !== undefined ? ` --config ${shellQuote(args.authFile)}` : "";
   }
   const profile = args.profile !== undefined && args.profile !== "" ? ` --profile ${shellQuote(args.profile)}` : "";
   return `${profile}${file}`;
@@ -121,7 +121,7 @@ export function contextFlags(
 
 /**
  * Commands that act on the credential store or the project pin rather than
- * authenticate with it: `--config`, `--local` and `--profile` pick the file
+ * authenticate with it: `--config`, `--local-auth` and `--profile` pick the file
  * and profile they change even under an environment credential, so their
  * printed reruns keep them.
  */
@@ -134,7 +134,7 @@ export function isCredentialStoreCommand(args: Pick<ParsedArgs, "command">): boo
 
 /**
  * Does a COMPLETE environment credential (the meta-token triple, or a refresh
- * token with its client id) resolve this run? Then no `--config`, `--local` or
+ * token with its client id) resolve this run? Then no `--config`, `--local-auth` or
  * `--profile` selects anything — the file was displaced and named on stderr.
  */
 function envCredentialResolves(): boolean {

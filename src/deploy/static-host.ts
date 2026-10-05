@@ -125,7 +125,7 @@ function isHiddenPath(path: string): boolean {
 /** Options for {@link assertStaticDir}. */
 export interface StaticDirOptions {
   /**
-   * The destination runs a build's server half (a local engine), so a build
+   * The destination runs a build's server half (a Xano Engine), so a build
    * with a server bundle needs no index.html: its root page may be rendered
    * rather than prerendered. Anywhere else the server half is not uploaded.
    */
@@ -170,7 +170,7 @@ export function assertStaticDir(
     throw new StaticDirError(
       `${where}: no index.html at its root, so the static host would have no entry page. ` +
         (existsSync(join(dir, SERVER_BUNDLE))
-          ? `Its server half (${SERVER_BUNDLE}) renders pages on a local engine only (\`--local-engine\`); ` +
+          ? `Its server half (${SERVER_BUNDLE}) renders pages on a Xano Engine only (\`--local\`); ` +
             `a host that serves files needs the root page prerendered.`
           : `Point it at the build output directory — the one that holds index.html.`),
     );
@@ -181,12 +181,12 @@ export function assertStaticDir(
   assertArchiveFits(files, where, maxBytes);
 }
 
-/** A local engine refuses an upload with more files than this, or more unpacked bytes than {@link ENGINE_MAX_UNPACKED_BYTES}. */
+/** A Xano Engine refuses an upload with more files than this, or more unpacked bytes than {@link ENGINE_MAX_UNPACKED_BYTES}. */
 const ENGINE_MAX_FILES = 20_000;
 const ENGINE_MAX_UNPACKED_BYTES = 256 * 1024 * 1024;
 
 /**
- * Refuse a build a local engine would answer 400 to, before the backend import
+ * Refuse a build a Xano Engine would answer 400 to, before the backend import
  * it follows has already landed. Counts the files the upload carries and their
  * sizes by stat, walking the tree as {@link scanFiles} does.
  */
@@ -200,13 +200,13 @@ function assertWithinEngineLimits(dir: string, where: string): void {
   const advice = "Point at the build output only (not the project root or node_modules), or trim what it ships.";
   if (files > ENGINE_MAX_FILES) {
     throw new StaticDirError(
-      `${where}: ${files.toLocaleString("en-US")} files, over a local engine's limit of ${ENGINE_MAX_FILES.toLocaleString("en-US")}. ${advice}`,
+      `${where}: ${files.toLocaleString("en-US")} files, over a Xano Engine's limit of ${ENGINE_MAX_FILES.toLocaleString("en-US")}. ${advice}`,
     );
   }
   if (bytes > ENGINE_MAX_UNPACKED_BYTES) {
     const mb = (n: number): number => Number((n / (1024 * 1024)).toFixed(2));
     throw new StaticDirError(
-      `${where}: ${mb(bytes)} MB unpacked, over a local engine's limit of ${mb(ENGINE_MAX_UNPACKED_BYTES)} MB. ${advice}`,
+      `${where}: ${mb(bytes)} MB unpacked, over a Xano Engine's limit of ${mb(ENGINE_MAX_UNPACKED_BYTES)} MB. ${advice}`,
     );
   }
 }
@@ -280,7 +280,7 @@ export function findSeedLeaks(
   values = values.filter((v) => v.scannable !== false);
   if (values.length === 0 || !existsSync(dir)) return [];
   const leaks: SeedLeak[] = [];
-  // The server half is never served: a local engine keeps it privately and every
+  // The server half is never served: a Xano Engine keeps it privately and every
   // other host is not sent it. Server code reading a seed value is not a leak.
   for (const file of collectFiles(dir, { server: false })) {
     // Latin-1 rather than UTF-8: a binary asset then decodes to harmless
@@ -402,7 +402,7 @@ export interface StaticHostRequest {
   label?: string;
   /**
    * The destination runs a build's server half (`.xano-ssr/`, written by
-   * `@xano/sdk/sveltekit`): a local engine. Anywhere else the server half is
+   * `@xano/sdk/sveltekit`): a Xano Engine. Anywhere else the server half is
    * left out of the upload, since a host that serves files only would never
    * run it and it may hold the app's private build-time env.
    */
@@ -643,7 +643,7 @@ export async function deployStaticHost(req: StaticHostRequest): Promise<StaticHo
     }
     // A build replaces the host's whole: the route's own failure published
     // nothing, and only a gateway's 502/503/504 leaves it unknown. The status
-    // travels on the error for a caller that explains one (a local engine too
+    // travels on the error for a caller that explains one (a Xano Engine too
     // old to host static sites answers 501).
     throw Object.assign(
       new Error(withWriteStatusAftermath(httpFailure("Static-host build", res, text), res.status, undefined, { atomic: true })),

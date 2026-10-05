@@ -2,7 +2,7 @@
  * WHICH profile a command acts on, as a pure grammar.
  *
  * Two independent ladders compose to reach a credential: which FILE
- * (`--config`/`$XANO_CONFIG` → `--local` → the shared global cache, in
+ * (`--config`/`$XANO_CONFIG` → `--local-auth` → the shared global cache, in
  * `resolveAuthFilePath`), then which PROFILE inside it — this module.
  *
  * Nothing here touches the filesystem: the caller reads the pointer file and
@@ -55,7 +55,7 @@ export interface ProfileSelection {
   flag?: string;
   /**
    * On a `"file-default"` selection read from a credential file that is NOT
-   * this machine's shared one (`--config`, `--local`, `$XANO_CONFIG`): that
+   * this machine's shared one (`--config`, `--local-auth`, `$XANO_CONFIG`): that
    * file's path. Its `default` key governs runs that read that file, so
    * "this machine's stored default" would misname it.
    */
@@ -162,7 +162,7 @@ export function describeProfileSelection(selection: ProfileSelection): string {
  * same rung the same way or the reader cannot match them up.
  */
 export function profileSourceLabel(source: ProfileSource, defaultIn?: string): string {
-  // A `--config`/`--local` file's default is that file's, not the machine's —
+  // A `--config`/`--local-auth` file's default is that file's, not the machine's —
   // the words `login` uses for it.
   if (source === "file-default" && defaultIn !== undefined) return `the default profile in ${defaultIn}`;
   return SOURCE_LABEL[source];
@@ -227,7 +227,7 @@ export function assertValidProfileName(name: string, context = "--profile"): voi
  * A selection as the `--json` documents of `whoami` and `status` carry it:
  * `defaultIn` always present — the file whose `default` chose it, or null for
  * the machine's shared file and for every other rung — so a script reads one
- * shape rather than a key that appears only under `--config`/`--local`.
+ * shape rather than a key that appears only under `--config`/`--local-auth`.
  */
 export function selectionDocument(
   selection: ProfileSelection | null,

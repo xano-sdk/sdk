@@ -4,7 +4,7 @@
  *
  * The transport itself is {@link ./xanosdk-import.ts} — the SDK's own import
  * route (`POST /api:meta/workspace/{id}/xanosdk/import`). Every import the SDK
- * makes goes there: `deploy` (ephemeral and local engine, `mode=replace`),
+ * makes goes there: `deploy` (ephemeral and Xano Engine, `mode=replace`),
  * `deploy --keep-data` (`mode=merge`), `release`, and `preflight`'s disposable
  * environment. The SDK never calls the instance's general-purpose
  * `workspace/{id}/import` route, which is a backup-restore and transfer route

@@ -1,10 +1,10 @@
 /**
- * The machine's record of which local engine belongs to which project.
+ * The machine's record of which Xano Engine belongs to which project.
  *
  * MACHINE-GLOBAL, keyed by project path. The hosted equivalent
  * (`src/deploy/ephemeral-state.ts`) keys by profile, instance host and
- * workspace id and lives in the project tree; a local engine has none of those
- * three, and a per-project file could not answer `local-engine stop --all`
+ * workspace id and lives in the project tree; a Xano Engine has none of those
+ * three, and a per-project file could not answer `local stop --all`
  * honestly — that command reconciles against an enumeration covering the whole
  * machine, so its state has to cover the whole machine too. One file under the
  * cache root is both the correct scope and the simpler thing.
@@ -12,7 +12,7 @@
  * **A record is a hint, never truth.** It holds no token, because the engine's
  * own enumeration re-emits one for every engine it still owns, and it holds no
  * pid, because nothing here ever signals one — a pid is reused after a reboot,
- * and a recorded one answers none of the three ways a local engine goes stale
+ * and a recorded one answers none of the three ways a Xano Engine goes stale
  * (the process is gone, the port now belongs to something else, the bearer
  * expired while the engine lives). So the file is safe to keep and safe to
  * ignore: reads fall back to empty rather than throwing, exactly as the hosted
@@ -24,7 +24,7 @@
  * projects). The write itself is atomic; the read-modify-write is not, so
  * without the lock the last writer silently undid the others — a lost record,
  * a lost completed-import marker, or a cleared record brought back by a write
- * that read the file before the clear (xanots/sdk#568).
+ * that read the file before the clear.
  *
  * Node-only, reached by a lazy import from the command layer.
  */
@@ -44,7 +44,7 @@ export const LOCAL_ENGINE_STATE_FILE = "engines.json";
  *
  * `engineUrl` and `engineDigest` are the engine's IDENTITY, taken straight off
  * the cache entry that was spawned. They are what lets a reuse path and
- * `local-engine list` tell one cached engine from another, and what a version
+ * `local list` tell one cached engine from another, and what a version
  * disagreement is reported against, without this module knowing anything about
  * where engines are published.
  */
@@ -280,7 +280,7 @@ function localEngineStateLockPath(env: NodeJS.ProcessEnv = process.env): string 
  * there returns at once. That answer is as good as a locked one: every write
  * is an atomic rename, so the unlocked read is a whole file some writer left,
  * and "there was nothing to clear" holds at the moment it was read. What it
- * buys is that a no-op — `local-engine stop` for an engine with no record,
+ * buys is that a no-op — `local stop` for an engine with no record,
  * possibly on a machine that never ran one — creates no directory and never waits
  * on another process's lock. Anything that changes the file re-reads it under
  * the lock and applies the edit to what it reads there.

@@ -1,7 +1,7 @@
 /**
- * The facts about a local engine that a REFUSAL needs, and nothing else.
+ * The facts about a Xano Engine that a REFUSAL needs, and nothing else.
  *
- * `deploy --local-engine` has to answer two questions before it does any work:
+ * `deploy --local` has to answer two questions before it does any work:
  * does this machine have a platform the engine is built for, and where does
  * this run's engine come from — an override the flag names, or a published
  * release. Both answers are cheap, neither touches the network or spawns
@@ -68,7 +68,7 @@ export function resolveEnginePlatform(
  * Named here rather than read inline so the tests, the acquisition module and
  * the process module cannot disagree about its spelling.
  */
-export const LOCAL_ENGINE_HOME_ENV = "XANOSDK_LOCAL_ENGINE_HOME";
+export const LOCAL_ENGINE_HOME_ENV = "XANOSDK_ENGINE_HOME";
 
 /**
  * Where this feature keeps its state: `~/.xanosdk/local-engine` by default, or
@@ -161,7 +161,7 @@ export type EngineSourceSpec =
  * moved to, without touching the committed `package.json`.
  *
  * It takes three forms, told apart by shape — the same three a value on
- * `--local-engine=` takes:
+ * `--local=` takes:
  *
  *   - a version, `v0.1.5` or `0.1.5` — that release, from the release manager;
  *   - an `http(s)` URL — an engine archive fetched from there;
@@ -172,7 +172,7 @@ export type EngineSourceSpec =
  * and above the pin, and like the flag it never writes the pin or asks about
  * updates.
  */
-export const LOCAL_ENGINE_OVERRIDE_ENV = "XANOSDK_LOCAL_ENGINE_OVERRIDE";
+export const LOCAL_ENGINE_OVERRIDE_ENV = "XANOSDK_ENGINE_OVERRIDE";
 
 /** A version as an override may spell it: the leading `v` is optional. */
 const OVERRIDE_VERSION = /^v?\d+\.\d+\.\d+$/;
@@ -193,7 +193,7 @@ function overrideSpec(value: string): EngineSourceSpec {
 /**
  * Whether an `http(s)` override may be fetched at all: `https`, or `http` to
  * this machine. Anything else would carry the engine — and any
- * `XANOSDK_LOCAL_ENGINE_TOKEN` — in cleartext past whoever is on the path, and
+ * `XANOSDK_ENGINE_TOKEN` — in cleartext past whoever is on the path, and
  * the bytes that come back are then EXECUTED. The rule the release index is
  * held to, applied to the override too.
  */
@@ -213,7 +213,7 @@ export function isTrustedEngineUrl(value: string): boolean {
  * An override that is a path, as an absolute path.
  *
  * `~` is expanded here rather than left to the shell: the glued form
- * (`--local-engine=~/Downloads/engine.tar.gz`) is the one being recommended to
+ * (`--local=~/Downloads/engine.tar.gz`) is the one being recommended to
  * testers, and no shell expands a tilde in the middle of a word. HOME is read
  * off the env passed in, so a test can name a home directory.
  */
@@ -238,7 +238,7 @@ const ARCHIVE_SUFFIX = /\.(tar\.gz|tgz|gz|tar|zip)$/i;
  *     names no file here — read as a path it would end in "no engine archive
  *     at …/vbogus", which answers a question the operator never asked.
  *
- * `where` names what carried the value (`--local-engine`, the variable).
+ * `where` names what carried the value (`--local`, the variable).
  */
 export function engineOverrideRefusal(
   value: string,
@@ -250,7 +250,7 @@ export function engineOverrideRefusal(
     return (
       `${where} names an engine over plain http on a host that is not this machine. An engine is ` +
       `a program this command runs, so fetched that way anyone on the network path could swap it ` +
-      `(and read XANOSDK_LOCAL_ENGINE_TOKEN if it is set). Nothing was requested.\n` +
+      `(and read XANOSDK_ENGINE_TOKEN if it is set). Nothing was requested.\n` +
       `Serve the archive over https://, or over http:// from 127.0.0.1, ::1 or localhost.`
     );
   }
@@ -304,7 +304,7 @@ export function engineSourceRefusal(
   flagValue: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
-  if (flagValue !== undefined && flagValue !== "") return engineOverrideRefusal(flagValue, "`--local-engine`", env);
+  if (flagValue !== undefined && flagValue !== "") return engineOverrideRefusal(flagValue, "`--local`", env);
   const fromEnv = readEnvVar(LOCAL_ENGINE_OVERRIDE_ENV, env)?.trim();
   if (fromEnv === undefined) return undefined;
   return engineOverrideRefusal(fromEnv, LOCAL_ENGINE_OVERRIDE_ENV, env);

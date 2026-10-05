@@ -397,11 +397,11 @@ export interface ParsedArgs {
   /** `--config <path>`: explicit credential file. Default: $XANO_CONFIG, then ./.xano/auth.json. */
   authFile: string | undefined;
   /**
-   * `--local`: use the project-local `./.xano/auth.json` cache instead of the
-   * shared `~/.xanosdk/auth.json` one (the default). `login --local` writes
-   * there; other commands read it. Without `--local`, reads still prefer an
+   * `--local-auth`: use the project-local `./.xano/auth.json` cache instead of the
+   * shared `~/.xanosdk/auth.json` one (the default). `login --local-auth` writes
+   * there; other commands read it. Without `--local-auth`, reads still prefer an
    * existing project-local cache before falling back to the global one, so a
-   * `--local` project keeps working without repeating the flag.
+   * `--local-auth` project keeps working without repeating the flag.
    */
   local: boolean;
   /** `logout --all`: clear every stored profile, not just the active one. */
@@ -452,7 +452,7 @@ export interface ParsedArgs {
   runtime: boolean;
   /** `preflight --capture`: write each round-tripped function's fetched JSON (candidate fixtures). */
   capture: boolean;
-  /** `local-engine cache clear --legacy-runtime`: remove the runtime copies earlier builds left in the user's own cache directory. */
+  /** `local cache clear --legacy-runtime`: remove the runtime copies earlier builds left in the user's own cache directory. */
   legacyRuntime: boolean;
   /** `preflight --verbose`: print full diffs / raw engine detail instead of a projected summary. */
   verbose: boolean;
@@ -564,7 +564,7 @@ export interface ParsedArgs {
    * (`.env.local`) at the backend this deploy made. The write is a managed
    * block that leaves the rest of the file alone, so the opt-out is for the
    * developer who wants that variable to stay exactly where they put it —
-   * pinned at a colleague's environment, say, or at a local engine.
+   * pinned at a colleague's environment, say, or at a Xano Engine.
    */
   noDevEnv: boolean;
   /**
@@ -689,30 +689,32 @@ export interface ParsedArgs {
    */
   to: string | undefined;
   /**
-   * `deploy --local-engine`: send this deploy to a Xano engine running on THIS
-   * machine instead of to an ephemeral.
+   * `deploy` to the Xano Engine on THIS machine: the default for a deploy that
+   * names no other destination, and what `--local` asks for explicitly.
    *
-   * A DESTINATION, not a modifier — mutually exclusive with {@link to}, and
-   * refused alongside `--static`, which has no host to publish to here.
+   * A DESTINATION, not a modifier — mutually exclusive with {@link to} and
+   * {@link ephemeral}.
    */
   localEngine: boolean;
+  /** `deploy --ephemeral`: send this deploy to a disposable ephemeral on Xano's cloud instead. */
+  ephemeral: boolean;
   /**
-   * `deploy --local-engine=<version|url|path>`: an OVERRIDE engine — a
+   * `deploy --local=<version|url|path>`: an OVERRIDE engine — a
    * published version (`v0.1.8`, the `v` optional), an `http(s)` URL to fetch it
    * from, or the path to an engine archive already on disk (`~` and relative
    * paths both resolve). An override never reads or writes the project's pin
-   * and skips the update check. XANOSDK_LOCAL_ENGINE_OVERRIDE supplies the same
+   * and skips the update check. XANOSDK_ENGINE_OVERRIDE supplies the same
    * value from the environment when the flag carries none.
    *
-   * Absent (a bare `--local-engine`), the run uses the project's pinned engine
-   * version from `package.json` (`"xanosdk": { "@xano/sdk": { "localEngine" } }`),
+   * Absent (a bare `--local`), the run uses the project's pinned engine
+   * version from `package.json` (`"xanosdk": { "@xano/sdk": { "engine" } }`),
    * or on the first run the latest published engine, which it then pins. A
    * newer published engine is offered on a terminal and never applied without
    * an explicit yes.
    */
   localEngineUrl: string | undefined;
   /**
-   * `local-engine update --version <v>` / `local-engine cache clear --version <v>`:
+   * `local update --version <v>` / `local cache clear --version <v>`:
    * the engine version to move the pin to, or the cached one to remove. Taken as
    * typed; the command normalizes it (`0.1.5` → `v0.1.5`). Only the first token
    * spells the CLI's own version (`xanosdk --version`), so this cannot collide.
@@ -780,7 +782,7 @@ const NOUN_COMMANDS = new Set([
   "env",
   "secrets",
   "ephemeral",
-  "local-engine",
+  "local",
   "workspace",
   "marketplace",
   "test",
@@ -1007,6 +1009,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let staticDir: string | undefined;
   let to: string | undefined;
   let localEngine = false;
+  let ephemeral = false;
   let localEngineUrl: string | undefined;
   let engineVersion: string | undefined;
   let description: string | undefined;
@@ -1394,22 +1397,24 @@ export function parseArgs(argv: string[]): ParsedArgs {
       // success. Same hazard as `--branch` below, in the other direction.
       if (value === undefined || value === "") throw selectorValueMissing("to", "--to", command, subcommand);
       to = value;
-    } else if (arg === "--local-engine" || arg.startsWith("--local-engine=")) {
-      // `env set|unset` took a boolean `--local-engine` before a local engine
+    } else if (arg === "--ephemeral") {
+      ephemeral = true;
+    } else if (arg === "--local" || arg.startsWith("--local=")) {
+      // `env set|unset` took a boolean `--local` before a Xano Engine
       // was a selector kind. Dropping it silently would turn `env set K v
-      // --local-engine` into a write to the tracked ephemeral, so it names the
+      // --local` into a write to the tracked ephemeral, so it names the
       // new spelling instead.
       if (command === "env" && (subcommand === "set" || subcommand === "unset")) {
-        throw new UsageError("`--local-engine` here is `--to local-engine`.", {
+        throw new UsageError("`--local` here is `--to local`.", {
           helpFor: helpTargetFor(command, subcommand),
         });
       }
       localEngine = true;
-      if (arg.startsWith("--local-engine=")) {
-        const value = arg.slice("--local-engine=".length);
+      if (arg.startsWith("--local=")) {
+        const value = arg.slice("--local=".length);
         if (value === "") {
           throw new UsageError(
-            "--local-engine= expects an engine version (v0.1.5), a URL to fetch the engine " +
+            "--local= expects an engine version (v0.1.5), a URL to fetch the engine " +
               "from, or the path to an engine archive on this machine.",
           );
         }
@@ -1420,14 +1425,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
         /^v?\d+\.\d+\.\d+$/.test(rest[i + 1] ?? "")
       ) {
         // The value is OPTIONAL, so a separated one is taken only when it could
-        // not be anything else. `xanosdk deploy --local-engine ./xano/index.ts`
+        // not be anything else. `xanosdk deploy --local ./xano/index.ts`
         // names the entry file, and swallowing it would turn a normal deploy
         // into a download from a path that is not a URL.
         //
         // An archive SUFFIX is the same test in the other form, and it is safe
         // for the same reason: an entry file ends `.ts` or `.js`, never
         // `.tar.gz` or `.tgz`, so the two cannot collide. Without it the form a
-        // tester actually types — `--local-engine ~/Downloads/engine.tar.gz` —
+        // tester actually types — `--local ~/Downloads/engine.tar.gz` —
         // drops the value silently and then refuses with "no engine cached".
         // A bare version (`v0.1.8`) cannot be an entry file either.
         localEngineUrl = rest[++i];
@@ -1468,7 +1473,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
       authFile = expandHome(requireValue(arg));
     } else if (arg.startsWith("--config=")) {
       authFile = expandHome(attachedValue(arg, "--config="));
-    } else if (arg === "--local") {
+    } else if (arg === "--local-auth") {
       useLocal = true;
     } else if (arg === "--paste") {
       paste = true;
@@ -1883,7 +1888,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     );
   }
   // Parsed for every command in the one loop, honoured by few. Each is refused
-  // where it is undeclared rather than dropped: a dropped `--local-engine`
+  // where it is undeclared rather than dropped: a dropped `--local`
   // would send a write meant for this machine to the tracked ephemeral.
   if (on !== undefined) {
     // Per command: a list of every selector spelling sent `env pull` (which
@@ -1904,16 +1909,37 @@ export function parseArgs(argv: string[]): ParsedArgs {
   }
   if (localEngine) {
     refuseUnlessDeclared(
-      "local-engine",
-      "--local-engine",
+      "local",
+      "--local",
       "only `deploy` takes it, because only a deploy downloads, pins and starts an engine. " +
-        // Command-aware: `publish` refuses `--to local-engine` too, so pointing
-        // it there sent the reader from one refusal to the next.
-        (command === "publish"
-          ? "A local engine takes a frontend only through `xanosdk deploy --local-engine --static <dir>`; " +
-            "`publish` publishes to an ephemeral's, a tenant's or your workspace's static host (`--to`)."
-          : "Elsewhere a local engine is a backend: `--to local-engine`, `--from local-engine`, or `local-engine` as the positional."),
+        "Elsewhere a Xano Engine is a backend: `--to local`, `--from local`, or `local` as the positional.",
     );
+  }
+  if (ephemeral) {
+    refuseUnlessDeclared(
+      "ephemeral",
+      "--ephemeral",
+      "only `deploy` takes it. Elsewhere an ephemeral is a backend: `--to ephemeral`, `--from ephemeral`, or `ephemeral` as the positional.",
+    );
+  }
+  if (command === "deploy") {
+    // One destination per deploy. Refused here, before anything compiles, so
+    // a run that named two never reaches either.
+    if (ephemeral && localEngine) {
+      throw new UsageError(
+        "`--ephemeral` and `--local` are two destinations, and a deploy has one. Drop whichever is not meant.",
+        { helpFor: { command: "deploy" } },
+      );
+    }
+    if (ephemeral && to !== undefined) {
+      throw new UsageError(
+        "`--ephemeral` and `--to` are two destinations, and a deploy has one: `--ephemeral` replaces a " +
+          "disposable ephemeral, `--to` merges into a backend that already exists. Drop whichever is not meant.",
+        { helpFor: { command: "deploy" } },
+      );
+    }
+    // The Xano Engine is where a deploy goes when it names nowhere else.
+    if (!ephemeral && to === undefined) localEngine = true;
   }
   if (guest) {
     refuseUnlessDeclared(
@@ -2168,6 +2194,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     staticHost,
     to,
     localEngine,
+    ephemeral,
     localEngineUrl,
     engineVersion,
     description,
@@ -2304,7 +2331,7 @@ export function resolveHelpRequest(argv: string[]): HelpRequest | undefined {
   ) {
     return { command: first };
   }
-  // `xanosdk marketplace install help`, `local-engine cache help`, `profile add
+  // `xanosdk marketplace install help`, `local cache help`, `profile add
   // help`: the same word after a verb, as its only argument, is that verb's
   // help — it was a package looked up on the network, an unknown cache action,
   // a profile named "help" (E2E pass 25). The same `help`-file exception.
@@ -3241,7 +3268,7 @@ function renameCandidates(
     return routed.length === 1 ? routed : routed.filter((k) => plausibleRename(orphanName, nameOf(k), true));
   };
   // Never a name a landing record holds under another identity — the lock's
-  // records, an ephemeral's, a local engine's: it is live there as an object
+  // records, an ephemeral's, a Xano Engine's: it is live there as an object
   // of its own, so moving the orphan's identity onto it wedges that backend's
   // next deploy. A `pull release:` drops such an entry from `objects` and keeps
   // its landing, so it reads as a newcomer too (E2E pass 28: `list_tags`,
@@ -3947,7 +3974,7 @@ function hoistLeadingGlobalFlags(argv: readonly string[]): { argv: string[]; com
  * the project, and where the entry, the lock and every tracked record in
  * `.xano/` live. Every command that reads or writes that state goes through
  * here: the ones defaulting to "the backend this project last deployed to"
- * (`tables`, `test`, `env`, `impersonate`, `local-engine token`, …) refused
+ * (`tables`, `test`, `env`, `impersonate`, `local token`, …) refused
  * from a subdirectory, and a deploy from there landed at the root, so the next
  * bare command refused again.
  *
@@ -3961,7 +3988,7 @@ const PATHLESS_VERBS: Readonly<Record<string, ReadonlySet<string>>> = {
   ephemeral: new Set(["list", "get", "delete"]),
   tenant: new Set(["list", "get", "delete", "details"]),
   release: new Set(["list", "show", "delete"]),
-  "local-engine": new Set(["token", "stop"]),
+  "local": new Set(["token", "stop"]),
   test: new Set(["list", "run", "run-all"]),
 };
 
@@ -3987,7 +4014,7 @@ async function atProjectRoot(
   const entered = enterProjectRoot(args, process.cwd(), positional);
   if (entered === undefined) return command(args);
   // A verb that prints and reads no project-relative path (`ephemeral list`,
-  // `local-engine token`) runs at the root for its tracked records alone, so
+  // `local token`) runs at the root for its tracked records alone, so
   // the note would explain paths it never prints.
   if (isPathlessRun(args)) {
     setHintContext(entered.args);
@@ -4055,7 +4082,7 @@ function isKindShapedOrBare(raw: string): boolean {
  * `whoami --version` said "--version expects an engine version", and
  * `status -v` "Unknown flag -v". Not when a value follows (`deploy --version
  * v0.1.5` is an engine version on the wrong command, refused as such), not on
- * a verb that DOES take one (`local-engine update --version v0.1.5`), not past
+ * a verb that DOES take one (`local update --version v0.1.5`), not past
  * `--`, and never on `env set`, whose value may be `-v`.
  */
 export function globalVersionAsked(argv: readonly string[]): boolean {
@@ -4066,7 +4093,7 @@ export function globalVersionAsked(argv: readonly string[]): boolean {
 }
 
 /**
- * `status -v extra`, `tables --version local-engine`: the global version flag
+ * `status -v extra`, `tables --version local`: the global version flag
  * followed by a positional. Neither reading is safe to guess — the run the
  * reader wanted, or the version — so it is one usage error naming both ways
  * out, never "Unknown flag -v. Did you mean: --version". An engine-version-
@@ -4200,7 +4227,7 @@ async function dispatch(rawArgv: string[]): Promise<void> {
     if (isUsageError(err) && hintFor === undefined) throw err;
     throw new UsageError(err.message, { ...(isUsageError(err) && err.suggestion !== undefined ? { suggestion: err.suggestion } : {}), ...hintFor });
   }
-  // Every printed `xanosdk …` hint carries this run's `--config`/`--local`/
+  // Every printed `xanosdk …` hint carries this run's `--config`/`--local-auth`/
   // `--profile`, including the ones printed far below any `args`.
   setHintContext(args);
   runArgs = args;
@@ -4217,7 +4244,7 @@ async function dispatch(rawArgv: string[]): Promise<void> {
   }
   if (command === "version" || command === "--version" || command === "-v") {
     // Bare unless `--json` is passed by name — not on a mere pipe, the way
-    // `local-engine token` is: `$(xanosdk version)` is the form this exists for,
+    // `local token` is: `$(xanosdk version)` is the form this exists for,
     // and it is always piped.
     // `xanosdk -v extra` read nothing of "extra" and exited 0 — the same misuse
     // `status -v extra` refuses, refused in the same words (E2E pass 25).
@@ -4324,7 +4351,7 @@ async function dispatch(rawArgv: string[]): Promise<void> {
     const { runEphemeralCommand } = await import("./ephemeral-command.js");
     return atProjectRoot(args, runEphemeralCommand);
   }
-  if (command === "local-engine") {
+  if (command === "local") {
     // Node-only (it runs the engine's own verbs and reads the binary cache);
     // lazily imported like the other Node-only command modules.
     const { runLocalEngineCommand } = await import("./local-engine-command.js");
@@ -4865,14 +4892,14 @@ function noteUnlockedBuild(): void {
  * The runnable form: `lock import` takes an exported bundle, so the export that
  * writes one is named too, with this run's credential and lock. None for a
  * backend this project makes or owns — the ephemeral a bare deploy tracks or
- * creates, a local engine — which serves nothing this project did not land.
+ * creates, a Xano Engine — which serves nothing this project did not land.
  */
 function adoptBeforeFirstLock(
   lockPath: string,
   args: Pick<ParsedArgs, "command" | "to" | "localEngine"> | undefined,
 ): string | undefined {
   const deploying = args?.command === "deploy";
-  if (deploying && (args.localEngine || args.to === undefined || args.to.startsWith("local-engine"))) return undefined;
+  if (deploying && (args.localEngine || args.to === undefined || args.to.startsWith("local"))) return undefined;
   const importLine = `\`xanosdk lock import live.json --lock=${shellWord(displayPath(lockPath))} --yes\``;
   const ending = "so the lock adopts the URLs it already serves instead of values it will not accept.";
   const target = deploying ? args.to! : "workspace";
@@ -6474,7 +6501,7 @@ export function checkStandInTokens(def: Xano): { values: Record<string, string>;
  */
 function docMergeOf(args: ParsedArgs): "keep-data" | "to" | undefined {
   if (args.command !== "deploy" || args.localEngine) return undefined;
-  if (args.to !== undefined) return args.replace || args.to.startsWith("local-engine") ? undefined : "to";
+  if (args.to !== undefined) return args.replace || args.to.startsWith("local") ? undefined : "to";
   return args.keepData && !args.reset ? "keep-data" : undefined;
 }
 
@@ -6535,7 +6562,7 @@ export function noteRunScope(scope: EnvScope | undefined): void {
  * another instance, workspace or profile does not count; `null` means it
  * refuses ("no backend to default to", "No ephemeral is tracked on <host>")
  * and a remedy naming it would dead-end. No credential resolved means an
- * ephemeral cannot be looked up, and only a local engine counts. The
+ * ephemeral cannot be looked up, and only a Xano Engine counts. The
  * record says nothing of liveness, and an ephemeral expires within the hour: a
  * pull offered against one already gone exits 8 (E2E pass 17 #3). Its recorded
  * expiry is read here, for free; a deletion before it is caught on the refusal

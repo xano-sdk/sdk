@@ -109,7 +109,7 @@ export async function runProfileCommand(args: ParsedArgs): Promise<void> {
  * a project-local file cannot capture a global sign-in: these verbs manage the
  * profiles a command in THIS directory will actually use, and `profile list`
  * showing one file while `profile delete` removed from another is the confusion
- * worth designing out. `--config` and `--local` still override.
+ * worth designing out. `--config` and `--local-auth` still override.
  */
 function profileFilePath(args: ParsedArgs): string {
   return resolveAuthFilePath(args, "read");
@@ -204,7 +204,7 @@ function validName(name: string, verb: string): void {
 
 /**
  * Whose default a file's `default` key is: the machine's for the shared file,
- * that file's for a `--config`/`--local` one — the words `login` uses.
+ * that file's for a `--config`/`--local-auth` one — the words `login` uses.
  */
 function defaultOf(path: string): string {
   return path === globalAuthFilePath() ? "this machine's default" : `the default profile in ${path}`;
@@ -256,7 +256,7 @@ function storedNamesLine(file: CredentialFile, path: string): string {
 
 /**
  * The two ways to store a first profile IN `path` — carrying `--config` or
- * `--local` when it is not the shared file, since a bare `xanosdk login` would
+ * `--local-auth` when it is not the shared file, since a bare `xanosdk login` would
  * sign into that one instead.
  */
 function signInLine(path: string): string {
@@ -757,8 +757,8 @@ function warnIfLocalShadowsPin(localPath: string, added: string): void {
       `Commands here now read ${localPath} instead, so "${pin.profile}" no longer resolves.`,
     "profile.local-shadows-pin",
     [
-      `Undo with \`xanosdk profile delete ${added} --local\`, or re-pin to the new profile with ` +
-        `\`xanosdk profile use ${added} --local\`.`,
+      `Undo with \`xanosdk profile delete ${added} --local-auth\`, or re-pin to the new profile with ` +
+        `\`xanosdk profile use ${added} --local-auth\`.`,
     ],
   );
 }

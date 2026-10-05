@@ -488,7 +488,7 @@ export interface WriteTarget {
  * exactly the confusion the disclosure exists to prevent.
  */
 export interface LocalEngineTarget {
-  readonly kind: "local-engine";
+  readonly kind: "local";
   /** The engine's base URL, loopback by construction. */
   readonly url: string;
   readonly workspaceId: number;
@@ -498,13 +498,13 @@ export interface LocalEngineTarget {
 export type DisclosureTarget = WriteTarget | LocalEngineTarget;
 
 function isLocalEngine(target: DisclosureTarget): target is LocalEngineTarget {
-  return "kind" in target && target.kind === "local-engine";
+  return "kind" in target && target.kind === "local";
 }
 
 /**
  * The two facts a mistargeted run turns on, as one phrase:
  * `app.xano.com · workspace 12`, or `tenant "prod" — prod.xano.io · workspace 1`,
- * or `local engine · 127.0.0.1:4200 · workspace 1`.
+ * or `Xano Engine · 127.0.0.1:4200 · workspace 1`.
  *
  * Returned rather than printed because the commands disagree about where it
  * belongs — see {@link discloseWriteTarget} — and both renderings have to be the
@@ -516,7 +516,7 @@ export function describeWriteTarget(target: DisclosureTarget): string {
     // The words come first, before anything a reader could mistake for a host
     // they recognize: what this line has to establish is that nothing here is
     // on a Xano instance at all.
-    return `local engine · ${hostLabel(target.url)} · workspace ${target.workspaceId}`;
+    return `Xano Engine · ${hostLabel(target.url)} · workspace ${target.workspaceId}`;
   }
   const where = `${hostLabel(target.base)} · workspace ${target.workspaceId}`;
   return target.label === undefined || target.label === "" ? where : `${target.label} — ${where}`;
@@ -579,7 +579,7 @@ export function credentialWriteTarget(binding: { instance: string; workspaceId: 
  * wrapper compares against its own configuration, and `hostLabel` is a reading
  * aid that drops information.
  *
- * A local engine carries `local: true` alongside it. A wrapper must not have to
+ * A Xano Engine carries `local: true` alongside it. A wrapper must not have to
  * infer "this is not a hosted backend" from the shape of a URL — a loopback
  * address is a fact about the network, not about what kind of destination this
  * was — and the flag is absent, not `false`, everywhere else, so its presence
@@ -593,11 +593,11 @@ export function writeTargetPayload(target: DisclosureTarget): {
   instance: string;
   workspaceId: number;
   label?: string;
-  kind?: "workspace" | "ephemeral" | "tenant" | "local-engine";
+  kind?: "workspace" | "ephemeral" | "tenant" | "local";
   local?: true;
 } {
   if (isLocalEngine(target)) {
-    return { instance: target.url, workspaceId: target.workspaceId, kind: "local-engine", local: true };
+    return { instance: target.url, workspaceId: target.workspaceId, kind: "local", local: true };
   }
   return {
     instance: target.base,

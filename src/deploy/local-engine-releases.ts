@@ -4,11 +4,11 @@
  *
  * The release manager is a public index: every published engine release, each
  * with one archive per platform it was built for and that archive's sha256.
- * Asking it is what lets a bare `--local-engine` work with nothing configured,
+ * Asking it is what lets a bare `--local` work with nothing configured,
  * and what lets a project pin a version everyone on it resolves the same way.
  *
  * **Unauthenticated, always.** The index is public, so no request here carries
- * a credential — not even when `XANOSDK_LOCAL_ENGINE_TOKEN` is set, which
+ * a credential — not even when `XANOSDK_ENGINE_TOKEN` is set, which
  * belongs to an operator-named download URL and to nothing else.
  *
  * Responses are projected field by field rather than cast, in the style of
@@ -295,7 +295,7 @@ export async function resolveEngineRelease(opts: ResolveEngineReleaseOptions): P
     if (status === 404) {
       throw new EngineReleaseNotFoundError(
         `There is no published engine release ${wanted}.\n` +
-          `Check the version, or run \`xanosdk local-engine update\` to move to the latest one.`,
+          `Check the version, or run \`xanosdk local update\` to move to the latest one.`,
       );
     }
     if (body === undefined) throw failed(status, display);
@@ -303,7 +303,7 @@ export async function resolveEngineRelease(opts: ResolveEngineReleaseOptions): P
     if (asset === undefined) {
       throw new Error(
         `Engine release ${wanted} has no archive for ${platform}, so nothing was downloaded.\n` +
-          `Run \`xanosdk local-engine update\` to move to a release built for ${platform}.`,
+          `Run \`xanosdk local update\` to move to a release built for ${platform}.`,
       );
     }
     return asset;

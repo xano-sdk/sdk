@@ -1,6 +1,6 @@
 /**
  * `@xano/sdk/sveltekit`: a SvelteKit adapter whose output a Xano static host
- * publishes, and a local engine also renders on the server.
+ * publishes, and a Xano Engine also renders on the server.
  *
  * It goes wherever the project configures SvelteKit. A project `npx sv create`
  * makes today has no `svelte.config.js`: the config is the object passed to
@@ -33,14 +33,14 @@
  *   the routes left to the browser still boot.
  * - the SERVER half at `.xano-ssr/server.js`: SvelteKit's server and the app's
  *   routes in one script, which answers every request that is not a file. A
- *   local engine (`xanosdk deploy --local-engine --static build`) runs it, so a
+ *   Xano Engine (`xanosdk deploy --local --static build`) runs it, so a
  *   dynamic route arrives as HTML with its own `<title>` and meta tags.
  *
  * ## The server bundle is never public
  *
  * SvelteKit inlines every `$env/static/private` value into the server code at
  * build time, so `.xano-ssr/server.js` can hold secrets. It sits in a dot directory
- * for that reason: `xanosdk deploy` sends it only to a local engine, which keeps
+ * for that reason: `xanosdk deploy` sends it only to a Xano Engine, which keeps
  * it privately and answers `/.xano-ssr/…` with a 404, and a static host that is
  * sent it anyway (an older SDK, another uploader) never publishes a hidden file.
  *
@@ -81,7 +81,7 @@ export interface XanoAdapterOptions {
    * A fallback page for hosts that serve files only: SvelteKit's app shell,
    * which renders the requested route in the browser. Written as `404.html`
    * by default, which a multipage static host serves (with status 404) for a
-   * path it holds no file for. `false` writes none. A local engine that runs
+   * path it holds no file for. `false` writes none. A Xano Engine that runs
    * the server half never serves it: SvelteKit renders the route itself.
    */
   fallback?: string | false;

@@ -703,7 +703,7 @@ async function seedRowRemedies(
   const resettable = seededHere === undefined ? [] : tables.filter((t) => seededHere.has(t.name) && t.guid !== undefined);
   const r = shellWord(release.name);
   const before = [
-    `The release's rows land with a deploy of the release: \`xanosdk deploy release:${r}${flags}\` on this ` +
+    `The release's rows land with a deploy of the release: \`xanosdk deploy release:${r} --ephemeral${flags}\` on this ` +
       `project's ephemeral, or \`xanosdk tenant deploy <tenant> ${r}${flags}\` on a tenant.`,
   ];
   if (resettable.length === 0) return { before };

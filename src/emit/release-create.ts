@@ -99,7 +99,7 @@ import { EXIT_RELEASE_REFUSED, releaseOrigin, describeOrigin, lookupRelease, typ
  * backend this project last deployed to.
  *
  * Both halves are the shared ones. The slot the registry declares refuses a
- * local engine with its reason (the cut runs on the instance) whether it was
+ * Xano Engine with its reason (the cut runs on the instance) whether it was
  * typed or came from the pointer, and the tracked-backend resolver owns the
  * three ways the default can fail — another profile, another workspace, never
  * deployed — so this command names the same fix every other bare command does.
@@ -161,7 +161,7 @@ async function refuseLiveDeployment(resolved: ResolvedSource): Promise<void> {
       // refuses with its own rerun.
       (pullable
         ? `To start from what it runs now, pull it into this project (\`xanosdk pull tenant:${t}${contextFlags()}\`), ` +
-          `\`xanosdk deploy\` it to an ephemeral, and cut from there.`
+          `\`xanosdk deploy --ephemeral\` it to an ephemeral, and cut from there.`
         : `It has no workspace yet — a tenant on its own domain gets one when its first release lands — so ` +
           `there is nothing on it to pull or cut from until then.`),
     { hintFor: { command: "release", subcommand: "create" } },
@@ -244,7 +244,7 @@ function comparisonInput(args: ParsedArgs, cwd: string): ParsedArgs | undefined 
 /**
  * How to make the source match the disk, for the source actually being cut.
  *
- * A bare `xanosdk deploy` ships to an EPHEMERAL. Offering it for a `--from
+ * `xanosdk deploy --ephemeral` ships to an EPHEMERAL. Offering it for a `--from
  * workspace` cut sends the author to run a command that leaves the workspace
  * exactly as divergent, and the re-cut then prints the same warning — a guard
  * whose own advice cannot silence it is one people learn to scroll past, which
@@ -301,7 +301,7 @@ function remedyFor(
   if (resolved.kind === "tenant") {
     return `Run \`xanosdk deploy --to tenant:${resolved.target.label}${input}\` first if you meant to cut ${what}.`;
   }
-  return `Run \`xanosdk deploy${input}\` first if you meant to cut ${what}.`;
+  return `Run \`xanosdk deploy --ephemeral${input}\` first if you meant to cut ${what}.`;
 }
 
 /**

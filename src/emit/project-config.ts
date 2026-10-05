@@ -68,7 +68,7 @@ import { assertWritable, atomicWrite } from "../util/atomic-write.js";
  * The SDK's own package name, as a key of the project's `"xanosdk"` block.
  *
  * The block is a map from package name to settings, and the SDK stores its own
- * there too — the local-engine version pin (`src/deploy/local-engine-pin.ts`).
+ * there too — the Xano Engine version pin (`src/deploy/local-engine-pin.ts`).
  * That entry is NOT a toolchain module's config, so every reader that treats a
  * key as "a module is expected" has to skip it, and every pass that drops keys
  * for packages no longer depended on has to keep it: a globally installed SDK

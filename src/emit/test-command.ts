@@ -48,9 +48,9 @@ export const EXIT_TESTS_FAILED = 5;
  *
  * `kind` is the field every `--json` document that names a backend carries.
  * `env` is the ephemeral's or tenant's server-assigned name, and only that —
- * null for a local engine, so a script feeding it to `xanosdk ephemeral` never
+ * null for a Xano Engine, so a script feeding it to `xanosdk ephemeral` never
  * addresses an engine. `name` is the backend's own name whatever its kind (the
- * same handle as `env`, or a local engine's enumerated name), the rule
+ * same handle as `env`, or a Xano Engine's enumerated name), the rule
  * `tables --json` follows; `display` is its display name. All are always
  * present, null where the kind has none, so the keys never depend on the kind.
  */
@@ -128,7 +128,7 @@ async function mapWithConcurrency<T, R>(
  */
 function sameBackend(args: ParsedArgs): string {
   const on = args.on ? ` --on ${shellQuote(args.on)}` : "";
-  return args.on !== undefined && /^local-engine\b/.test(args.on) ? on : `${on}${contextFlags(args)}`;
+  return args.on !== undefined && /^local\b/.test(args.on) ? on : `${on}${contextFlags(args)}`;
 }
 
 /** How a test is labelled in the human view: its family, and the object it hangs off. */
@@ -258,10 +258,10 @@ interface Resolved {
 /**
  * Resolve `--on`, or the tracked default when it is absent.
  *
- * The credential is a provider, not a value: a local engine is reached with
+ * The credential is a provider, not a value: a Xano Engine is reached with
  * its own bearer, so a run against one never reads (or refreshes) a Xano
  * credential — a signed-out developer iterating locally is never told to log
- * in. `--profile` beside a local engine is refused by the resolver, not dropped.
+ * in. `--profile` beside a Xano Engine is refused by the resolver, not dropped.
  */
 async function resolveOn(args: ParsedArgs, subcommand: string): Promise<Resolved> {
   const slot = requireBackendSlot("test", subcommand, "on");
@@ -459,8 +459,8 @@ async function runOne(args: ParsedArgs, name: string): Promise<void> {
  *
  * A {@link BearerTarget} rather than a full credential: the target says where to
  * read and the bearer says who is asking, and nothing beneath this reads more.
- * That is what lets `deploy --local-engine --test` run against the ENGINE's own
- * token — the alternative would be dressing a local engine up as a credential,
+ * That is what lets `deploy --local --test` run against the ENGINE's own
+ * token — the alternative would be dressing a Xano Engine up as a credential,
  * which is the one thing the local value is shaped to make impossible.
  * Reporting and the exit code stay with the caller: a deploy has its own summary
  * document to fold these into.
@@ -647,8 +647,8 @@ export function isSuiteUnreachable(err: unknown): err is Error {
  * ends: the backend's own status command where there is one, and the network.
  */
 export function suiteUnreachableCheck(ran: { kind: SourceKind; env: string | null }, args: ParsedArgs): string {
-  return ran.kind === "local-engine"
-    ? "Check that the local engine is still running (`xanosdk local-engine list`)"
+  return ran.kind === "local"
+    ? "Check that the Xano Engine is still running (`xanosdk local list`)"
     : ran.kind === "ephemeral" && ran.env !== null
       ? `Check that it is still up with \`xanosdk ephemeral get ${shellQuote(ran.env)}${contextFlags(args)}\` — an ephemeral expires — and that this machine reaches the instance`
       : "Check that this machine reaches the instance (network, VPN or proxy)";

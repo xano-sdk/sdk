@@ -169,7 +169,7 @@ export function unknownCommand(
 
 /**
  * A word that is not a command but IS a verb of one — `cache`, typed without
- * the `local-engine` it lives under. A spelling suggestion cannot reach that
+ * the `local` it lives under. A spelling suggestion cannot reach that
  * (the nearest command name is unrelated), so the owner is named instead,
  * with the full path to type.
  */
@@ -511,8 +511,8 @@ export function extraArguments(
   );
 }
 
-/** A backend handle (`ephemeral:x`, `local-engine`, …). */
-const BACKEND_HANDLE = /^(?:workspace|ephemeral|local-engine|tenant)(?::[^\s=]+)?$/;
+/** A backend handle (`ephemeral:x`, `local`, …). */
+const BACKEND_HANDLE = /^(?:workspace|ephemeral|local|tenant)(?::[^\s=]+)?$/;
 
 /** The selector flag a stray backend positional belongs on, when the command has exactly one. */
 function positionalSelectorHint(
@@ -851,8 +851,8 @@ export function processExitCode(err: unknown): number {
  * it at `impersonate workspace` would name a spelling the verb refuses.
  */
 const MOVED_TO_TOP_LEVEL: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  ["tables", new Set(["workspace", "ephemeral", "tenant", "local-engine"])],
-  ["impersonate", new Set(["ephemeral", "tenant", "local-engine"])],
+  ["tables", new Set(["workspace", "ephemeral", "tenant", "local"])],
+  ["impersonate", new Set(["ephemeral", "tenant", "local"])],
 ]);
 
 /**

@@ -41,3 +41,17 @@ free to use any other layout; only `index.ts` registering the objects matters.
 Authoring is **declarative def-objects** passed to factories; there is no callback/chaining
 builder. `xano.export()` returns the importable `packageExport` bundle, and
 `xanosdk export`/`deploy` read the module's default export.
+
+## Wiring a project by hand
+
+`xanosdk init` writes all of this for you. Without it, two lines set a project up:
+
+```bash
+npm init -y && npm pkg set type=module && npm install -D @xano/sdk
+npx xanosdk upgrade     # rewrites npm's caret to the range init writes
+```
+
+Write your workspace in `xano/index.ts`; `login` and `deploy` are unchanged. `type=module`
+matters: Xano SDK defs are ESM-only, and `npm init` writes `"type": "commonjs"`. A TypeScript
+entry wants [`tsx`](https://tsx.is) (`npm i -D tsx`), which the CLI picks up — Node's type
+stripping does not remap a workspace's `./x.js` imports.

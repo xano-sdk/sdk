@@ -52,7 +52,7 @@ import {
  * SDK has no business knowing what that is. It is attached to the host of the
  * URL the operator passed and to nothing else — see {@link fetchFollowingRedirects}.
  */
-export const LOCAL_ENGINE_TOKEN_ENV = "XANOSDK_LOCAL_ENGINE_TOKEN";
+export const LOCAL_ENGINE_TOKEN_ENV = "XANOSDK_ENGINE_TOKEN";
 
 /**
  * The most the archive is allowed to decompress to.
@@ -97,7 +97,7 @@ export function displayDownloadUrl(url: string): string {
 export type EngineFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 const defaultFetch: EngineFetch = (url, init) =>
-  fetchOrExplain(url, init, "The local engine download", DOWNLOAD_TIMEOUT_MS, displayDownloadUrl(url));
+  fetchOrExplain(url, init, "The Xano Engine download", DOWNLOAD_TIMEOUT_MS, displayDownloadUrl(url));
 
 function isRedirect(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
@@ -143,9 +143,9 @@ async function fetchFollowingRedirects(
   throw new Error(
     `The engine download redirected more than ${MAX_REDIRECTS} times, so it was abandoned.\n` +
       (opts.release === undefined
-        ? `Check the URL passed to \`--local-engine\` addresses the artifact itself.`
+        ? `Check the URL passed to \`--local\` addresses the artifact itself.`
         : `Re-run in a moment; if it keeps failing, engine ${opts.release}'s archive is ` +
-          `unavailable — \`xanosdk local-engine update\` moves to another release.`),
+          `unavailable — \`xanosdk local update\` moves to another release.`),
   );
 }
 
@@ -171,7 +171,7 @@ function releaseDownloadRefusal(status: number, version: string): Error {
     new Error(
       `The download of engine ${version} failed (HTTP ${status}), so nothing was written.\n` +
         `Re-run in a moment; if it keeps failing, that release's archive is unavailable — ` +
-        `\`xanosdk local-engine update\` moves to another release.`,
+        `\`xanosdk local update\` moves to another release.`,
     ),
   );
 }
@@ -198,7 +198,7 @@ function downloadRefusal(status: number, hasToken: boolean): Error {
   if (status === 404) {
     return new Error(
       `The engine download found nothing at that URL (HTTP 404 Not Found).\n` +
-        `Check the URL passed to \`--local-engine\` addresses the artifact` +
+        `Check the URL passed to \`--local\` addresses the artifact` +
         (hasToken
           ? ` and that ${LOCAL_ENGINE_TOKEN_ENV} can read it`
           : `; if it is a private release, which also answers 404 without a credential, set ` +
@@ -219,13 +219,13 @@ function downloadRefusal(status: number, hasToken: boolean): Error {
       status,
       new Error(
         `The engine download failed (HTTP ${status}) — the server hosting it erred, so nothing was written.\n` +
-          `Re-run in a moment; if it keeps failing, check the URL passed to \`--local-engine\` is still served.`,
+          `Re-run in a moment; if it keeps failing, check the URL passed to \`--local\` is still served.`,
       ),
     );
   }
   return new Error(
     `The engine download failed (HTTP ${status}).\n` +
-      `Check the URL passed to \`--local-engine\` still addresses the artifact` +
+      `Check the URL passed to \`--local\` still addresses the artifact` +
       (hasToken ? ` and that ${LOCAL_ENGINE_TOKEN_ENV} can read it` : ``) +
       `, then re-run.`,
   );
@@ -354,10 +354,10 @@ const badArchive = (why: string, release: string | undefined): Error =>
     `The engine archive ${why}.\n` +
       `It is not the artifact this expects, so nothing was written. ` +
       (release === undefined
-        ? `Check the URL or path passed to \`--local-engine\` addresses the engine archive ` +
+        ? `Check the URL or path passed to \`--local\` addresses the engine archive ` +
           `itself — a partial download, a login page and a release listing all save as ` +
           `ordinary files.`
-        : `Engine ${release}'s published archive is unusable; \`xanosdk local-engine update\` ` +
+        : `Engine ${release}'s published archive is unusable; \`xanosdk local update\` ` +
           `moves to another release.`),
   );
 
@@ -447,7 +447,7 @@ function isDownloadUrl(source: string): boolean {
  * A source that is a path, as an absolute path.
  *
  * `~` is expanded here rather than left to the shell: the glued form
- * (`--local-engine=~/Downloads/engine.tar.gz`) is the one being recommended to
+ * (`--local=~/Downloads/engine.tar.gz`) is the one being recommended to
  * testers, and no shell expands a tilde in the middle of a word. HOME is read
  * off the SAME env the rest of this module takes, so a test can name a home
  * directory the way it names the cache root.
@@ -472,7 +472,7 @@ function readArchiveFile(path: string): Uint8Array {
   } catch {
     throw new Error(
       `There is no engine archive to read at ${path}.\n` +
-        `Check the path — it is read exactly as passed to \`--local-engine\`, with \`~\` and ` +
+        `Check the path — it is read exactly as passed to \`--local\`, with \`~\` and ` +
         `relative paths resolved from where the command ran.`,
     );
   }
@@ -571,9 +571,9 @@ async function acquireEngineUnclassified(opts: AcquireEngineOptions): Promise<Ac
 
   if (platform === undefined) {
     throw new Error(
-      `There is no local engine build for ${opts.platform ?? process.platform} ` +
+      `There is no Xano Engine build for ${opts.platform ?? process.platform} ` +
         `${opts.arch ?? process.arch} — it runs on ${SUPPORTED_PLATFORMS.join(", ")} and nothing ` +
-        `else.\nDeploy from one of those machines, or drop \`--local-engine\`: \`xanosdk deploy\` ` +
+        `else.\nDeploy from one of those machines, or drop \`--local\`: \`xanosdk deploy\` ` +
         `reaches an ephemeral from anywhere.`,
     );
   }

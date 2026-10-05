@@ -1,6 +1,6 @@
 /**
  * The merge half of `deploy --keep-data`, shared by the ephemeral and the
- * local-engine arms: preview what the merge drops, then apply it, through the
+ * local arms: preview what the merge drops, then apply it, through the
  * route that can prove it merged.
  *
  * ## Why the SDK import route and not the general one
@@ -72,11 +72,11 @@ import { UNTRUSTED_CERTIFICATE } from "../util/http.js";
 
 /** Where the merge goes, and what it merges. */
 export interface KeepDataMergeRequest {
-  /** The environment's own bearer — a hosted credential or a local engine's. */
+  /** The environment's own bearer — a hosted credential or a Xano Engine's. */
   auth: BearerTarget;
   baseUrl: string;
   workspaceId: number;
-  /** Human name for the environment, for errors ("ephemeral e4f2", "local engine xanosdk-…"). */
+  /** Human name for the environment, for errors ("ephemeral e4f2", "Xano Engine xanosdk-…"). */
   label: string;
   /** The outgoing bundle text. Packed WITHOUT seed content: a merge writes no rows. */
   bundle: string;
@@ -114,7 +114,7 @@ export interface KeepDataMergeRequest {
    */
   envSetTo?: string;
   /** Which backend kind this is, for an unreachable probe's exit-8 error. */
-  kind?: "ephemeral" | "local-engine";
+  kind?: "ephemeral" | "local";
   /** This run as a paste-ready rerun, and any withheld-secret note, for that error. */
   rerun?: { command: string; note: string };
   /**
@@ -268,7 +268,7 @@ export function cannotMergeError(label: string): Error {
   return new Error(
     `\`--keep-data\` cannot keep ${label}'s rows: this environment predates the SDK import route, ` +
       `which every deploy writes through. Nothing was sent, and its data is untouched.\n` +
-      `Update it: \`xanosdk local-engine update\` for a local engine, or update the Xano instance ` +
+      `Update it: \`xanosdk local update\` for a Xano Engine, or update the Xano instance ` +
       `behind an ephemeral environment. Dropping \`--keep-data\` will not help — a replacing ` +
       `deploy uses the same route.`,
   );
@@ -1689,15 +1689,15 @@ export async function mergeKeepingData(req: KeepDataMergeRequest): Promise<KeepD
   } catch (err) {
     throw await unansweredReadError(err, req);
   }
-  // Every keep-data environment that is not a local engine is tenant-hosted.
-  const triggers = req.kind === "local-engine" ? [] : liveTableTriggers(live);
+  // Every keep-data environment that is not a Xano Engine is tenant-hosted.
+  const triggers = req.kind === "local" ? [] : liveTableTriggers(live);
   if (triggers.length > 0) {
     const reset = req.rerun === undefined ? "xanosdk deploy --keep-data --reset" : withFlag(req.rerun.command, "--reset");
     throw tableTriggerMergeError(req.label, triggers, { command: reset, note: req.rerun?.note ?? "" });
   }
   const diff = diffAgainstLive(outgoing, live, { mode: "merge", ...(req.storedColumns === undefined ? {} : { stored: req.storedColumns }) });
   const resetRerun = req.rerun === undefined ? "xanosdk deploy --keep-data --reset" : withFlag(req.rerun.command, "--reset");
-  if (req.kind !== "local-engine") {
+  if (req.kind !== "local") {
     await assertStorageModesKept(diff.storageChanges, tableRowCounter(req.auth, { workspaceId: req.workspaceId, base: req.baseUrl }), {
       target: req.label,
       subject: "the merge",

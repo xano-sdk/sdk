@@ -5,7 +5,7 @@
  * `--keep-data` merges into an environment a previous deploy filled, through
  * the SDK import route, instead of full-replacing it. Four things about that
  * were unmeasured, on both destinations the flag serves (an ephemeral and a
- * local engine):
+ * Xano Engine):
  *
  *   Q1  Does the SDK import route answer there at all? A bodyless `dry_run`
  *       POST: 404 means absent, 400/422/2xx means present.
@@ -269,7 +269,7 @@ async function local(): Promise<void> {
   const { engine, entry } = await ensureProjectEngine({ dir, source: resolveEngineSource(undefined) });
   try {
     const auth = { access_token: engine.token, instance: engine.url } as unknown as ResolvedAuth;
-    await run({ label: `local engine ${engine.name}`, base: engine.url, workspaceId: engine.workspaceId, auth }, {});
+    await run({ label: `Xano Engine ${engine.name}`, base: engine.url, workspaceId: engine.workspaceId, auth }, {});
   } finally {
     stopEngineNamed(engine.name, { entry });
     clearEngineRecord(dir);

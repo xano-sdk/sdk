@@ -6,19 +6,19 @@
  * ## Why a separate file
  *
  * The kind could have been a key in `.xano/ephemeral.json`, but two readers walk
- * that file's `environments` keys as credential scopes, and a local engine has
+ * that file's `environments` keys as credential scopes, and a Xano Engine has
  * no scope — it would either satisfy one it does not belong to or break the
  * walk. A newest-timestamp rule across the ephemeral record and the engine
  * record was the other option; it is ambiguous when both exist, and the engine
  * record is machine-global, so one project's timestamp would steer another's.
- * One small file that says only "ephemeral" or "local-engine" answers the
+ * One small file that says only "ephemeral" or "local" answers the
  * question directly, and each kind's own store still answers "which one".
  *
  * ## Written by exactly two places
  *
  * The ephemeral deploy arm, immediately after it records the environment, and
- * the local-engine deploy arm, immediately after it records the engine. NOT the
- * shared engine-record writer: `local-engine update` reaches that too, and a
+ * the local deploy arm, immediately after it records the engine. NOT the
+ * shared engine-record writer: `local update` reaches that too, and a
  * restart is not a deploy — it must not steer the next bare command at the
  * engine. A deploy to a workspace or a tenant never writes it either: that is a
  * real deployment, and a bare write that followed one would be a production
@@ -44,9 +44,9 @@ import { ensureGitignored } from "../auth/store.js";
 import type { SourceKind } from "../emit/source-selector.js";
 
 /** The two kinds a deploy records: the throwaway ones. */
-export type DeployedKind = "ephemeral" | "local-engine";
+export type DeployedKind = "ephemeral" | "local";
 
-const DEPLOYED_KINDS: readonly DeployedKind[] = ["ephemeral", "local-engine"];
+const DEPLOYED_KINDS: readonly DeployedKind[] = ["ephemeral", "local"];
 
 /** The on-disk pointer. */
 export interface DeployedPointer {

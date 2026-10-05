@@ -14,7 +14,7 @@
  *   always the backend the developer has in mind, and `--from` can name
  *   production; a developer expecting dev secrets would otherwise confirm a
  *   routine-looking diff and land live credentials on a laptop. The prompt is
- *   about the FILE, so it asks whatever the kind — a local engine included.
+ *   about the FILE, so it asks whatever the kind — a Xano Engine included.
  * - No value is ever printed — not in the prompt, not in the success output, not
  *   in an error. The terminal scrollback of every session that ran the command
  *   is exactly where a secret must not end up, which is also why the export
@@ -337,14 +337,14 @@ export async function runEnvPullCommand(args: ParsedArgs, opts: EnvPullCommandOp
 }
 
 /**
- * `tenant:prod-eu`, `local-engine:xanosdk-3f1c`, `your workspace`, `your local
+ * `tenant:prod-eu`, `local:xanosdk-3f1c`, `your workspace`, `your local
  * engine` — the kind AND the name, never a bare kind. The two credential- and
  * directory-scoped forms read as possessives, since their provenance is a bare
  * kind with no name to add.
  */
 export function sourceLabel(resolved: ResolvedSource): string {
   if (resolved.provenance === "workspace") return "your workspace";
-  if (resolved.provenance === "local-engine") return "your local engine";
+  if (resolved.provenance === "local") return "your Xano Engine";
   return resolved.provenance;
 }
 

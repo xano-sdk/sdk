@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -9039,14 +9039,18 @@
         },
         {
           "flag": "--to <destination>",
-          "description": "Merge into a real destination instead of replacing an ephemeral. The escape hatch from the release flow: workspace, or tenant:<name>",
+          "description": "Merge into a real destination instead of replacing the Xano Engine or an ephemeral. The escape hatch from the release flow: workspace, or tenant:<name>",
           "examples": [
             "workspace"
           ]
         },
         {
-          "flag": "--local-engine[=<version|url|path>]",
-          "description": "Deploy to an engine on this machine instead of an ephemeral. Bare: runs the project's pinned engine version (the latest on first run, then pinned in package.json — commit it); a newer engine is offered, never applied without a yes. A version, URL or archive path (or XANOSDK_LOCAL_ENGINE_OVERRIDE, for every run in a shell) runs that engine as an override and never touches the pin; a URL must be https (plain http only from this machine). Not combinable with --to or --static"
+          "flag": "--local[=<version|url|path>]",
+          "description": "Deploy to the Xano Engine on this machine — the default, so the flag is needed only to name an engine. Bare: runs the project's pinned engine version (the latest on first run, then pinned in package.json — commit it); a newer engine is offered, never applied without a yes. A version, URL or archive path (or XANOSDK_ENGINE_OVERRIDE, for every run in a shell) runs that engine as an override and never touches the pin; a URL must be https (plain http only from this machine). Not combinable with --to or --ephemeral"
+        },
+        {
+          "flag": "--ephemeral",
+          "description": "Deploy to a disposable ephemeral on Xano's cloud instead of the Xano Engine on this machine"
         },
         {
           "flag": "--dry-run",
@@ -9209,7 +9213,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9218,11 +9222,11 @@
           "slot": "<source>",
           "role": "subject",
           "default": "entry",
-          "grammar": "release:<name>, workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, tenant:<name>, or a path to a bundle .json",
+          "grammar": "release:<name>, workspace, ephemeral, ephemeral:<name>, local, local:<name>, tenant:<name>, or a path to a bundle .json",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         },
         {
@@ -9234,23 +9238,23 @@
             "workspace"
           ],
           "refused": {
-            "local-engine": "a deploy to a local engine is `--local-engine`, which also downloads, pins and starts one",
-            "ephemeral": "a deploy with no `--to` already replaces an ephemeral. To merge into one instead, name it as the tenant it is: `--to tenant:<ephemeral name>`"
+            "local": "a deploy to a Xano Engine is `--local`, which also downloads, pins and starts one",
+            "ephemeral": "`--ephemeral` already replaces an ephemeral. To merge into one instead, name it as the tenant it is: `--to tenant:<ephemeral name>`"
           }
         }
       ],
-      "description": "Ship to a live ephemeral env → URL"
+      "description": "Deploy to the Xano Engine on this machine (default) or an ephemeral (--ephemeral) → URL"
     },
     {
       "command": "env pull",
       "flags": [
         {
           "flag": "--from <source>",
-          "description": "Read the values from this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "description": "Read the values from this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "examples": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         },
         {
@@ -9270,7 +9274,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9279,11 +9283,11 @@
           "slot": "--from",
           "role": "from",
           "default": "tracked",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         }
       ],
@@ -9295,11 +9299,11 @@
       "flags": [
         {
           "flag": "--to <destination>",
-          "description": "Write to this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "description": "Write to this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "examples": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         },
         {
@@ -9319,7 +9323,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9328,11 +9332,11 @@
           "slot": "--to",
           "role": "to",
           "default": "tracked",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         }
       ],
@@ -9344,11 +9348,11 @@
       "flags": [
         {
           "flag": "--to <destination>",
-          "description": "Write to this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "description": "Write to this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "examples": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         },
         {
@@ -9364,7 +9368,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9373,11 +9377,11 @@
           "slot": "--to",
           "role": "to",
           "default": "tracked",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         }
       ],
@@ -9400,7 +9404,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9435,7 +9439,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9454,7 +9458,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9476,7 +9480,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9574,7 +9578,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9583,11 +9587,11 @@
           "slot": "<source>",
           "role": "subject",
           "default": "none",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, tenant:<name>, release:<name>, or a path to a bundle .json",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, tenant:<name>, release:<name>, or a path to a bundle .json",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         }
       ],
@@ -9619,7 +9623,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9628,10 +9632,10 @@
           "slot": "<backend>",
           "role": "subject",
           "default": "tracked",
-          "grammar": "ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "grammar": "ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "values": [
             "ephemeral",
-            "local-engine"
+            "local"
           ],
           "refused": {
             "workspace": "your workspace opens from the Xano dashboard as whoever is signed in, so there is no session to mint",
@@ -9785,11 +9789,11 @@
         },
         {
           "flag": "--from <source>",
-          "description": "Fill xano/ by decoding an existing backend instead of writing the empty starter: workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, tenant:<name>, release:<name>, or a path to a bundle .json",
+          "description": "Fill xano/ by decoding an existing backend instead of writing the empty starter: workspace, ephemeral, ephemeral:<name>, local, local:<name>, tenant:<name>, release:<name>, or a path to a bundle .json",
           "examples": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         },
         {
@@ -9830,7 +9834,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -9839,18 +9843,18 @@
           "slot": "--from",
           "role": "from",
           "default": "none",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, tenant:<name>, release:<name>, or a path to a bundle .json",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, tenant:<name>, release:<name>, or a path to a bundle .json",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         }
       ],
       "description": "Scaffold a Xano SDK project — empty, or filled from an existing backend"
     },
     {
-      "command": "local-engine cache",
+      "command": "local cache",
       "args": "<action>",
       "flags": [
         {
@@ -9869,11 +9873,11 @@
       "description": "`list`: each cached engine version, its size on disk, and the engines running on it. `clear`: remove every cached engine and the runtime they unpacked, or one with `--version <v>` — any engine running on a removed version is stopped first; the next deploy fetches and restarts it"
     },
     {
-      "command": "local-engine list",
-      "description": "List local engines on this machine, marking the ones xanosdk started"
+      "command": "local list",
+      "description": "List Xano Engines on this machine, marking the ones xanosdk started"
     },
     {
-      "command": "local-engine stop",
+      "command": "local stop",
       "args": "<name>",
       "flags": [
         {
@@ -9881,15 +9885,15 @@
           "description": "Every engine xanosdk started on this machine, across projects (foreign ones are reported, not stopped)"
         }
       ],
-      "description": "Stop one local engine by name, or every one xanosdk started on this machine"
+      "description": "Stop one Xano Engine by name, or every one xanosdk started on this machine"
     },
     {
-      "command": "local-engine token",
+      "command": "local token",
       "args": "[name]",
-      "description": "Print a local engine's meta API bearer — the local XANO_META_TOKEN; `--json` adds its url and workspace id. Re-run after a restart, which re-mints it (default: the engine this project deployed to)"
+      "description": "Print a Xano Engine's meta API bearer — the local XANO_META_TOKEN; `--json` adds its url and workspace id. Re-run after a restart, which re-mints it (default: the engine this project deployed to)"
     },
     {
-      "command": "local-engine update",
+      "command": "local update",
       "flags": [
         {
           "flag": "--version <v>",
@@ -9959,7 +9963,7 @@
       "command": "login",
       "flags": [
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         },
         {
@@ -9987,7 +9991,7 @@
           "description": "Overwrite the cached credential — sign in again even when one is already there"
         }
       ],
-      "description": "OAuth sign-in — shared cache, or --local per project"
+      "description": "OAuth sign-in — shared cache, or --local-auth per project"
     },
     {
       "command": "logout",
@@ -10001,7 +10005,7 @@
           "description": "Confirm a destructive action non-interactively"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         },
         {
@@ -10146,7 +10150,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10173,7 +10177,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10192,7 +10196,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10206,7 +10210,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10221,7 +10225,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10236,7 +10240,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10251,7 +10255,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10294,7 +10298,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10306,10 +10310,11 @@
       "flags": [
         {
           "flag": "--to <destination>",
-          "description": "Where to publish, instead of the backend this project last deployed to: workspace, ephemeral, ephemeral:<name>, or tenant:<name>",
+          "description": "Where to publish, instead of the backend this project last deployed to: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "examples": [
             "workspace",
-            "ephemeral"
+            "ephemeral",
+            "local"
           ]
         },
         {
@@ -10353,7 +10358,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10362,14 +10367,12 @@
           "slot": "--to",
           "role": "to",
           "default": "tracked",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, or tenant:<name>",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "values": [
             "workspace",
-            "ephemeral"
-          ],
-          "refused": {
-            "local-engine": "a local engine takes a frontend only through `xanosdk deploy --local-engine --static <dir>`"
-          }
+            "ephemeral",
+            "local"
+          ]
         }
       ],
       "description": "Publish an already-built frontend to a static host — no compile, no backend import"
@@ -10407,7 +10410,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10416,11 +10419,11 @@
           "slot": "<source>",
           "role": "subject",
           "default": "tracked",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, tenant:<name>, or release:<name>",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, tenant:<name>, or release:<name>",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         }
       ],
@@ -10499,7 +10502,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10514,7 +10517,7 @@
             "ephemeral"
           ],
           "refused": {
-            "local-engine": "the cut runs on the instance, which cannot reach an engine on this machine"
+            "local": "the cut runs on the instance, which cannot reach an engine on this machine"
           }
         }
       ],
@@ -10537,7 +10540,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10560,7 +10563,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10578,7 +10581,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10597,7 +10600,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10628,7 +10631,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10676,7 +10679,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10695,7 +10698,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10704,11 +10707,11 @@
           "slot": "<backend>",
           "role": "subject",
           "default": "tracked",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ],
           "refused": {
             "release": "a release is not a running backend — list the backend it was cut from, or land it and list that"
@@ -10738,7 +10741,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10761,7 +10764,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10780,7 +10783,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10798,7 +10801,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10809,11 +10812,11 @@
       "flags": [
         {
           "flag": "--on <backend>",
-          "description": "List the tests on this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "description": "List the tests on this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "examples": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         },
         {
@@ -10833,7 +10836,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10842,11 +10845,11 @@
           "slot": "--on",
           "role": "on",
           "default": "tracked",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         }
       ],
@@ -10858,11 +10861,11 @@
       "flags": [
         {
           "flag": "--on <backend>",
-          "description": "Run on this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "description": "Run on this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "examples": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         },
         {
@@ -10874,7 +10877,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10883,11 +10886,11 @@
           "slot": "--on",
           "role": "on",
           "default": "tracked",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         }
       ],
@@ -10898,11 +10901,11 @@
       "flags": [
         {
           "flag": "--on <backend>",
-          "description": "Run on this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "description": "Run on this backend instead of the one this project last deployed to: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "examples": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         },
         {
@@ -10926,7 +10929,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10935,11 +10938,11 @@
           "slot": "--on",
           "role": "on",
           "default": "tracked",
-          "grammar": "workspace, ephemeral, ephemeral:<name>, local-engine, local-engine:<name>, or tenant:<name>",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
           "values": [
             "workspace",
             "ephemeral",
-            "local-engine"
+            "local"
           ]
         }
       ],
@@ -10971,7 +10974,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -10998,7 +11001,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -11016,7 +11019,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -11087,7 +11090,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -11117,7 +11120,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
@@ -11192,7 +11195,7 @@
           "description": "Explicit credential file (default: $XANO_CONFIG)"
         },
         {
-          "flag": "--local",
+          "flag": "--local-auth",
           "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
         }
       ],
