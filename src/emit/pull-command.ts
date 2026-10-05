@@ -48,6 +48,7 @@ import { keptDuplicates, replacedRegistrations, reportSuperseded, type KeptDupli
 import { isMachineOutput, writeJson } from "./output.js";
 import { decodeWorkspaceArchive, encodeWorkspaceArchive } from "../validate/archive.js";
 import { decodeBundle } from "../codegen/index.js";
+import { ROUTES_MANIFEST_BASENAME } from "./routes-manifest.js";
 import {
   carriedSeedRows,
   fetchWorkspaceBundle,
@@ -77,6 +78,8 @@ import { identityNamesByGuid, lockKey, lockNameForObject, WORKSPACE_KEY, withObj
 import { fetchSourceArchive } from "./deploy-source.js";
 import { requireBackendSlot } from "./backend-slot.js";
 import { memoCredential, refuseProfileForLocal, selectBackend } from "./tracked-backend.js";
+import { recordSync, syncBranchLabel, type SyncReport } from "./sync-record.js";
+import { syncDigests } from "../deploy/sync-baseline.js";
 import {
   containedWrites,
   DECODE_MARKER,
@@ -492,12 +495,15 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
   const keptName = source.kind === "workspace" || source.kind === "local" ? undefined : projectWorkspaceName(join(cwd, backendDir, "index.ts"));
   const project = decodeBundle(bundle, {
     secretsFile: `${backendDir}/${WORKSPACE_SECRETS_BASENAME}`,
-    writesSecrets: args.noSecrets !== true,
     ...(keptName !== undefined ? { workspaceName: keptName } : {}),
   });
   refuseDuplicateSourceGuids(project);
   const seedRows = carriedSeedRows(fetched.archive, bundle.payload);
-  const placed = placeGeneratedFiles(project, backendDir);
+  // The project's toolchain modules, for their sections of the route manifest
+  // placed below — discovered before the pulled tree's entry is ever loaded.
+  const { discoverManifestModules } = await import("./routes-manifest-file.js");
+  const modules = await discoverManifestModules(cwd, join(cwd, backendDir, ROUTES_MANIFEST_BASENAME), readVersion());
+  const placed = placeGeneratedFiles(project, backendDir, undefined, undefined, modules);
   const settings =
     source.kind === "release"
       ? keepProjectSettings(placed, backendDir, join(cwd, backendDir))
@@ -524,6 +530,23 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
   const reconciliation =
     lock === undefined ? undefined : reconcileLock(lock, pulledIdentities(bundle.payload));
 
+  // The sync baseline this pull records once the tree is written (see
+  // `deploy/sync-baseline.ts`): a decode reads the whole branch, so it is
+  // complete. Only for a workspace, the one source `workspace diff` compares,
+  // and only beside a lock, where a landing record lives too. The branch label
+  // is read now so the record itself stays synchronous after the lock write.
+  const syncTarget =
+    source.kind === "workspace" && lock !== undefined
+      ? await (async () => {
+          const auth = await credential();
+          const branch = await syncBranchLabel(auth, args.branch);
+          return branch === undefined ? undefined : { instance: auth.instance, workspaceId: auth.workspaceId, branch };
+        })()
+      : undefined;
+  /** Record it. AFTER the lock write: that write rebuilds the lock from the copy read above. */
+  const recordPullSync = (): SyncReport | null =>
+    syncTarget === undefined ? null : recordSync({ lockPath, target: syncTarget, digests: syncDigests({ held: [bundle] }), by: "pull", complete: true });
+
   if (reconciliation?.disjoint === true && args.yes !== true) {
     throw await needsYes(
       args,
@@ -549,7 +572,7 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
   const duplicates = keptDuplicates(dirAbs, incoming, plan.kept, backendDir);
   if (upToDate) {
     await refreshAgentGuidance({ ...args, file: join(cwd, backendDir, "index.ts") });
-    finishUpToDate(cwd, backendDir, project, args, fetched, lock, lockPath, reconciliation, bundle.payload, files.length, plan.kept, settingsReport(settings, backendDir), seedRows, duplicates);
+    finishUpToDate(cwd, backendDir, project, args, fetched, lock, lockPath, reconciliation, bundle.payload, files.length, plan.kept, settingsReport(settings, backendDir), seedRows, duplicates, recordPullSync);
     return;
   }
 
@@ -802,6 +825,11 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
     }
   }
 
+  // A tree that does not round-trip does not match the branch, so it is no
+  // baseline. One that was not checked (`--skip-roundtrip`) is taken as
+  // decoded, as the rest of the pull takes it.
+  const syncBaseline = verified === false ? null : recordPullSync();
+
   if (isMachineOutput(args)) {
     writeJson({
       source: fetched.provenance,
@@ -822,6 +850,7 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
       keptDuplicates: duplicates,
       modulesReplaced,
       verified,
+      syncBaseline,
     });
     if (verified === false) throw pullVerifyFailed(cwd, backendDir);
     // On stderr, so a piped run says it too: the document carries the rest.
@@ -899,11 +928,15 @@ function finishUpToDate(
   workspaceSettings: WorkspaceSettingsReport,
   seedRows: readonly SeedRowsReport[],
   duplicates: readonly KeptDuplicate[],
+  /** Records the branch's sync baseline; run after the lock write. */
+  recordPullSync: () => SyncReport | null,
 ): void {
   reportSeedRows(seedRows, fetched.label, fetched.provenance, backendDir, contextFlags(args));
   ensureSecretPathGitignored(join(cwd, backendDir, WORKSPACE_ENV_BASENAME));
   writeDocumentationTokens(cwd, project.documentationTokens, args, fetched.label, join(cwd, backendDir, WORKSPACE_SECRETS_BASENAME));
   if (lock !== undefined && reconciliation !== undefined) writeLockFile(lockPath, pulledLock(lock, reconciliation, payload));
+  // The tree already matches the branch, so this is a moment the two agree.
+  const syncBaseline = recordPullSync();
   if (isMachineOutput(args)) {
     writeJson({
       source: fetched.provenance,
@@ -927,6 +960,7 @@ function finishUpToDate(
       modulesReplaced: [],
       // Nothing was written, so there is nothing new to check.
       verified: null,
+      syncBaseline,
     });
   }
   // On stderr, so a piped run says it too.

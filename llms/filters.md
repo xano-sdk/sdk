@@ -27,6 +27,10 @@ with `c.obj`/`c.array`. Any argument also takes a runtime value (`inp`, `ref`, a
 `withFilters` chain) — inside `obj()`/`expr()` an argument cannot carry its own filter
 chain, so compute it in a prior `set_var`. The arg types below name each argument's
 ENGINE type, not the JS type you may pass.
+`fl.add`/`fl.sub`/`fl.mul` keep an INT when both operands are ints (`2 × 3` is `6`, not
+`6.0`) and give a decimal only when either operand is one — the `decimal` return type
+below covers both, so an int pipeline needs no `fl.to_int()`. `fl.div` is an int only
+when it divides exactly.
 To add to a numeric column (counter, stock, balance), use `s.db.increment`
 (`llms/statements-data.md`) — one atomic UPDATE. A pipeline read-modify-write is NOT
 atomic (concurrent writers lose updates), and `col("clicks")` does NOT resolve to the

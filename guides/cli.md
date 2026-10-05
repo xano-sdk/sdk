@@ -112,7 +112,7 @@ xanosdk ephemeral export <name> --format multidoc --path -          # …stream 
 
 xanosdk workspace details                   # which workspace your token is scoped to (instance, id, name)
 xanosdk workspace export --path ws.json     # your REAL workspace as a JSON bundle (`--path -` streams to stdout)
-xanosdk workspace diff ./xano/index.ts --branch staging   # did my release land? which objects on the branch differ from your compile, are missing, or are unexpected (default: live); exits 2 when anything declared differs or is missing
+xanosdk workspace diff ./xano/index.ts --branch staging   # did my release land? which objects on the branch differ from your compile, are missing, or are unexpected (default: live), and which side changed each since the last sync (`changedThere`/`changedHere`/`changedBoth`); exits 2 when anything declared differs or is missing
 xanosdk workspace branch list               # its branches, and which one is live
 xanosdk workspace branch set-live staging   # promote a branch (also the way back after --backup-branch)
 xanosdk workspace branch delete staging --yes   # remove a non-live branch (a label padded with spaces is found by the trimmed one; one not there exits 0, alreadyGone; the live branch exits 2, SDK_BRANCH_LIVE)
@@ -137,7 +137,7 @@ xanosdk help                                # grouped command reference (also th
 xanosdk <command> --help                    # that command's usage, subcommands, and flags (`xanosdk deploy --help`)
 xanosdk <noun> <verb> --help                # scoped to one verb (`xanosdk workspace export --help`)
 xanosdk <command> --json                    # force JSON on stdout (otherwise: whenever stdout isn't a terminal)
-xanosdk <command> --no-refresh              # don't refresh the managed block in AGENTS.md (a build that writes nothing outside its output)
+xanosdk <command> --no-refresh              # don't refresh the managed blocks in AGENTS.md and the README (a build that writes nothing outside its output)
 xanosdk completion zsh                      # shell completion script (also bash, fish) — see below
 
 xanosdk preflight ./xano/index.ts           # import into a live instance, diff each object back (needs auth + a throwaway tenant)
@@ -314,8 +314,8 @@ as `installed`. The install matches how this CLI is installed (`npm i -g` for a 
 project, `--save-prod` when `@xano/sdk` is in `dependencies`, as a scaffold puts it, else
 `--save-dev`) — and for a project-local install it
 then restores the `@xano/sdk` range your project was scaffolded with (npm rewrites it to a
-caret) and restamps the managed block in your
-agent files so the guidance matches the version you now have. Set `XANOSDK_INSTALL_MODE` to
+caret) and restamps the managed blocks in your
+`AGENTS.md` and README so what they say matches the version you now have. Set `XANOSDK_INSTALL_MODE` to
 `global` or `local` to override the detection. Run through `npx` (or `pnpm dlx`, `yarn dlx`, `bunx`)
 outside a project, it installs nothing (`status: "not-installed"`): that copy is temporary,
 and `npx @xano/sdk@latest` already runs the newest release.

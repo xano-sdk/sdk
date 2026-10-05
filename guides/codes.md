@@ -35,7 +35,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 
 | Code | Meaning |
 |---|---|
-| `agents.refresh-failed` | A managed agent file (AGENTS.md, …) could not be refreshed; the compile itself went on. |
+| `agents.refresh-failed` | A managed block (AGENTS.md, the README's Built-with footer) could not be refreshed; the compile itself went on. |
 | `agents.symlink` | … is a symlink — left it and its target untouched. |
 | `branch.deletion` | … will be permanently deleted and CANNOT be recovered: |
 | `branch.inventory-unknown` | The branch inventory could not be read, so what this wipe destroys is UNKNOWN. |
@@ -142,7 +142,9 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `module.install-failed` | … failed — the module was not added. |
 | `module.kind-unknown` | … does not declare a module kind we recognize, so it is read as an ordinary package. |
 | `module.legacy-peer-deps` | Installed with --legacy-peer-deps: …. |
-| `module.load-failed` | Could not load …/index.ts to update what the module left behind (…). |
+| `module.load-failed` | Could not load …/index.ts to … (…). |
+| `module.peer-mismatch` | The project already declares a peer a toolchain module needs, and the installed version falls outside the module's range; it was left as it is. |
+| `module.peer-not-added` | A peer a toolchain module needs could not be added as a direct dependency; the line names the command that adds it. |
 | `module.peer-unresolved` | … declares a peer range this project does not satisfy; --legacy-peer-deps did not resolve it either. |
 | `module.removed-from-marketplace` | … has been removed from the marketplace. |
 | `module.sdk-skew` | … requires `@xano/sdk` … — the module was not added. |
@@ -224,6 +226,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `release.seed-rows-not-decoded` | … carries seed rows for …, and a decoded tree carries no rows — they are not in …/. |
 | `release.transfer-cancelled` | Transfer cancelled — nothing was imported. |
 | `routes.cli-skew` | This CLI is another version than the project's installed SDK, so it left the route table for the installed CLI to render. |
+| `routes.module-failed` | A toolchain module could not generate its section of `routes.gen.ts`; the rest was refreshed and its previous block, if any, was kept. |
 | `routes.not-written` | The route table (`routes.gen.ts`) was not written this run; the line says why and what writes it. |
 | `routes.realtime-unresolved` | …: leaving out … — … — whose canonical URL token resolves nowhere, along with their channels. |
 | `secrets.cleartext-export` | … carries … in cleartext — written owner-only (0600); do not commit it. |
@@ -248,6 +251,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `static.teardown-unknown` | Could not read …'s static hosting, so this cannot say whether a frontend serves there — this replace takes down any that does. |
 | `static.unconfirmed-live` | Could not confirm the frontend is live within the wait window — the build uploaded and should come online shortly. |
 | `static.upload-failed` | The static-host upload failed — the backend deploy stands: |
+| `sync.record-failed` | The … succeeded, but its sync baseline could not be recorded in …: … |
 | `tenant.deploy-partial` | The deploy stopped partway: … release "…" declares… — answered as a NOT NULL violation, though the release makes no field required: the value converts to nul… |
 | `tenant.deploy-unconfirmed` | Compare its `deployedAt` and `deployedReleaseId` with what they were before this deploy (deployedAt …, deployedReleaseId …). |
 | `tenant.identities-unchecked` | Whether this release's names and pinned public URL slugs are free on … was not checked — …. |
@@ -309,6 +313,7 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 | `field.email-default-invalid` | The `default` at … is …, which is not an email address — every insert or request that leaves the field out is refused "Invalid email format.". |
 | `field.enum-default-not-a-value` | The `default` at … is …, which is not one of the enum's values (…) — a value no request can send back. |
 | `field.input-default-invalid` | The `default` at … is …, which … — every request that leaves the input out is refused. |
+| `field.input-required-default-ignored` | The `default` at …, input "…" is …, but the input is `required: true` — the engine refuses a request that leaves a required input out ("Missing param") befor… |
 | `field.vector-not-nullable` | table "…", column "…" is a vector with `nullable: false` and no default — an empty default becomes NULL only on a nullable column, and `''` is not a vector,… |
 | `function.reserved-input-name` | function "…": the input name `…` is reserved by the engine — a call passes its arguments keyed by input name, and the engine skips a `…` key when it evaluate… |
 | `guard.role-unsatisfiable` | A guard.role on a table passed by name checks a column the table lacks, or a role its enum column cannot hold. |

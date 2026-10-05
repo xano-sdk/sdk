@@ -5153,6 +5153,21 @@ function withPinnedGuid(artifact: string, def: { guid?: unknown }): string {
 }
 
 /**
+ * The project whose toolchain modules `routes --emit` composes: the one holding
+ * the file it writes, else the entry's. The same owner the CLI-skew check names,
+ * so the bytes do not depend on where the command was typed. A target with no
+ * `package.json` above it (`projectRootFrom` stops at the repo or the root) is
+ * in no project; `-` is no file at all.
+ */
+function emitProjectDir(emit: string, entry: string): string {
+  if (emit !== "-") {
+    const root = projectRootFrom(dirname(resolve(emit)));
+    if (existsSync(join(root, "package.json"))) return root;
+  }
+  return projectRootFrom(dirname(resolve(entry)));
+}
+
+/**
  * `xanosdk routes <entry>` (alias `paths`) — list every API query's HTTP verb
  * and its resolved group-relative path in the `api:<canonical>/<name>` form, so
  * writing a frontend client or curling a live env doesn't need a hand-rolled
@@ -5185,6 +5200,28 @@ async function runPaths(args: ParsedArgs): Promise<void> {
   // prior in-process command left, so reference guids bake consistently.
   resetLockOverrides();
   const lockModel = existsSync(lockPath) ? readLockFile(lockPath) : undefined;
+
+  // Toolchain modules load BEFORE the entry, as on `export` (loading the entry
+  // unregisters the TypeScript loader a later import would need), and only when
+  // a manifest is written: a listing fires no hook, so it imports none. Frozen
+  // under `--strict`: a module that cannot load would leave its section
+  // unchecked, and the CI guard must not pass on that.
+  //
+  // Found from the project the table is written INTO, the owner the skew check
+  // below names, and never from the cwd: discovery reads `package.json` where
+  // it is pointed and does not walk up. So a run from a subdirectory or a
+  // monorepo root would find no modules and overwrite their committed blocks
+  // with a plain "Wrote". The entry's project stands in for `--emit -`, and for
+  // a target that is in no project.
+  const toolchain =
+    args.emit !== undefined
+      ? await (await import("./toolchain-modules.js")).discoverToolchainPlugins(emitProjectDir(args.emit, file), {
+          frozen: args.strict === true,
+          // A module outside its SDK peer range keeps its block and is named,
+          // as any other skip is; it does not abort every `dev` and `build`.
+          peerSkew: "skip",
+        })
+      : undefined;
 
   const def = await loadDefault(file);
   if (!Xano.isXano(def)) {
@@ -5288,8 +5325,28 @@ async function runPaths(args: ParsedArgs): Promise<void> {
       return;
     }
 
-    const { renderPlannedManifest, renderRouteManifest } = await import("./routes-manifest.js");
-    const source = emptiedManifest ? renderRouteManifest([]) : renderPlannedManifest(plan)!;
+    // The file every writer composes the same way: fresh core sections, each
+    // module's section, and a failed module's previous block carried forward.
+    const { renderManifestFile, reportModuleFailures } = await import("./routes-manifest-file.js");
+    const loaded = toolchain?.loaded ?? [];
+    const skipped = toolchain?.skipped ?? [];
+    const rendered = renderManifestFile(
+      plan,
+      {
+        loaded,
+        skipped,
+        // Read only when a module could fail or be skipped: with none, nothing
+        // is carried forward and `renderManifestFile` never consults it.
+        previous:
+          loaded.length + skipped.length > 0 && args.emit !== "-" && existsSync(args.emit)
+            ? readFileSync(args.emit, "utf8")
+            : undefined,
+        sdkVersion: readVersion(),
+      },
+      { orEmpty: true },
+    )!;
+    reportModuleFailures(rendered.failed, args.emit === "-" ? "the route manifest on stdout" : args.emit, args.strict === true);
+    const source = rendered.source;
     const routeCount = resolved.length === 1 ? "1 route" : `${resolved.length} routes`;
     const channelCount =
       channelRows.length === 1 ? "1 channel" : `${channelRows.length} channels`;
@@ -5404,6 +5461,14 @@ async function runPaths(args: ParsedArgs): Promise<void> {
   }
 }
 
+/** What {@link refreshRouteManifest} did to the file, and the lock entries it found orphaned. */
+export interface RouteManifestRefresh {
+  readonly manifest: "written" | "unchanged" | "skipped" | "absent";
+  readonly lockOrphans: number;
+  /** Why a `skipped` manifest could not be written, when that is not an unresolved api group. */
+  readonly why?: string;
+}
+
 /**
  * Bring an existing route manifest up to date with the workspace, quietly —
  * for a command that changed the workspace as a side effect (`marketplace
@@ -5412,16 +5477,28 @@ async function runPaths(args: ParsedArgs): Promise<void> {
  * without its output. Also counts the lock entries the workspace no longer
  * exports, which the same change orphans.
  *
- * "skipped" when the manifest cannot be brought up to date here (an api group
- * whose canonical resolves nowhere), which the caller reports with the command.
+ * "skipped" when the manifest cannot be brought up to date here, which the
+ * caller reports with the command: an api group whose canonical resolves
+ * nowhere, or a module block that cannot be carried forward (`why` says which
+ * block and why). Neither is the entry failing to load.
  */
 export async function refreshRouteManifest(
   entry: string,
   emit: string,
-): Promise<{ manifest: "written" | "unchanged" | "skipped" | "absent"; lockOrphans: number }> {
+  /** The project whose `package.json` names its toolchain modules. */
+  projectDir: string,
+): Promise<RouteManifestRefresh> {
   resetLockOverrides();
   const lockPath = join(dirname(resolve(entry)), "xano.lock");
   const lockModel = existsSync(lockPath) ? readLockFile(lockPath) : undefined;
+  // After the package change and before the entry, as `routes --emit` does: a
+  // module just removed has no section to write, and one still installed keeps
+  // its own. `configuring`: the command calling this has just reconciled the
+  // project and made the unconfigured report itself.
+  const { discoverToolchainPlugins } = await import("./toolchain-modules.js");
+  const toolchain = existsSync(emit)
+    ? await discoverToolchainPlugins(projectDir, { frozen: false, configuring: true, peerSkew: "skip" })
+    : undefined;
   const def = await loadDefault(entry);
   if (!Xano.isXano(def)) return { manifest: "absent", lockOrphans: 0 };
   const previousSink = setDiagnosticSink(() => {});
@@ -5436,14 +5513,26 @@ export async function refreshRouteManifest(
   const lockOrphans =
     lockModel === undefined ? 0 : Object.keys(lockModel.objects).filter((k) => k !== WORKSPACE_KEY && !live.has(k)).length;
   if (!existsSync(emit)) return { manifest: "absent", lockOrphans };
-  const { planRouteManifest, renderPlannedManifest, renderRouteManifest } = await import("./routes-manifest.js");
+  const { planRouteManifest, RouteManifestError } = await import("./routes-manifest.js");
+  const { renderManifestFile, reportModuleFailures } = await import("./routes-manifest-file.js");
   const plan = planRouteManifest(payload, (kind, name) => lockModel?.objects[lockKey(kind, name)]?.canonical);
   if (plan.unresolved.length > 0) return { manifest: "skipped", lockOrphans };
-  const source =
-    renderPlannedManifest(plan) ??
-    (plan.resolved.length === 0 && plan.servers.length === 0 ? renderRouteManifest([]) : undefined);
-  if (source === undefined) return { manifest: "skipped", lockOrphans };
-  if (readFileSync(emit, "utf8") === source) return { manifest: "unchanged", lockOrphans };
+  const current = readFileSync(emit, "utf8");
+  let rendered: ReturnType<typeof renderManifestFile>;
+  try {
+    rendered = renderManifestFile(
+      plan,
+      { loaded: toolchain?.loaded ?? [], skipped: toolchain?.skipped ?? [], previous: current, sdkVersion: readVersion() },
+      { orEmpty: true },
+    );
+  } catch (err) {
+    if (!(err instanceof RouteManifestError)) throw err;
+    return { manifest: "skipped", lockOrphans, why: err.message };
+  }
+  if (rendered === undefined) return { manifest: "skipped", lockOrphans };
+  reportModuleFailures(rendered.failed, emit);
+  const source = rendered.source;
+  if (current === source) return { manifest: "unchanged", lockOrphans };
   try {
     writeFileSync(emit, source, "utf8");
   } catch (err) {

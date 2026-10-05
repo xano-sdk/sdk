@@ -32,7 +32,7 @@
  *
  * Pure and browser-safe, like `lock.ts`; the file I/O is in `io.ts`.
  */
-import { LOCK_PAYLOAD_KEYS, lockKey, type LandedEntry, type LockFile } from "./lock.js";
+import { LOCK_PAYLOAD_KEYS, lockKey, withSyncedOf, type LandedEntry, type LockFile } from "./lock.js";
 
 /** A destination as the landing record addresses it. */
 export type LandingDestination =
@@ -189,9 +189,10 @@ export function applyLanding(lock: LockFile, destKey: string, update: LandingUpd
   if (Object.keys(next).length > 0) landed[destKey] = next;
   else delete landed[destKey];
   const objects = withoutPrunedObjects(lock.objects, update);
-  return Object.keys(landed).length > 0
-    ? { version: lock.version, objects, landed }
-    : { version: lock.version, objects };
+  return withSyncedOf(
+    Object.keys(landed).length > 0 ? { version: lock.version, objects, landed } : { version: lock.version, objects },
+    lock,
+  );
 }
 
 /**
@@ -271,9 +272,12 @@ export function withStoredColumns(
 export function withoutLanding(lock: LockFile, destKey: string): LockFile {
   if (lock.landed?.[destKey] === undefined) return lock;
   const { [destKey]: _dropped, ...landed } = lock.landed;
-  return Object.keys(landed).length > 0
-    ? { version: lock.version, objects: lock.objects, landed }
-    : { version: lock.version, objects: lock.objects };
+  return withSyncedOf(
+    Object.keys(landed).length > 0
+      ? { version: lock.version, objects: lock.objects, landed }
+      : { version: lock.version, objects: lock.objects },
+    lock,
+  );
 }
 
 /** One destination's record, or `undefined` when this project has landed nothing there. */

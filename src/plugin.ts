@@ -10,12 +10,15 @@
  * A TOOLCHAIN module extends the **CLI** instead. It adds nothing to the
  * workspace — registering it into `xano/index.ts` would be meaningless, because
  * there is nothing to register. What it does is participate in the commands:
- * declare questions, contribute to files the project owns, and run when a
- * bundle is compiled or a workspace is checked.
+ * declare questions, contribute to files the project owns, add a section to
+ * the route manifest (`routes.gen.ts`), and run when a bundle is compiled or a
+ * workspace is checked.
  *
- * The shape this contract was built for is a module that renders the compiled
+ * The contract was first built for a module that renders the compiled
  * workspace to a committed tree on every deploy, so a backend change can be
- * reviewed as what the engine will actually run.
+ * reviewed as what the engine will actually run. The route-manifest hook was
+ * added for the second module, `@xano-sdk/zod`, which renders a runtime
+ * validator for every request input beside the SDK's own input types.
  *
  * ── Contributions apply to a PROJECT, not to a scaffold ─────────────────────
  *
@@ -339,17 +342,266 @@ export interface PreflightContext {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Route inputs
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The request inputs of every endpoint, realtime channel and realtime message a
+ * route manifest (`routes.gen.ts`) describes, read off the compiled payload.
+ *
+ * VALIDATOR-NEUTRAL on purpose. The SDK renders its own request types from this
+ * and a module renders its validators from the same value, so the two cannot
+ * disagree about what an input is: there is one reading of the stored inputs,
+ * not one per renderer. It is built from the payload alone because the decode
+ * paths (`pull`, `generate`, `init --from`) write the manifest with no compile
+ * of the workspace to ask.
+ *
+ * Keys are the manifest's FINAL keys, so a section built from this lines up
+ * with `ROUTES` and `CHANNELS` entry for entry. Entries are in a fixed order (see
+ * each list), so a renderer that walks them in order writes the same text for
+ * the same workspace.
+ */
+export interface RouteInputs {
+  /** One per `ROUTES` key, in `ROUTES` order. */
+  readonly routes: readonly RouteInputSet[];
+  /** One per `CHANNELS` key, in `CHANNELS` order: the channel's path params. */
+  readonly channels: readonly RouteInputSet[];
+  /**
+   * One per message on a channel in `CHANNELS`, sorted by key: the message's
+   * payload. A message whose channel the manifest leaves out (its server's
+   * canonical resolves nowhere) is left out with it.
+   */
+  readonly messages: readonly MessageInputSet[];
+}
+
+/** The inputs of one endpoint or channel, under its manifest key. */
+export interface RouteInputSet {
+  /**
+   * The manifest key: `"GET listings"` or `"v1:GET vehicles"` for an endpoint,
+   * `"rooms/{room_id}"` or `"chat:lobby"` for a channel.
+   */
+  readonly key: string;
+  /** In the order the def declares them. */
+  readonly inputs: readonly InputDescription[];
+}
+
+/**
+ * The payload inputs of one realtime message. Its `key` is
+ * `"<channel key> <message name>"` — `"rooms/{room_id} send"`. Read in the
+ * order a message is addressed, and collision-free: a message name holds no
+ * space and no `/`.
+ */
+export interface MessageInputSet extends RouteInputSet {
+  /** The owning channel's `CHANNELS` key. */
+  readonly channel: string;
+  /** The message's name, as a client sends it. */
+  readonly name: string;
+}
+
+/**
+ * The stored input types whose description carries nothing beyond the common
+ * flags. Engine spellings, not authoring names: `epochms` is
+ * `input.timestamp()`, `blob_img` is `input.image()`, `file` is a raw upload.
+ */
+export type InputScalarType =
+  | "text"
+  | "int"
+  | "decimal"
+  | "bool"
+  | "email"
+  | "password"
+  | "uuid"
+  | "date"
+  | "epochms"
+  | "json"
+  | "file"
+  | "blob"
+  | "blob_img"
+  | "blob_video"
+  | "blob_audio"
+  | "geo_point"
+  | "geo_multipoint"
+  | "geo_linestring"
+  | "geo_multilinestring"
+  | "geo_polygon"
+  | "geo_multipolygon";
+
+/**
+ * An enabled method on an input (`trim`, `min:8`), with its arguments as
+ * strings. The stored form is numeric and string inconsistently (`[8]` and
+ * `["8"]` are both real bytes), so the two are read as one.
+ */
+export interface InputMethod {
+  readonly name: string;
+  readonly args: readonly string[];
+}
+
+/**
+ * A list input's length bounds. A bound the engine does not enforce is ABSENT,
+ * never `0`: unset is stored as `""` or `{}`, and the engine reads `0` as no
+ * bound too, so all of those describe the same unbounded side.
+ */
+export interface InputListBounds {
+  readonly min?: number;
+  readonly max?: number;
+}
+
+/** The flags every described input carries, whatever its type. */
+export interface InputDescriptionBase {
+  /** The key a client sends. */
+  readonly name: string;
+  /** A required input stays required when it carries a default. */
+  readonly required: boolean;
+  /**
+   * Whether `null` is accepted. A type nullable by default (files, geo, uuid,
+   * vector, `date`, `epochms`) reads `true` unless the def said otherwise, and
+   * a `json` input is always nullable.
+   */
+  readonly nullable: boolean;
+  /** `false` for a single value; the bounds for a list. */
+  readonly list: false | InputListBounds;
+  /**
+   * The enabled methods, in stored order. Always empty on an `obj`, and on an
+   * `enum` or `vector` input, whose methods the engine does not apply (a
+   * dbLink's customization of such a column is the exception: the engine
+   * applies those).
+   */
+  readonly methods: readonly InputMethod[];
+}
+
+/**
+ * One request input.
+ *
+ * A `dbLink` is the one entry that is not itself a request key: the engine
+ * expands it into the linked table's columns at the TOP level of the request,
+ * so a renderer spreads {@link DbLinkInputDescription.columns} into the
+ * surrounding object. A stored type this reading does not know is `unknown`,
+ * never guessed at.
+ */
+export type InputDescription =
+  | (InputDescriptionBase & { readonly type: InputScalarType })
+  | (InputDescriptionBase & {
+      readonly type: "enum";
+      /** As stored: a numeric enum keeps numeric values. */
+      readonly values: readonly (string | number)[];
+    })
+  | (InputDescriptionBase & { readonly type: "vector"; readonly size: number })
+  | (InputDescriptionBase & {
+      readonly type: "tableRef";
+      /** The referenced table's primary-key type, which is what a client sends. */
+      readonly keyType: "int" | "uuid";
+      /** The referenced table's guid. */
+      readonly table: string;
+    })
+  | (InputDescriptionBase & { readonly type: "obj"; readonly children: readonly InputDescription[] })
+  | DbLinkInputDescription
+  | (InputDescriptionBase & {
+      readonly type: "unknown";
+      /** The stored type string, for a renderer's diagnostics. */
+      readonly storedType: string;
+    });
+
+/**
+ * A database link: one stored input the engine expands into one input per
+ * column of the linked table.
+ */
+export interface DbLinkInputDescription {
+  /** The stored entry's name (by convention `<table>__`). Not a request key. */
+  readonly name: string;
+  readonly type: "dbLink";
+  /** The linked table's guid. */
+  readonly table: string;
+  /**
+   * The request inputs it expands to, as the engine expands them: never the
+   * `id`, not a column the link hides, not a private or internal column unless
+   * the link customizes it, and a customized column with the customization's
+   * `required` and methods in place of its own.
+   *
+   * `undefined` when the payload does not carry the linked table, so the
+   * columns cannot be known. A renderer must not read that as "no columns":
+   * narrowing the request to nothing would reject a body the server accepts.
+   */
+  readonly columns: readonly InputDescription[] | undefined;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Route-manifest sections
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * What {@link ToolchainPlugin.routesManifest} is handed.
+ *
+ * Everything the section can depend on is in here, and nothing else: the
+ * hook's output is a function of this value alone (see the hook for why).
+ */
+export interface RoutesManifestContext {
+  /**
+   * Every endpoint's, channel's and message's request inputs, under the
+   * manifest's FINAL keys — the keys of `ROUTES`, `CHANNELS` and the generated
+   * input maps — in a fixed order. Walk it in order and the section comes out
+   * the same for the same workspace.
+   */
+  readonly inputs: RouteInputs;
+  /** This module's block from the project's `package.json` `"xanosdk"` object. */
+  readonly config: Readonly<Record<string, unknown>>;
+  /** The running `@xano/sdk` version, for a plugin's own peer-range check. */
+  readonly sdkVersion: string;
+}
+
+/**
+ * One module's section of `routes.gen.ts`: TypeScript source, plus the named
+ * package imports it needs.
+ *
+ * WHERE IT LANDS. The SDK composes the file: the merged imports of every
+ * module at the top (one `import { a, b } from "pkg";` per package, names
+ * sorted and deduped), then the core sections, then each module's `source` in
+ * a marked block naming the module's package and version, blocks ordered by
+ * package name. So the source is in the SAME FILE as the core sections and
+ * after them: it may name the generated types (`RouteInputs`, `ChannelInputs`,
+ * `MessageInputs`, `MessageName` — maps keyed by the manifest's keys, not the
+ * {@link RouteInputs} description type of this entry, and always present,
+ * empty or not) directly, without importing them. Anything it exports is
+ * exported from `routes.gen.ts`.
+ *
+ * ── Imports are declared, never written ─────────────────────────────────────
+ *
+ * The core sections import nothing, which is what keeps `routes.gen.ts` free
+ * of the SDK runtime in a frontend bundle. A module's imports are the only
+ * ones in the file, so they are data the SDK can check, never `import` lines
+ * inside `source`. A specifier that is not a bare package name is REFUSED:
+ * `@xano/sdk` and its subpaths (the bundle cost the file exists to avoid), a
+ * relative or absolute path (it would resolve against whichever directory the
+ * file was written into), and a protocol (`node:`) all fail the module by
+ * name. Each name must be a plain identifier: no `as` renames, no
+ * side-effect-only import.
+ *
+ * Imported names share one scope with the core sections and every other
+ * module's source, so pick names that will not collide; a collision fails the
+ * user's typecheck rather than being renamed for you.
+ *
+ * A blank `source` contributes no block at all, and its imports are dropped
+ * with it: that is how a module whose config turns the section off removes it.
+ */
+export interface RoutesManifestSection {
+  /** Named imports from packages the consuming project can resolve. */
+  readonly imports?: readonly { readonly from: string; readonly names: readonly string[] }[];
+  /** TypeScript placed after the core sections. Must not spell a block marker (`// xanosdk:begin`, `// xanosdk:end`). */
+  readonly source: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // The plugin itself
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * What a toolchain module's `xanosdk.plugin` file default-exports.
  *
- * Five hooks, and deliberately no more. This contract was designed from one
- * example, and a contract designed from one example generalizes badly — so it
- * covers exactly what that first module needs and stops. The SECOND toolchain
- * module is the one that should generalize it, with the real second set of
- * requirements in hand.
+ * Six hooks. The first five were designed from one example (a module that
+ * renders the workspace to a committed tree) and covered exactly what it
+ * needed. The sixth, {@link ToolchainPlugin.routesManifest}, was added when the
+ * second module, `@xano-sdk/zod`, brought a second real set of requirements: a
+ * module that writes into a file the SDK generates, rather than into a tree of
+ * its own. A hook is added when a module needs it, not in anticipation.
  *
  * Every hook is optional: a module that only adds a `.gitattributes` line
  * declares {@link ToolchainPlugin.contributes} alone.
@@ -411,4 +663,32 @@ export interface ToolchainPlugin {
   readonly onBundle?: (ctx: BundleContext) => Promise<HookResult>;
   /** Runs on `preflight`, contributing a comparison to the report. */
   readonly onPreflight?: (ctx: PreflightContext) => Promise<HookResult>;
+  /**
+   * This module's section of the route manifest (`routes.gen.ts`), computed
+   * from the request inputs the SDK read off the payload. See
+   * {@link RoutesManifestSection} for where it lands and what it may import.
+   *
+   * Runs wherever the manifest is written: `routes --emit` (the `xano:routes`
+   * and `xano:check` scripts), `init` when it writes the project's first
+   * manifest, the refresh `marketplace install`, `reinstall` and `remove`
+   * make, and the decode paths `pull` and `generate`. Not `init --from`: a
+   * project it creates has no module installed yet, and the first
+   * `xano:routes` after an install adds the section.
+   *
+   * SYNCHRONOUS AND PURE. No filesystem, no network, no clock, no randomness:
+   * the same context returns the same section, every time. Every writer of
+   * `routes.gen.ts` must produce identical bytes for the same workspace, or
+   * `routes --emit --strict` flips between red and green depending on which
+   * command last wrote the file; and the decode paths place the file
+   * synchronously, so a promise has nowhere to be awaited. A promise, or any
+   * value that is not a {@link RoutesManifestSection}, is refused.
+   *
+   * A throw (or a refused section) is this module failing, not the manifest:
+   * the core sections are still refreshed, the module's previous block is kept
+   * as it was (none is written when the file has none yet), and a warning
+   * names the module. A module that fails to load is handled the same way. On a verifying run
+   * (`routes --emit --strict`) it is fatal instead, because a check that did
+   * not run must not read as one that passed.
+   */
+  readonly routesManifest?: (ctx: RoutesManifestContext) => RoutesManifestSection;
 }

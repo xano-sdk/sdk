@@ -30,6 +30,10 @@ export interface FieldOptions {
    * and is rejected at export/encode time rather than 500ing at deploy with
    * Postgres `22021`. BMP characters (accents, `€`, most CJK) store
    * fine. A *function/endpoint input* default binds at runtime and has no limit.
+   *
+   * On an **input**, a default applies only when the input is NOT `required`: the
+   * engine refuses a missing required input before it reads the default
+   * (`field.input-required-default-ignored`).
    */
   default?: string | number | boolean;
   /**
@@ -126,13 +130,26 @@ export interface FieldOptions {
 export interface FieldCustomization {
   /** Drop this column from the expansion entirely. */
   hidden?: boolean;
-  /** Whether the expanded input is required. */
+  /**
+   * Whether the expanded input is required. REPLACES the column's own flag,
+   * and an omitted `required` is stored as `false`: a node written only to add
+   * `methods` makes a required column optional. Restate `required: true`.
+   */
   required?: boolean;
   /** Default for the expanded input; stored as a string (`0` → `"0"`). */
   default?: string | number | boolean;
-  /** Methods/filters appended to the column's own, in the same spellings as {@link FieldOptions.methods}. */
+  /**
+   * Methods/filters for the expanded input, in the same spellings as
+   * {@link FieldOptions.methods}. They REPLACE the column's own methods, not
+   * add to them (an omitted `methods` leaves none), so restate each of the
+   * column's methods you mean to keep.
+   */
   methods?: readonly MethodSpec[];
-  /** Overrides for an object column's OWN children, keyed by child name. */
+  /**
+   * Overrides for an object column's OWN children, keyed by child name. A node
+   * that sets this leaves the object column's own `required` and methods as
+   * they are, and applies these overrides one level down instead.
+   */
   customize?: Readonly<Record<string, FieldCustomization>>;
 }
 

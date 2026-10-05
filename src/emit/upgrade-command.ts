@@ -432,14 +432,15 @@ const RECONCILE_ENV = "XANOSDK_UPGRADE_RECONCILE";
 
 /**
  * Run the newly installed CLI over the project to refresh what is rendered
- * from the package — the agent guidance and the route table. This process is
- * the OLD CLI: its templates rendered AGENTS.md as the previous version wrote
- * it, and stamping the new version on that text left a block no later refresh
- * saw as stale. When the new CLI cannot be run, the step to take is named.
+ * from the package — the agent guidance, the README footer and the route
+ * table. This process is the OLD CLI: its templates rendered AGENTS.md as the
+ * previous version wrote it, and stamping the new version on that text left a
+ * block no later refresh saw as stale. When the new CLI cannot be run, the
+ * step to take is named.
  */
 export function reconcileWithInstalled(dir: string): string[] {
   const again =
-    "Run `xanosdk upgrade` once more — the new CLI then refreshes AGENTS.md, the .env.example template and the route table (`npm run xano:routes`); commit what changes.";
+    "Run `xanosdk upgrade` once more — the new CLI then refreshes AGENTS.md, the README's Built-with footer, the .env.example template and the route table (`npm run xano:routes`); commit what changes.";
   const bin = installedBin(dir);
   if (bin === undefined) {
     warn(`Could not find the installed ${PACKAGE} CLI to refresh what it renders.`, "upgrade.partial", [again]);
@@ -490,10 +491,11 @@ function installedBin(dir: string): string | undefined {
 
 /**
  * What THIS CLI renders into the project, brought up to it: the agent guidance
- * block, the lambda modules' type-check config, the `.env.example` template, and the route table the scaffold's
- * `xano:routes` script generates — `xano:check` fails on a stale template or
- * route table. Run by the installed CLI after an upgrade, and by `upgrade`
- * when already current.
+ * block and the README's footer, the lambda modules' type-check config, the
+ * `.env.example` template, and the route table the scaffold's `xano:routes`
+ * script generates — `xano:check` fails on a stale template or route table.
+ * Run by the installed CLI after an upgrade, and by `upgrade` when already
+ * current.
  */
 async function reconcileDerived(dir: string, version: string): Promise<string[]> {
   const changed: string[] = [];

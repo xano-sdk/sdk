@@ -110,6 +110,8 @@ import { readLockFile } from "../lock/io.js";
 import { sdkKindName, type LockFile } from "../lock/lock.js";
 import { fetchWorkspaceBundle } from "./codegen-command.js";
 import { landingLockPath, recordForeignLanding, type LandingReport } from "./landing-record.js";
+import { recordSync, type SyncReport } from "./sync-record.js";
+import { objectDigests, syncDigests } from "../deploy/sync-baseline.js";
 import { exportWorkspaceBundle, type ExportedBundle } from "../deploy/workspace-export.js";
 import { SettledWriteFailure } from "./operation-outcome.js";
 import {
@@ -269,6 +271,8 @@ interface LandingVerification {
   readonly canonicals: readonly CanonicalMismatch[];
   /** Why the check could not run. Present only for `unverified`. */
   readonly reason?: string;
+  /** The landed branch as read back, when the read and the comparison ran. Never in the machine payload. */
+  readonly landed?: unknown;
 }
 
 /** One public URL slug the landing did not serve as declared. */
@@ -457,6 +461,7 @@ async function verifyLanding(
     suffixed: suffixedSiblings(declaredLabels(declared), undeclared),
     compared: result.compared,
     canonicals,
+    landed: landedBundle,
   };
 }
 
@@ -633,6 +638,12 @@ interface PromoteExtras {
    * whose identities do not match this project's lock.
    */
   landingRecord: LandingReport | null;
+  /**
+   * The sync baseline recorded for the landed branch (see
+   * `deploy/sync-baseline.ts`), or `null`: no lock here, or a landing that did
+   * not verify.
+   */
+  syncBaseline: SyncReport | null;
   /**
    * The branch that was live before `--set-live` switched to the landed one —
    * the label to set live again to roll back. Present only once the switch ran;
@@ -854,7 +865,7 @@ export async function runPromoteCommand(args: ParsedArgs): Promise<void> {
     // sending every caller on an instance with an unreadable export to resolve
     // a write that already answered.
     checks: ["verify"],
-    extras: { declined: false, landingRecord: null, tableEffects: null, canonicalMoves: [] },
+    extras: { declined: false, landingRecord: null, syncBaseline: null, tableEffects: null, canonicalMoves: [] },
   });
 
   // What a landed branch costs a run that ended `no`: it is still there, and a
@@ -1311,6 +1322,30 @@ export async function runPromoteCommand(args: ParsedArgs): Promise<void> {
           }),
         );
       }
+    }
+
+    // The branch as read back is exactly what it holds now, so a verified
+    // landing records it whole as the branch's sync baseline (see
+    // `deploy/sync-baseline.ts`). A failed one is known to be incomplete, and
+    // an unverified one was never read.
+    // The branch also holds what the release did not carry (a promote adds a
+    // branch cloned from live), so only the release's objects are the
+    // project's; the rest is the branch's others.
+    if (verification.outcome === "passed" && verification.landed !== undefined) {
+      const released = await ctx.loadArchive().catch(() => undefined);
+      op.set(
+        "syncBaseline",
+        recordSync({
+          lockPath,
+          target: { instance: auth.instance, workspaceId: auth.workspaceId, branch },
+          digests: syncDigests({
+            held: [verification.landed],
+            ...(released === undefined ? {} : { heldLabels: new Set(Object.keys(objectDigests(released))) }),
+          }),
+          by: "promote",
+          complete: true,
+        }),
+      );
     }
 
     // Serving requires a PASS, not merely the absence of a failure. `unverified`

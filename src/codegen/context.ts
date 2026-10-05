@@ -89,12 +89,6 @@ export class DecodeContext {
    */
   secretsFile: string = WORKSPACE_SECRETS_FILE;
 
-  /**
-   * Whether the caller writes that sidecar at all. `--no-secrets` does not, and
-   * the report has to say so rather than promise a file and a restored gate.
-   */
-  writesSecrets = true;
-
   /** The barrel's `workspace("…")` name when the payload carries no workspace object. */
   fallbackWorkspaceName = "workspace";
 

@@ -538,11 +538,69 @@ export interface LandedEntry {
  */
 export type LandedRecord = Record<string, Record<string, LandedEntry>>;
 
+/** The command that recorded a {@link SyncBaseline}. */
+export type SyncSource = "deploy" | "promote" | "pull" | "init";
+
+/** The commands that record a baseline, as the lock spells them. */
+const SYNC_SOURCES: ReadonlySet<string> = new Set<SyncSource>(["deploy", "promote", "pull", "init"]);
+
+/**
+ * One workspace branch's sync baseline: a content digest of each object the
+ * branch held the last time this project and the branch matched (see
+ * `deploy/sync-baseline.ts`). `workspace diff` reads it to say which side
+ * changed since.
+ */
+export interface SyncBaseline {
+  /** When the baseline last changed, ISO-8601. A sync that changed nothing keeps the old time. */
+  at: string;
+  /** The command that recorded it. */
+  by: SyncSource;
+  /**
+   * The digest scheme the digests were taken under. A baseline taken under
+   * another scheme is not compared: its digests would differ from today's for
+   * an object nobody changed.
+   */
+  scheme: number;
+  /**
+   * Whether {@link objects} names EVERY object the branch held, not only this
+   * project's. Only then does an object the baseline does not name mean it was
+   * added in Xano since.
+   */
+  complete: boolean;
+  /** The project's objects there: `<sdkKind>:<name>`, as `workspace diff` labels it → content digest. */
+  objects: Record<string, string>;
+  /**
+   * The rest of what the branch held, the same way: objects another source
+   * put there, and sections a decode does not write into the tree. Absent
+   * when there were none.
+   */
+  others?: Record<string, string>;
+}
+
+/**
+ * Per workspace destination (the {@link LandedRecord} key), per branch label,
+ * the baseline last recorded there. Written by deploy, promote, pull and
+ * `init --from`, after their write succeeded. Like `landed`, it is carried
+ * through every export untouched.
+ */
+export type SyncedRecord = Record<string, Record<string, SyncBaseline>>;
+
 export interface LockFile {
   version: typeof LOCK_VERSION;
   objects: Record<string, LockEntry>;
   /** Absent (or empty) until this project lands something. See {@link LandedRecord}. */
   landed?: LandedRecord;
+  /** Absent (or empty) until this project syncs with a workspace branch. See {@link SyncedRecord}. */
+  synced?: SyncedRecord;
+}
+
+/**
+ * `base` with the sync baselines of `lock` carried across. Every rebuild of a
+ * lock goes through this: a baseline dropped by an identity transform would
+ * make every object read as changed on the next diff.
+ */
+export function withSyncedOf<T extends LockFile>(base: T, lock: Pick<LockFile, "synced">): T {
+  return lock.synced !== undefined && Object.keys(lock.synced).length > 0 ? { ...base, synced: lock.synced } : base;
 }
 
 /**
@@ -571,9 +629,12 @@ export function emptyLock(): LockFile {
  * every destination.
  */
 export function withObjects(lock: LockFile, objects: Record<string, LockEntry>): LockFile {
-  return lock.landed !== undefined && Object.keys(lock.landed).length > 0
-    ? { version: lock.version, objects, landed: lock.landed }
-    : { version: lock.version, objects };
+  return withSyncedOf(
+    lock.landed !== undefined && Object.keys(lock.landed).length > 0
+      ? { version: lock.version, objects, landed: lock.landed }
+      : { version: lock.version, objects },
+    lock,
+  );
 }
 
 /**
@@ -675,7 +736,8 @@ export function parseLockReport(
       path,
       `it holds unresolved merge-conflict markers (\`<<<<<<<\`, \`=======\`, \`>>>>>>>\`). Resolve it as the union ` +
         `of both sides: keep every entry under \`objects\` (and \`landed\`) from each, delete the markers, and fix ` +
-        `the commas. Where both sides renamed one object, two keys then share a guid — keep the one your code ` +
+        `the commas. Under \`synced\`, keep either side's baseline for a branch, or delete it: a missing baseline ` +
+        `only means \`workspace diff\` cannot say which side changed until the next deploy or pull. Where both sides renamed one object, two keys then share a guid — keep the one your code ` +
         `exports and remove the other with \`xanosdk lock prune --identity-only --yes <key>\`.`,
     );
   }
@@ -709,8 +771,14 @@ export function parseLockReport(
   }
   const objects = validateLockObjects(obj.objects, path, opts);
   const landed = obj.landed === undefined ? undefined : validateLanded(obj.landed, path, droppedLandings);
+  const synced = obj.synced === undefined ? undefined : validateSynced(obj.synced);
   return {
-    lock: { version: LOCK_VERSION, objects, ...(landed !== undefined && Object.keys(landed).length > 0 ? { landed } : {}) },
+    lock: {
+      version: LOCK_VERSION,
+      objects,
+      ...(landed !== undefined && Object.keys(landed).length > 0 ? { landed } : {}),
+      ...(synced !== undefined && Object.keys(synced).length > 0 ? { synced } : {}),
+    },
     droppedLandings,
   };
 }
@@ -757,6 +825,65 @@ function validateLanded(raw: unknown, path: string, dropped: string[]): LandedRe
     if (Object.keys(record).length > 0) out[dest] = record;
   }
   return out;
+}
+
+/** Sorted by label, so the committed lock diffs by object rather than by write order. */
+function sortedDigests(digests: Readonly<Record<string, string>>): Record<string, string> {
+  return Object.fromEntries(Object.entries(digests).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+/** A workspace destination key: baselines are kept only for what `workspace diff` can read. */
+const WORKSPACE_DESTINATION_KEY = /^[^/\s]+\/workspace\/[1-9]\d*$/;
+
+/**
+ * Read the `synced` map: workspace destination → branch label → baseline.
+ *
+ * Lenient where `landed` is hard-line, because a baseline is advisory. A prune
+ * deletes by the landing record, so a misread one is dangerous; a baseline only
+ * says which side changed, and without one `workspace diff` says
+ * `baseline: null`. A baseline this build cannot read (a newer build's `by`, a
+ * hand edit) is dropped rather than failing every command that reads the lock.
+ */
+function validateSynced(raw: unknown): SyncedRecord {
+  const out: SyncedRecord = {};
+  if (!isPlainRecord(raw)) return out;
+  for (const [dest, branches] of Object.entries(raw)) {
+    if (!WORKSPACE_DESTINATION_KEY.test(dest) || !isPlainRecord(branches)) continue;
+    const record: Record<string, SyncBaseline> = {};
+    for (const [branch, entry] of Object.entries(branches)) {
+      const baseline = readBaseline(entry);
+      if (branch.trim() !== "" && baseline !== undefined) record[branch] = baseline;
+    }
+    if (Object.keys(record).length > 0) out[dest] = record;
+  }
+  return out;
+}
+
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/** A digest map, or `undefined` when any entry is not a non-empty string. */
+function readDigests(raw: unknown): Record<string, string> | undefined {
+  if (!isPlainRecord(raw)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [label, digest] of Object.entries(raw)) {
+    if (typeof digest !== "string" || digest === "") return undefined;
+    out[label] = digest;
+  }
+  return out;
+}
+
+function readBaseline(raw: unknown): SyncBaseline | undefined {
+  if (!isPlainRecord(raw)) return undefined;
+  const { at, by, complete, scheme } = raw;
+  const objects = readDigests(raw.objects);
+  const others = raw.others === undefined ? {} : readDigests(raw.others);
+  if (typeof at !== "string" || Number.isNaN(Date.parse(at))) return undefined;
+  if (typeof by !== "string" || !SYNC_SOURCES.has(by) || typeof complete !== "boolean") return undefined;
+  if (typeof scheme !== "number" || !Number.isInteger(scheme) || scheme < 1) return undefined;
+  if (objects === undefined || others === undefined) return undefined;
+  return { at, by: by as SyncSource, scheme, complete, objects, ...(Object.keys(others).length > 0 ? { others } : {}) };
 }
 
 /**
@@ -1121,9 +1248,35 @@ export function serializeLock(lock: LockFile): string {
     }
     landed[dest] = record;
   }
+  // The sync baselines, sorted at every level for the same reason. Omitted
+  // when empty, so a lock that never synced is byte-identical to one written
+  // before the section existed.
+  const synced: SyncedRecord = {};
+  for (const dest of Object.keys(lock.synced ?? {}).sort()) {
+    const src = lock.synced![dest]!;
+    const record: Record<string, SyncBaseline> = {};
+    for (const branch of Object.keys(src).sort()) {
+      const b = src[branch]!;
+      const others = b.others === undefined ? {} : sortedDigests(b.others);
+      record[branch] = {
+        at: b.at,
+        by: b.by,
+        scheme: b.scheme,
+        complete: b.complete,
+        objects: sortedDigests(b.objects),
+        ...(Object.keys(others).length > 0 ? { others } : {}),
+      };
+    }
+    if (Object.keys(record).length > 0) synced[dest] = record;
+  }
   return (
     JSON.stringify(
-      Object.keys(landed).length > 0 ? { version: lock.version, objects, landed } : { version: lock.version, objects },
+      {
+        version: lock.version,
+        objects,
+        ...(Object.keys(landed).length > 0 ? { landed } : {}),
+        ...(Object.keys(synced).length > 0 ? { synced } : {}),
+      },
       null,
       2,
     ) + "\n"

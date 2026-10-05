@@ -238,5 +238,42 @@ const ws = new WebSocket(socketUrl("chat", XANO_HOST), token);
 ws.send(JSON.stringify({ action: "join", channel: channelPath("rooms/{room_id}", { room_id }) }));
 ```
 
+**Request types come from the same file.** It exports four types-only maps, keyed exactly
+like the runtime tables they sit beside, so a frontend types what it sends without importing a
+def at all:
+
+| Type | Keyed by | Holds |
+|---|---|---|
+| `RouteInputs` | the `ROUTES` key (`"POST listings"`, `"v1:GET vehicles"`) | the endpoint's inputs, path params included |
+| `ChannelInputs` | the `CHANNELS` key (`"rooms/{room_id}"`) | the channel's path params |
+| `MessageInputs` | `"<channel key> <message name>"` (`"rooms/{room_id} send"`) | the message's payload |
+| `MessageName` | | every `MessageInputs` key |
+
+```ts
+import { ROUTES, routePath, type RouteInputs } from "../xano/routes.gen";
+
+type NewListing = RouteInputs["POST listings"];
+
+fetch(BASE + routePath("POST listings"), {
+  method: ROUTES["POST listings"].verb,
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ title, price } satisfies NewListing),
+});
+```
+
+Each type agrees with `InferInput<typeof def>` for the same endpoint — required and optional
+keys, `null`, enums, nested objects and lists — so code that already imports a def can keep
+using `InferInput`. The one difference is a database-link input (`input.dbLink(table)`): the
+manifest types it as the linked table's columns, which is what the server accepts, where
+`InferInput` shows an opaque marker under the link's name. Responses are not in the manifest;
+type them with `InferResponse` on an `import type` of the def.
+
+These are types, so they add nothing to a bundle. For runtime validation, install
+`@xano-sdk/zod` (`npx xanosdk marketplace install zod`): it writes `ROUTE_SCHEMAS`,
+`CHANNEL_SCHEMAS` and `MESSAGE_SCHEMAS` into the same file under the same keys
+(`ROUTE_SCHEMAS["POST listings"].parse(body)`), each checked against its type when you
+typecheck, so a schema cannot drift from the type it validates. The file then imports `zod`,
+and still never `@xano/sdk`.
+
 Add `--strict` in CI to fail when the committed manifest is out of date. A hand-typed
 `ROUTES` table is the option that gives up both the bundle saving and the rename safety.

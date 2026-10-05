@@ -45,7 +45,7 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync, type Dirent } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import type { ParsedArgs } from "./cli.js";
+import type { ParsedArgs, RouteManifestRefresh } from "./cli.js";
 import { backendDirIn } from "./backend-dir.js";
 import { isProjectDir } from "./xanosdk-project.js";
 import { relForwardSlash } from "../util/rel-path.js";
@@ -82,7 +82,14 @@ import {
 import { condenseNpmError } from "./npm.js";
 import { type PeerRetryResult } from "./npm-install.js";
 import { addCommandFor, installCommandFor, removeArgs, removeCommandFor } from "./package-manager.js";
-import { type AddOutcome, type RemoveOutcome, addDependency, refusePlugAndPlay, removeDependency } from "./project-dependency.js";
+import {
+  type AddOutcome,
+  type RemoveOutcome,
+  addDependency,
+  refusePlugAndPlay,
+  removeDependency,
+} from "./project-dependency.js";
+import { addToolchainPeers } from "./toolchain-peers.js";
 import { retryCommand } from "./retry-command.js";
 import {
   declaredDependencies,
@@ -285,8 +292,14 @@ export async function runMarketplaceInstallCommand(args: ParsedArgs): Promise<vo
     unknownFlags: args.unknownFlags,
   });
 
+  // After the reconcile, so a module refused there adds nothing on its behalf.
+  const peers = await addToolchainPeers(dir, name, retryCommand(args, { command: "marketplace install" }).command);
   await reportNextStep(dir, name);
   reportSync(sync, args.json);
+  // Last, once the project holds everything the module brought: its section
+  // of the route manifest lands now, not at the next `xano:routes`, so
+  // `xano:check` is green straight after the install.
+  const routes = await refreshRoutesAfterInstall(dir);
 
   if (isMachineOutput(args)) {
     writeJson({
@@ -296,7 +309,9 @@ export async function runMarketplaceInstallCommand(args: ParsedArgs): Promise<vo
       modules: sync.modules,
       unconfigured: sync.unconfigured,
       written: sync.written,
-      changed: sync.changed,
+      changed: sync.changed || peers.length > 0 || routes === "written",
+      peers,
+      routes,
     });
   }
 }
@@ -398,7 +413,11 @@ export async function runMarketplaceReinstallCommand(args: ParsedArgs): Promise<
     unknownFlags: args.unknownFlags,
   });
 
+  // The same two steps `install` ends with: a module installed by hand under a
+  // manager that does not add peers gets them here.
+  const peers = await addToolchainPeers(dir, pkg, retryCommand(args, { command: "marketplace reinstall" }).command);
   reportSync(sync, args.json);
+  const routes = await refreshRoutesAfterInstall(dir);
 
   if (isMachineOutput(args)) {
     const mod = sync.modules.find((m) => m.pkg === pkg);
@@ -407,7 +426,9 @@ export async function runMarketplaceReinstallCommand(args: ParsedArgs): Promise<
       modules: sync.modules,
       unconfigured: sync.unconfigured,
       written: sync.written,
-      changed: sync.changed,
+      changed: sync.changed || peers.length > 0 || routes === "written",
+      peers,
+      routes,
       ...(mod?.sources === undefined ? {} : { sources: mod.sources }),
       // Hoisted alongside `sources` for the same reason it is: this verb is
       // ABOUT one package, so its caller should not have to find it in the
@@ -450,6 +471,8 @@ async function refuseUnclaimedFlags(
     const { loaded } = await discoverToolchainPlugins(dir, {
       frozen: false,
       configuring: true,
+      // As the reconcile discovers, so this is never stricter than it.
+      peerSkew: "skip",
       ...(enable === undefined ? {} : { configOverride: { [enable]: { enabled: true } } }),
     });
     flags = questionSets(loaded).flatMap((set) => set.questions.map(flagFor));
@@ -895,44 +918,99 @@ interface RemovalTarget {
   readonly workspace?: boolean;
 }
 
+/** What a marketplace verb did to the project's `routes.gen.ts`. */
+type RoutesRefresh = RouteManifestRefresh["manifest"];
+
 /**
  * After a workspace module is removed: regenerate the route manifest if the
  * project keeps one, and name the lock entries the workspace no longer exports
  * with the prune that drops them. Never fatal — the removal is done; what
  * cannot be brought up to date here is said with the command that does it.
  */
-async function afterWorkspaceModuleRemoved(
+async function afterWorkspaceModuleRemoved(dir: string): Promise<{ routes: RoutesRefresh; lockOrphans: number }> {
+  const { rel, routes, lockOrphans } = await refreshProjectRoutes(dir, {
+    regenerated: "without the removed module's endpoints",
+    loading: "update what the module left behind",
+    remedy: (rel) => `Run \`npm run xano:routes\` and \`xanosdk lock prune ./${rel}/index.ts --yes\` once it loads.`,
+  });
+  if (lockOrphans > 0) {
+    warn(
+      `${rel}/xano.lock still pins ${lockOrphans} ${lockOrphans === 1 ? "entry" : "entries"} the workspace no longer exports ` +
+        `(the removed module's objects). Once they are gone for good: \`xanosdk lock prune ./${rel}/index.ts --yes\`.`,
+      "lock.module-orphans",
+    );
+  }
+  return { routes, lockOrphans };
+}
+
+/**
+ * After `install` or `reinstall`: bring the route manifest up to date, so a
+ * toolchain module's section lands with the module. Only a project that keeps
+ * a manifest beside its entry — the same file `remove` refreshes; one with no
+ * `routes.gen.ts` gets none from an install, and its entry is not loaded.
+ */
+async function refreshRoutesAfterInstall(dir: string): Promise<RoutesRefresh> {
+  if (!existsSync(join(backendDirIn(dir), "routes.gen.ts"))) return "absent";
+  const { routes } = await refreshProjectRoutes(dir, {
+    regenerated: "for the modules now installed",
+    loading: "refresh routes.gen.ts",
+    remedy: () => "Run `npm run xano:routes` once it loads.",
+  });
+  return routes;
+}
+
+/**
+ * The refresh `install`, `reinstall` and `remove` share: regenerate the
+ * project's `routes.gen.ts` and say what happened. Never fatal — the package
+ * change is done; what cannot be refreshed here is said with the command that
+ * does it.
+ *
+ * Two different failures, two different warnings. An entry that will not load
+ * is `module.load-failed`, with the caller's remedy. A manifest that cannot be
+ * written (an unresolved api group, or a module block that cannot be carried
+ * forward) is `routes.not-written`, naming the reason: the entry loaded fine,
+ * and blaming it sends the reader to the wrong file.
+ */
+async function refreshProjectRoutes(
   dir: string,
-): Promise<{ routes: "written" | "unchanged" | "skipped" | "absent"; lockOrphans: number }> {
+  say: {
+    /** What a regenerated file now reflects, after "Regenerated <file>". */
+    readonly regenerated: string;
+    /** What loading the entry was for, after "Could not load <entry> to". */
+    readonly loading: string;
+    /** What to run once the entry loads, given the backend's relative path. */
+    readonly remedy: (rel: string) => string;
+  },
+): Promise<{ rel: string; routes: RoutesRefresh; lockOrphans: number }> {
   const backend = backendDirIn(dir);
   const entry = join(backend, "index.ts");
   const rel = relForwardSlash(dir, backend) || ".";
-  if (!existsSync(entry)) return { routes: "absent", lockOrphans: 0 };
-  const routesFile = join(backend, "routes.gen.ts");
+  if (!existsSync(entry)) return { rel, routes: "absent", lockOrphans: 0 };
+  let refreshed: RouteManifestRefresh;
   try {
     const { refreshRouteManifest } = await import("./cli.js");
-    const { manifest, lockOrphans } = await refreshRouteManifest(entry, routesFile);
-    if (manifest === "written") info(`Regenerated ${rel}/routes.gen.ts without the removed module's endpoints.`);
-    if (manifest === "skipped") {
-      warn(`${rel}/routes.gen.ts could not be regenerated here — run \`npm run xano:routes\` and commit it.`, "routes.not-written");
-    }
-    if (lockOrphans > 0) {
-      warn(
-        `${rel}/xano.lock still pins ${lockOrphans} ${lockOrphans === 1 ? "entry" : "entries"} the workspace no longer exports ` +
-          `(the removed module's objects). Once they are gone for good: \`xanosdk lock prune ./${rel}/index.ts --yes\`.`,
-        "lock.module-orphans",
-      );
-    }
-    return { routes: manifest, lockOrphans };
+    refreshed = await refreshRouteManifest(entry, join(backend, "routes.gen.ts"), dir);
   } catch (err) {
     warn(
-      `Could not load ${rel}/index.ts to update what the module left behind ` +
-        `(${err instanceof Error ? err.message.split("\n")[0] : String(err)}). Run \`npm run xano:routes\` and ` +
-        `\`xanosdk lock prune ./${rel}/index.ts --yes\` once it loads.`,
+      `Could not load ${rel}/index.ts to ${say.loading} ` +
+        `(${err instanceof Error ? err.message.split("\n")[0] : String(err)}). ${say.remedy(rel)}`,
       "module.load-failed",
     );
-    return { routes: "skipped", lockOrphans: 0 };
+    return { rel, routes: "skipped", lockOrphans: 0 };
   }
+  const { manifest, lockOrphans, why } = refreshed;
+  if (manifest === "written") info(`Regenerated ${rel}/routes.gen.ts ${say.regenerated}.`);
+  if (manifest === "skipped") {
+    // With a `why`, the block it names fails `xano:routes` the same way, so the
+    // reason's own remedy (a hand edit) is the one to give.
+    warn(
+      why === undefined
+        ? `${rel}/routes.gen.ts could not be regenerated here — run \`npm run xano:routes\` and commit it.`
+        : `${rel}/routes.gen.ts could not be regenerated here: ${why}`,
+      "routes.not-written",
+    );
+  }
+  return { rel, routes: manifest, lockOrphans };
 }
 
 /**

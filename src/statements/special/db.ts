@@ -3228,29 +3228,23 @@ export function dbQuery<
   } as unknown as DbResult<As, ApplyFilters<QueryResult<QueryRow<T, Cols, P, RT>, A, P, RT, E, AG, Cols>, Fs>>, args);
 }
 
+/**
+ * There is no `as`: the transaction returns nothing, so a binding on it is
+ * always `null` (measured on a live instance). The
+ * body shares the enclosing stack, so read what its statements bind. A pulled
+ * workspace that stores an `as` keeps it through the decoder's envelope spread.
+ */
 export interface DbTransactionArgs extends StatementAnnotations {
   /** The statements to run atomically. */
   body: Statement[];
-  /**
-   * Capture the transaction's result into this stack variable.
-   *
-   * A transaction returns whatever its sub-stack returned, so the binding is
-   * real state and not decoration — a pulled workspace stores one.
-   * The engine's XanoScript schema for this statement declares no `as`
-   * argument, which is why nothing here modelled it; the statement class
-   * returns a value all the same, and the stack item carries the binding like
-   * any other.
-   */
-  as?: string;
 }
 
-const DB_TRANSACTION_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, body: 1, as: 1 } satisfies Record<keyof DbTransactionArgs, 1>);
+const DB_TRANSACTION_KEYS = Object.keys({ disabled: 1, description: 1, mock: 1, body: 1 } satisfies Record<keyof DbTransactionArgs, 1>);
 
 /**
  * `db.transaction { … }` — run a sub-stack in a database transaction
- * (`mvp:db_transaction`). Carries the `run` sub-stack and, where the author
- * bound one, the result variable. Byte-verified (parser-minimal) against the
- * engine's persisted shape.
+ * (`mvp:db_transaction`). Carries the `run` sub-stack. Byte-verified
+ * (parser-minimal) against the engine's persisted shape.
  */
 export function dbTransaction<const B extends readonly Statement[]>(
   args: Omit<DbTransactionArgs, "body"> & { body: B },
@@ -3263,10 +3257,6 @@ export function dbTransaction<const B extends readonly Statement[]>(
     context: { run: args.body.map(encodeStatement) },
     input: [],
   };
-  // Written only when bound. The persisted golden for this statement carries no
-  // `as` key at all, so materializing an empty one would add a byte the engine
-  // did not store.
-  if (args.as !== undefined) stmt.as = args.as;
   return annotate(stmt, args) as Statement & BodyBrand<B>;
 }
 

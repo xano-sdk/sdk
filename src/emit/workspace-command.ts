@@ -320,6 +320,24 @@ async function runDiff(args: ParsedArgs): Promise<void> {
   const comparedIsLive: boolean | null =
     args.branch === undefined ? true : liveLabel === undefined ? null : args.branch === liveLabel;
 
+  // Which side moved since this project and the branch last agreed. Read from
+  // the baseline the last deploy, promote, pull or `init --from` recorded for
+  // this branch. With none (or an unknown branch label) the lists stay empty
+  // and `baseline` is null: the comparison above is still the whole answer.
+  const { landingLockPath } = await import("./landing-record.js");
+  const { readSyncBaseline, storedBranchLabel } = await import("./sync-record.js");
+  const { syncDirection } = await import("../deploy/sync-baseline.js");
+  const syncLabel = storedBranchLabel(listed, args.branch);
+  const baseline =
+    syncLabel === undefined
+      ? undefined
+      : readSyncBaseline(landingLockPath(args, args.file !== undefined ? { entryFile: args.file } : {}), {
+          instance: auth.instance,
+          workspaceId: auth.workspaceId,
+          branch: syncLabel,
+        });
+  const direction = syncDirection(JSON.parse(local.bundle) as unknown, live, result, baseline);
+
   // An agent is the primary reader of a diff, and every other verb in this
   // family answers on stdout. Emitted BEFORE the human rendering rather than
   // instead of it at the end, so the two cannot drift about what was compared.
@@ -345,6 +363,14 @@ async function runDiff(args: ParsedArgs): Promise<void> {
       // `<sdkKind>:<name>` strings a caller can match on.
       settingsFields: result.settingsFields,
       unexpected: result.liveOnly,
+      // Each difference above by the side that moved since the baseline (see
+      // `deploy/sync-baseline.ts`). Empty, with `baseline: null`, when this
+      // branch has none.
+      baseline: direction.baseline,
+      changedThere: direction.changedThere,
+      changedHere: direction.changedHere,
+      changedBoth: direction.changedBoth,
+      unclassified: direction.unclassified,
       source: local.source,
     });
     return;
@@ -392,6 +418,16 @@ async function runDiff(args: ParsedArgs): Promise<void> {
   );
   report("unexpected there, not declared here", result.liveOnly);
   blank();
+  if (direction.baseline !== null) {
+    // Same objects, regrouped by which side moved. Printed only when a baseline
+    // exists: without one, "unclassified" would name every row above.
+    step(`Since the last ${direction.baseline.by} (${direction.baseline.at}):`);
+    report("changed there (in Xano), not here", direction.changedThere);
+    report("changed here, not there", direction.changedHere);
+    report("changed on both sides — a conflict", direction.changedBoth);
+    report("different, but the baseline cannot say which side moved", direction.unclassified);
+    blank();
+  }
   detail(`Compared against ${local.source}. Nothing was written.`);
 }
 

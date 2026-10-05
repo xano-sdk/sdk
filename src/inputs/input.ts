@@ -134,6 +134,9 @@ export const input = {
    * true, methods: ["lower"] } }` — where `hidden` drops them wholesale. Both
    * are read per column by the engine's expansion, and a column named in
    * `customize` with `hidden: true` is dropped exactly as the outer list does it.
+   * A node REPLACES the column's own `required` flag and `methods`, and an
+   * omitted one is stored as `false` / none: a node that only adds a method
+   * makes a required column optional, so restate `required: true`.
    *
    * Input-only: the engine refuses it as a column type, and a column linking a
    * whole table would be a foreign key — use

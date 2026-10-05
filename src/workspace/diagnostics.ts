@@ -80,6 +80,7 @@ const VALUES = [
   "field.enum-default-not-a-value",
   "field.email-default-invalid",
   "field.input-default-invalid",
+  "field.input-required-default-ignored",
   "value.obj-zero-based-numeric-keys",
   "value.int-out-of-range",
 ] as const;

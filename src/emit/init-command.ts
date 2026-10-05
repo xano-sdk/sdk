@@ -115,7 +115,8 @@ import {
   WORKSPACE_ENV_EXAMPLE_FILE,
 } from "./workspace-env.js";
 import { ensureWorkspaceEnvGitignored } from "./gitignore.js";
-import { readToolchainBlock } from "./project-config.js";
+import { readToolchainBlock, readToolchainConfig } from "./project-config.js";
+import type { Discovery } from "./toolchain-modules.js";
 import { resolveThemeChoice } from "./theme-resolve.js";
 import { defaultThemeChoice, type ThemeChoice } from "./theme-presets.js";
 import type { FrontendPreset, LandingContent } from "./frontend-presets.js";
@@ -815,6 +816,16 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
     );
     blank();
     moduleOutcome = await installModules(targetDir, modules);
+    // A toolchain module's other peers, as `marketplace install` adds them (one
+    // helper, so the two commands leave the same dependencies). Here, in pass
+    // one, because the scaffold's package.json merges what pass one recorded and
+    // its install then puts it on disk. Never under `--no-install`: `modules` is
+    // empty there, and nothing was installed to read peers from.
+    if (moduleOutcome.toolchain.length > 0) {
+      const { addToolchainPeers } = await import("./toolchain-peers.js");
+      const rerun = retryCommand(args, { command: "init" }).command;
+      for (const pkg of moduleOutcome.toolchain) await addToolchainPeers(targetDir, pkg, rerun);
+    }
   }
 
   // Pass one wrote a manifest and ran `npm install` before the questionnaire
@@ -1019,8 +1030,10 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
         // the first CI run is green without a manual step. Only after a real
         // install: the entry cannot be loaded without its dependencies.
         if (result.install === "installed" && sdkResolves(targetDir)) {
-          const derivation = await writeDerivedFiles(targetDir, (env) =>
-            spellProjectCli(renderXanoIndexWithModules(appName, outcome.registered, outcome.unwired, env), vars.cli),
+          const derivation = await writeDerivedFiles(
+            targetDir,
+            (env) => spellProjectCli(renderXanoIndexWithModules(appName, outcome.registered, outcome.unwired, env), vars.cli),
+            toolchain,
           );
           derived = derivation.written;
           entryFailed = derivation.failed === true;
@@ -1267,6 +1280,8 @@ function deferredDependency(specifier: string, targetDir: string): { name: strin
 async function writeDerivedFiles(
   targetDir: string,
   renderIndexWithEnv: (env: readonly string[]) => string,
+  /** The toolchain modules this run discovered, for their sections of the route manifest. */
+  toolchain: Pick<Discovery, "loaded" | "skipped">,
 ): Promise<DerivedFiles> {
   const written: string[] = [];
   let declaredEnv: readonly string[] = [];
@@ -1279,7 +1294,9 @@ async function writeDerivedFiles(
     const { resetLockOverrides, seedLockOverrides } = await import("../lock/store.js");
     const { readLockFile, writeLockFile } = await import("../lock/io.js");
     const { setDiagnosticSink } = await import("../workspace/diagnostics.js");
-    const { planRouteManifest, renderPlannedManifest } = await import("./routes-manifest.js");
+    const { planRouteManifest } = await import("./routes-manifest.js");
+    const { renderManifestFile, reportModuleFailures } = await import("./routes-manifest-file.js");
+    const { isEnabled } = await import("./toolchain-modules.js");
 
     const existing = existsSync(lockPath) ? readLockFile(lockPath) : undefined;
     resetLockOverrides();
@@ -1319,11 +1336,26 @@ async function writeDerivedFiles(
       writeLockFile(lockPath, lock);
       written.push(LOCK_REL);
     }
-    const manifest = renderPlannedManifest(
+    // Each module with the config this run just RECORDED, not the config
+    // discovery read before the questionnaire: the file has to be what the
+    // project's own `xano:routes` writes from its package.json now, and a
+    // module the answers switched off contributes nothing.
+    const loaded = toolchain.loaded.flatMap((plugin) => {
+      const config = readToolchainConfig(targetDir, plugin.pkg) ?? {};
+      return isEnabled(config) ? [{ ...plugin, config }] : [];
+    });
+    const manifest = renderManifestFile(
       planRouteManifest(payload, (kind, name) => lock.objects[lockKey(kind, name)]?.canonical),
+      {
+        loaded,
+        skipped: toolchain.skipped,
+        previous: existsSync(routesPath) ? readFileSync(routesPath, "utf8") : undefined,
+        sdkVersion: readVersion(),
+      },
     );
     if (manifest !== undefined) {
-      writeFileSync(routesPath, manifest, "utf8");
+      reportModuleFailures(manifest.failed, ROUTES_REL);
+      writeFileSync(routesPath, manifest.source, "utf8");
       written.push(ROUTES_REL);
     }
   } catch (err) {

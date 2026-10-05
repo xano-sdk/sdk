@@ -272,7 +272,7 @@ export async function runGenerateCommand(args: ParsedArgs): Promise<void> {
   }
 
   const loaded = await loadSource(args, raw, cwd);
-  const project = decodeBundle(loaded.bundle, { secretsFile: `${shown}/${WORKSPACE_SECRETS_BASENAME}`, writesSecrets: args.noSecrets !== true });
+  const project = decodeBundle(loaded.bundle, { secretsFile: `${shown}/${WORKSPACE_SECRETS_BASENAME}` });
   refuseDuplicateSourceGuids(project);
   // Placed with an empty prefix and joined onto `root` here, so an absolute
   // `--out` works the same as a relative one. The committed `.env.example`
@@ -286,10 +286,15 @@ export async function runGenerateCommand(args: ParsedArgs): Promise<void> {
   // with no package.json above it cannot load `@xano/sdk`, so that remedy
   // would fail as printed — say what to add first.
   const routesDeferred: string[] = [];
+  // The toolchain modules of the project the tree lands in, for their sections
+  // of its route manifest — the project `routes --emit` would run from. A tree
+  // no package.json holds has none.
+  const { discoverManifestModules } = await import("./routes-manifest-file.js");
+  const modules = await discoverManifestModules(projectRootFrom(dirname(root)), join(root, ROUTES_MANIFEST_BASENAME), readVersion());
   const decoded = placeGeneratedFiles(project, "", projectRelative ? shown : basename(root) || shown, {
     entry: shellWord(`${shown}/index.ts`),
     deferred: routesDeferred,
-  }).map((f) => ({
+  }, modules).map((f) => ({
     path: f.path.replace(/^\//, ""),
     content: f.content,
   }));

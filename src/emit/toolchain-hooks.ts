@@ -22,8 +22,17 @@
  * Node-only; reached from the commands, which the CLI imports lazily.
  */
 
-import type { BundleContext, BundlePayload, HookResult, PreflightContext } from "../plugin.js";
+import type {
+  BundleContext,
+  BundlePayload,
+  HookResult,
+  PreflightContext,
+  RoutesManifestContext,
+  ToolchainPlugin,
+} from "../plugin.js";
 import type { LoadedPlugin } from "./toolchain-modules.js";
+import { checkModuleSection, type ModuleSection } from "./routes-manifest-modules.js";
+import { byCodeUnit } from "../util/code-unit.js";
 import { UsageError } from "./errors.js";
 import { detail, info, warn } from "./ui.js";
 
@@ -184,10 +193,63 @@ export async function runBundleHooks(
   }
 }
 
+/**
+ * One module's answer to `routesManifest`: its section, or why there is none.
+ *
+ * A failure is a VALUE, not a throw, and never a partial file: the writer
+ * decides what it means (KTD7). On a normal write the core sections are still
+ * refreshed and the module's previous block is carried forward
+ * (`parseModuleSections`); on a verifying one it is fatal.
+ */
+export type RoutesManifestResult =
+  | ({ readonly kind: "section" } & ModuleSection)
+  | { readonly kind: "failed"; readonly pkg: string; readonly version: string; readonly why: string };
+
+/**
+ * Call every loaded plugin's `routesManifest`, in package-name order (the
+ * order the blocks land in the file), skipping plugins without one.
+ *
+ * Synchronous, and prints nothing: the decode paths place the manifest
+ * synchronously, and what a failure prints depends on the writer. A hook that
+ * throws, returns a promise, or returns a section the composer would refuse
+ * (an `@xano/sdk` or relative import, say) is that module's `failed` result,
+ * so one broken module never costs the others their sections. A returned
+ * section comes back normalized: imports merged per package and sorted.
+ */
+export function fireRoutesManifest(
+  plugins: readonly LoadedPlugin[],
+  ctx: Omit<RoutesManifestContext, "config">,
+): RoutesManifestResult[] {
+  const results: RoutesManifestResult[] = [];
+  for (const { pkg, version, plugin, config } of [...plugins].sort((a, b) => byCodeUnit(a.pkg, b.pkg))) {
+    if (plugin.routesManifest === undefined) continue;
+    try {
+      const section = plugin.routesManifest({ ...ctx, config });
+      // A promise is refused just below, and nothing ever awaits it. Observed
+      // here so its later rejection is not an unhandled one — which would crash
+      // the process under Node's default, long after this module's failure was
+      // reported as a value.
+      if (typeof (section as { then?: unknown } | null)?.then === "function") {
+        Promise.resolve(section).catch(() => {});
+      }
+      const imports = checkModuleSection(pkg, section);
+      results.push({
+        kind: "section",
+        pkg,
+        version,
+        section: { ...(imports.length > 0 ? { imports } : {}), source: section.source },
+      });
+    } catch (error) {
+      results.push({ kind: "failed", pkg, version, why: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return results;
+}
+
 /** Whether any loaded plugin declares the hook, so the SDK can skip its setup. */
 export function anyDeclares(
   plugins: readonly LoadedPlugin[],
-  hook: "onBundle" | "onPreflight",
+  hook: keyof Pick<ToolchainPlugin, "onBundle" | "onPreflight" | "routesManifest">,
 ): boolean {
   return plugins.some((p) => p.plugin[hook] !== undefined);
 }

@@ -1,4 +1,4 @@
-# xanosdk v1.0.5
+# xanosdk v1.0.6
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 
@@ -39,7 +39,7 @@ plain file read resolves them at the version you have.
 
 - [Object kinds](llms/object-kinds.md): Read when deciding WHAT to build — every authorable primitive, what each is, and which factory + register method builds it. Also when `register*` will not typecheck an array built by `.flatMap()`/`.concat()`.
 - [Core def shapes](llms/kinds-core.md): Read when authoring a function, query, api group, task, workflow test, middleware, tool, or addon — and for the `response` and `expr` shapes every one of them uses.
-- [Consuming defs from a client](llms/client.md): Read when a frontend imports a def (`getPath()`/`InferResponse`) or calls the deployed backend — what the import costs, `window.XANO_HOST`, local dev, file URLs, and a Node spot-check.
+- [Consuming defs from a client](llms/client.md): Read when a frontend calls the deployed backend or imports a def — request types and zod schemas without the import, its cost, `window.XANO_HOST`, local dev, file URLs, a Node spot-check.
 - [Toolchain modules](llms/toolchain.md): Read when `package.json` has a `"xanosdk"` block or you run `xanosdk marketplace`.
 - [Error index](llms/errors.md): Read when a request, test, build, or pull fails with a message you did not write — the string, its cause, and where the fix is.
 - [Saved unit tests, assertions, and mocks](llms/tests.md): Read when authoring a `workflowTest()` stack, when a query/function/middleware carries `tests`, when a statement needs a `mock`, or when running a deployed environment's tests.
@@ -436,7 +436,7 @@ Non-obvious authoring rules:
   checked only by the `xanosdk export`/`deploy` CLI path. Only `deploy` ships seed rows.
   - Entry points: the `node:fs` writers (`writeBundle`/`writeArtifact`) and lock-file I/O
     import from `@xano/sdk/node`, NOT the browser-safe `@xano/sdk` entry (a frontend
-    imports defs from it for `getPath()`/`InferInput`). `@xano/sdk/internal` is the
+    imports from it; request types come from `routes.gen.ts`). `@xano/sdk/internal` is the
     compiler machinery, never needed to author. READING a bundle back is `@xano/sdk/bundle`
     — a statement walker (`2.if.0` paths), a structural hash, `mvp:*` catalog, `tableRefOf`.
 - **Intra-workspace imports use `.js` specifiers** (`../tables/links.js`), not
@@ -554,7 +554,7 @@ to survive a rename).
     - `getPath` percent-encodes each value (so `?`/`#`/spaces stay in their segment) and throws on what encoding cannot contain: a `/`, and a segment that becomes `.`/`..` as sent (a URL parser drops those before routing, addressing a different endpoint).
     - The keys are typed from the literal `name`, so a typo is a compile error.
     - `q.toSearchParams(input)` drops GET path params (free `query.toSearchParams` keeps them); lists send `k[]=a&k[]=b` (`k=a&k=b` binds only `b`).
-  - Browser bundle cost, the `routes.gen.ts` alternative, and spot-checking a def from Node: `llms/client.md`.
+  - Browser bundle cost, the `routes.gen.ts` alternative (paths and request types), and spot-checking a def from Node: `llms/client.md`.
 - `apiGroup({ name, guid?, canonical?, description?, docs?, swagger?, apiGroupEnabled?, documentation?, cors?, middleware? })` — a query container; queries bind to it via their `apiGroup`. `canonical` holds only letters, digits, `_` and `-` (it is the `<canonical>` of `/api:<canonical>`); anything else THROWS at build.
   - `documentation?`: `{ require_token? }` — the gate on this group's hosted docs. `require_token: true` IS the declaration; the token lives in `xano/.secrets.json` under this group's guid, and a literal `token` FAILS the export. ⚠ ALWAYS emitted, present or not: an absent key is written as the engine default on import, so omitting the block CLEARS an existing gate (the opposite of the `workspaceConfig` rule). `swagger: true` publishes the docs; `require_token` gates them only alongside a non-empty token, so `swagger: true` with no gate makes the whole group readable by anyone with the URL — export warns once per build and `--strict` fails; `diagnostics: { allow: ["api-group.docs-public"] }` accepts it. A declared gate with NO token drops the block, so those bytes clear it: export FAILS under `swagger: true`, and with `swagger` off warns and completes.
   - `cors?`: `{ mode?, allowOrigins?: string[], allowHeaders?: string[], allowCredentials?, maxAge?, allowMethods?: { get?, post?, put?, patch?, delete?, head? } }`.
@@ -630,7 +630,7 @@ surface — `s.conditional`/`s.while` `when` (incl. each `elif` branch), and
 
 # Consuming defs from a client
 
-> Read when a frontend imports a def (`getPath()`/`InferResponse`) or calls the deployed backend — what the import costs, `window.XANO_HOST`, local dev, file URLs, and a Node spot-check.
+> Read when a frontend calls the deployed backend or imports a def — request types and zod schemas without the import, its cost, `window.XANO_HOST`, local dev, file URLs, a Node spot-check.
 
 Importing a def into a browser bundle or a Node script — for `getPath()`, `getUrl()`, `verb`, or `InferResponse` — runs its factory calls; these are the costs and the checks.
 
@@ -645,6 +645,16 @@ Importing a def into a browser bundle or a Node script — for `getPath()`, `get
   plain data importing NOTHING, still compile-checked: `routePath("GET blog/{slug}", { slug })`
   `channelPath("rooms/{room_id}", { room_id })`, `socketUrl("chat", baseUrl)` (tenant base
   URLs lifted to `wss://h/ws/<tenant>:<canonical>`). A rename is a type error, not a 404.
+- **Request types without the def.** `routes.gen.ts` also exports types-only `RouteInputs`,
+  `ChannelInputs`, `MessageInputs` (and `MessageName`), keyed like `ROUTES`, `CHANNELS`, and
+  `"<channel key> <message name>"`: `type NewListing = RouteInputs["POST listings"]`. A
+  frontend types bodies, channel params and payloads from these, not `InferInput` on a def;
+  keep `InferInput` in code that already imports defs. They match `InferInput`, except a
+  `dbLink` input appears as the linked table's columns (what the server accepts). Responses
+  are not in the file: `InferResponse` on an `import type` of the def.
+  Runtime validation: `xanosdk marketplace install zod` adds `@xano-sdk/zod`, which writes
+  `ROUTE_SCHEMAS`/`CHANNEL_SCHEMAS`/`MESSAGE_SCHEMAS` into the file under the same keys, each
+  checked against its type at typecheck; the file then imports `zod`, never `@xano/sdk`.
 - **Verifying a def outside a bundler.** Inside a bundler (Vite/webpack) importing a
   query def to read `getPath()`/`verb` works directly. To spot-check from Node, run a REAL
   file with `tsx <file.ts>` **from inside the project root** — not `tsx -e "import …"`
@@ -707,6 +717,18 @@ shipped defaults. `marketplace reinstall <pkg>` re-asks with the current setting
 defaults and re-enables a disabled one; `marketplace remove <pkg>` drops block, lines and
 dependency together — a plain `npm uninstall` leaves the block, and a package it names
 that is no longer installed fails every `--frozen-lock` run.
+
+**A module's section of `xano/routes.gen.ts`.** A module with a `routesManifest` hook (types:
+`@xano/sdk/plugin`) writes a block between `// xanosdk:begin <pkg>` and `// xanosdk:end <pkg>`
+after the core sections, on every write of the file (`routes --emit`, `xano:routes`, `pull`,
+`generate`, `marketplace install|reinstall|remove`). Edits inside the block are overwritten.
+Install also adds the module's non-SDK peers (e.g. `zod`) as direct dependencies.
+The hook is synchronous and pure: given
+the request inputs under the manifest's keys and its config, it returns `{ imports?, source }`,
+imports as bare package names (`@xano/sdk*`, relative and `node:` are refused). A module that
+fails to load or throws leaves its previous block as it was, with a warning naming it, and the
+core sections still refresh; under `routes --emit --strict` it is fatal. `@xano-sdk/zod`
+(`xanosdk marketplace install zod`) is one: it adds `ROUTE_SCHEMAS` and its siblings.
 
 # Error index
 
@@ -997,7 +1019,7 @@ off); a trigger's own failure reaches the error log only while it is on.
 
 Array blocks (an `if`/`transform` is applied per item):
 
-- `s.array.map({ source, as?, transform? })` — `transform` is either a per-item `Value` expression (each item maps to that value) or a **record of values** (each item maps to an object with those keys), or a list of `{ key, value }` pairs, for a key computed per item or two rows sharing one. Use `ref("$this")` for the item and `ref("$index")` for its position. These are THIS statement's own bindings, in a value expression — not the JavaScript lambda contract (see **Lambda bodies**), which binds a different set per surface and is written with `lam.fn`.
+- `s.array.map({ source, as?, transform? })` — `transform` is either a per-item `Value` expression (each item maps to that value) or a **record of values** (each item maps to an object with those keys), or a list of `{ key, value }` pairs, for a key computed per item or two rows sharing one. Use `ref("$this")` for the item and `ref("$index")` for its position. A `transform` value, filter arguments included, can read `ref("$this.<path>")` and any outer stack variable or input. These are THIS statement's own bindings, in a value expression — not the JavaScript lambda contract (see **Lambda bodies**), which binds a different set per surface and is written with `lam.fn`.
 - `s.array.union({ source, with, as?, transform? })` — set-union two arrays. `with` is REQUIRED; omitted → `Unable to locate input: `.
 
 DB reads/writes (`table` is a def handle or name; `fieldName` defaults to the
@@ -1051,7 +1073,8 @@ primary key `id`):
   - Template placeholders are Twig over the request scope: `{{ $input.name }}` for an input, `{{ $var.name }}` for a stack variable. ⚠ A BARE `{{ name }}` renders as the empty string — HTTP 200, no error, a query that silently ran with a blank where the value belonged. A bound `?` arg carries a VALUE without the template at all.
   - ⚠ A table's PHYSICAL name is **not stable across deploys**. A deploy is a full replace, so every table is created afresh and the id in its name moves every time — the same unchanged project redeployed three times gave one table three different names. Never store, cache, hardcode or fixture one: resolve it from `information_schema` inside the same request that uses it.
 - `s.db.external.<engine>.direct_query({ sql, connectionString, responseType?, args?, parser?, as? })` — same shape against an EXTERNAL database; `<engine>` is `postgres`/`mysql`/`mssql`/`oracle`/`snowflake`. `connectionString` is a `Value` — reach for `env(...)`, not a literal — stored as `context.connection_string_flex`. A bare string stores the older `context.connection_string` instead (an env-var name unless it looks like a URL); each form round-trips as itself.
-- `s.db.transaction({ body, as? })` — run a `Statement[]` atomically. `as` binds whatever the block returned.
+- `s.db.transaction({ body })` — run a `Statement[]` atomically. It returns nothing, so it takes no `as`: read what the body binds. An `s.return` in the body ends the WHOLE stack with that value, and the writes before it commit.
+  - The body shares the enclosing stack: a variable it binds (`as: "order"` on an `s.db.add`) is still bound AFTER the transaction.
 - `s.db.bulk.add({ table, items, allowIdField?, as? })` / `s.db.bulk.update` / `s.db.bulk.patch` — `items` is an array `Value`.
   - ⚠ `bulk.add` **drops `id` on every row unless `allowIdField: true`** (silently, next sequence value instead) — the opposite of `seed`, where `id` pins. Rows referenced by a foreign key need `allowIdField: true`; literal `items` carrying `id` without it throw. `bulk.update`/`patch` keep `id` (their match key).
   - ⚠ **`bulk.update` is a whole-row REPLACE: every column an item OMITS is zeroed** (`""`/`0`/`null`), HTTP 200, no error — `{ id: 7, status: "done" }` blanks the rest of row 7. **Use `s.db.bulk.patch`** for the partial write "update these rows" means. `export()` warns on a STATIC `items` missing columns (`--strict` fails); a `ref`/`inp` `items` is uninspectable.
@@ -1428,6 +1451,10 @@ with `c.obj`/`c.array`. Any argument also takes a runtime value (`inp`, `ref`, a
 `withFilters` chain) — inside `obj()`/`expr()` an argument cannot carry its own filter
 chain, so compute it in a prior `set_var`. The arg types below name each argument's
 ENGINE type, not the JS type you may pass.
+`fl.add`/`fl.sub`/`fl.mul` keep an INT when both operands are ints (`2 × 3` is `6`, not
+`6.0`) and give a decimal only when either operand is one — the `decimal` return type
+below covers both, so an int pipeline needs no `fl.to_int()`. `fl.div` is an int only
+when it divides exactly.
 To add to a numeric column (counter, stock, balance), use `s.db.increment`
 (`llms/statements-data.md`) — one atomic UPDATE. A pipeline read-modify-write is NOT
 atomic (concurrent writers lose updates), and `col("clicks")` does NOT resolve to the

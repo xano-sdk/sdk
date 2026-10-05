@@ -66,6 +66,8 @@ import { seedRowsByTableGuid } from "../workspace/seed.js";
 import { contextFlags } from "./context-flags.js";
 import { requireBackendSlot } from "./backend-slot.js";
 import { memoCredential, refuseProfileForLocal } from "./tracked-backend.js";
+import { recordSync, syncBranchLabel, type SyncTarget } from "./sync-record.js";
+import { syncDigests } from "../deploy/sync-baseline.js";
 import type { Source } from "./source-selector.js";
 import { getEngineRecord } from "../deploy/local-engine-state.js";
 import { detail, info, step, success, warn, blank, style, stdoutStyle, terminalText } from "./ui.js";
@@ -83,7 +85,8 @@ import {
   type LockFile,
 } from "../lock/lock.js";
 import { resetLockOverrides, seedLockOverrides } from "../lock/store.js";
-import { planRouteManifest, renderPlannedManifest, RouteManifestError, ROUTES_MANIFEST_BASENAME } from "./routes-manifest.js";
+import { planRouteManifest, RouteManifestError, ROUTES_MANIFEST_BASENAME } from "./routes-manifest.js";
+import { renderManifestFile, reportModuleFailures, type ManifestModules } from "./routes-manifest-file.js";
 import { setDiagnosticSink, type Diagnostic } from "../workspace/diagnostics.js";
 import { resolveKnowledge } from "../workspace/knowledge.js";
 import { readLockFile, writeLockFile } from "../lock/io.js";
@@ -187,6 +190,8 @@ interface SourcedBundle {
   readonly credentialRead?: boolean;
   /** The seed rows the archive carries (a release cut with `--seed`), which the tree does not. */
   readonly seed?: { rows: SeedRowsReport[]; label: string; provenance: string };
+  /** The workspace branch read, for its sync baseline. Only for a workspace whose branch label is known. */
+  readonly syncTarget?: SyncTarget;
 }
 
 /**
@@ -209,10 +214,13 @@ async function fetchBundle(
     const auth = await credential();
     // The `step` lines belong to fetchWorkspaceBundle, which also owns the
     // branch probe that has to run before them.
+    const bundle = await fetchWorkspaceBundle(auth, args.branch);
+    const branch = await syncBranchLabel(auth, args.branch);
     return {
-      bundle: await fetchWorkspaceBundle(auth, args.branch),
+      bundle,
       origin: { source: "workspace", origin: String(auth.workspaceId), ...(args.branch === undefined ? {} : { branch: args.branch.trim() }) },
       credentialRead,
+      ...(branch === undefined ? {} : { syncTarget: { instance: auth.instance, workspaceId: auth.workspaceId, branch } }),
     };
   }
   // A bare tracked source (`local`, `ephemeral`) is the one recorded for
@@ -411,6 +419,15 @@ export function placeGeneratedFiles(
    * than ahead of the write it describes. Omitted, it warns on the spot.
    */
   routes?: { entry: string; deferred: string[] },
+  /**
+   * The toolchain modules of the project the tree is placed into, and the
+   * route manifest it is replacing, so the manifest carries each module's
+   * section exactly as `routes --emit` would write it there — and a module that
+   * fails keeps its previous block rather than the file losing it. Discovered
+   * by the caller, before any entry is loaded; omitted (`init --from`, a
+   * `generate --out` no project holds), the manifest has no module sections.
+   */
+  modules?: ManifestModules,
 ): ScaffoldFile[] {
   const out: ScaffoldFile[] = [
     // Generated from the names the source declares, and therefore placed HERE
@@ -439,27 +456,42 @@ export function placeGeneratedFiles(
   // it instead of listing it for deletion. A workspace with no endpoint gets
   // none; one whose manifest cannot be written (a canonical resolving nowhere, a
   // verb+name shared across groups) gets none and a warning saying why.
-  const manifest = routeManifestFor(project.source, routes?.entry ?? `${displayDir}/index.ts`, routes?.deferred);
+  const manifest = routeManifestFor(project.source, routes?.entry ?? `${displayDir}/index.ts`, routes?.deferred, modules);
   if (manifest !== undefined) out.push({ path: `${backendDir}/${ROUTES_MANIFEST_BASENAME}`, content: manifest });
   return out;
 }
 
-/** The route manifest for a decoded payload, or `undefined` when `routes --emit` would write none. */
+/**
+ * The route manifest for a decoded payload, or `undefined` when `routes --emit`
+ * would write none. When it cannot be rendered, the file it replaces
+ * (`modules.previous`), unchanged, if there is one.
+ */
 export function routeManifestFor(
   payload: Readonly<Record<string, unknown>>,
   entry?: string,
   deferred?: string[],
+  modules?: ManifestModules,
 ): string | undefined {
   try {
-    return renderPlannedManifest(planRouteManifest(payload), entry);
+    const file = renderManifestFile(planRouteManifest(payload), modules, entry === undefined ? {} : { entry });
+    if (file === undefined) return undefined;
+    reportModuleFailures(file.failed, ROUTES_MANIFEST_BASENAME);
+    return file.source;
   } catch (err) {
     if (!(err instanceof RouteManifestError)) throw err;
+    // The file being replaced comes back unchanged rather than absent: a decode
+    // lists a recorded file it did not produce for deletion, and a module block
+    // that could not be carried forward is no reason to lose the whole manifest.
+    const kept = modules?.previous;
     // Never a silent skip: the scaffold's `xano:check` would fail on the missing
-    // file with nothing saying why.
-    const line = `${ROUTES_MANIFEST_BASENAME} was not written: ${err.message}`;
+    // (or stale) file with nothing saying why.
+    const line =
+      kept === undefined
+        ? `${ROUTES_MANIFEST_BASENAME} was not written: ${err.message}`
+        : `${ROUTES_MANIFEST_BASENAME} was not refreshed and was kept as it was: ${err.message}`;
     if (deferred === undefined) warn(line, "routes.not-written");
     else deferred.push(line);
-    return undefined;
+    return kept;
   }
 }
 
@@ -1051,13 +1083,14 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
     );
   }
 
-  const { bundle, origin, credentialRead, seed } =
+  const { bundle, origin, credentialRead, seed, syncTarget } =
     source.kind === "file"
       ? {
           bundle: readBundleFile(source.path),
           origin: { source: "file", origin: source.path } as const,
           credentialRead: undefined,
           seed: undefined,
+          syncTarget: undefined,
         }
       : await fetchBundle(args, source);
 
@@ -1087,7 +1120,6 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
   const ws = (bundle.payload as Record<string, unknown> | undefined)?.workspace as { name?: unknown } | undefined;
   const unnamed = typeof ws?.name !== "string" || ws.name.trim() === "";
   const project = decodeBundle(bundle, {
-    writesSecrets: args.noSecrets !== true,
     ...(unnamed ? { workspaceName: appName } : {}),
   });
 
@@ -1273,6 +1305,13 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
   // Written after the scaffold's "Wrote N files" list, so named on its own.
   // Spelled from where the command was typed, as every other path this run prints.
   if (lock !== null && !hadLock) success(`Wrote ${displayPath(lock)}`);
+  // The tree and the branch it was decoded from agree, so this is the
+  // branch's first sync baseline (see `deploy/sync-baseline.ts`). A decode
+  // reads the whole branch, so it is complete. Not for a tree that failed its
+  // round trip: that one does not match the branch.
+  if (lock !== null && syncTarget !== undefined && verified !== false) {
+    recordSync({ lockPath: lock, target: syncTarget, digests: syncDigests({ held: [bundle] }), by: "init", complete: true });
+  }
 
   // The decode report is written from the report object, so the copy on disk has
   // to be re-rendered once verification has had its say — otherwise the file

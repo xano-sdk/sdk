@@ -388,6 +388,13 @@ async function interrogate(
     await discoverToolchainPlugins(projectDir, {
       frozen: false,
       configuring: true,
+      // A module outside its SDK peer range is skipped, not refused: a skipped
+      // module is untouchable below, so its settings and blocks are left exactly
+      // as they are, and discovery names it with the remedy. A refusal here came
+      // AFTER npm had run, leaving `remove` half done and `install` unconfigured.
+      // The module a verb installs or reinstalls is refused by that verb's own
+      // check before this runs.
+      peerSkew: "skip",
       // `enable` is applied HERE and nowhere else — folding the pending flag
       // into what discovery reads is what lets the re-enabling land inside the
       // reconciler's single write. See `SyncOptions.enable`.

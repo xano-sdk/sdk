@@ -1543,9 +1543,9 @@ const telemetryOff = (v: unknown): boolean =>
  * where each read as drift and `release create` told the author to deploy the
  * very code that was running.
  *
- * A key is dropped from BOTH sides only when each side either lacks it or holds
- * it at this default. A live value away from the default (a hint set, telemetry
- * on, a prompt added in the builder) still differs, since a release carries it.
+ * A key is dropped from a side that lacks it or holds it at this default. A
+ * live value away from the default (a hint set, telemetry on, a prompt added in
+ * the builder) still differs, since a release carries it.
  */
 const ENGINE_FILLED_DEFAULTS: Readonly<Record<string, { readonly [key: string]: EngineDefault }>> = {
   tool: {
@@ -1571,46 +1571,49 @@ const AGENT_SETTINGS_DEFAULTS: { readonly [key: string]: EngineDefault } = {
 };
 
 /**
- * `ours` and `theirs` with every key of `defaults` removed where neither side
- * holds it away from its default. Copies; the rows themselves are untouched.
+ * `row` with every key of `defaults` removed that it lacks or holds at its
+ * default. Copies; the row itself is untouched.
+ *
+ * One-sided, so a row can be digested on its own (see {@link canonicalRow}).
+ * The verdict is the one a two-sided rule would reach: a side away from the
+ * default keeps the key, so it still differs from a side that dropped it.
  */
 function withoutEngineDefaults(
   defaults: { readonly [key: string]: EngineDefault } | undefined,
-  ours: Record<string, unknown>,
-  theirs: Record<string, unknown>,
-): [Record<string, unknown>, Record<string, unknown>] {
-  if (defaults === undefined) return [ours, theirs];
-  const a = { ...ours };
-  const b = { ...theirs };
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  if (defaults === undefined) return row;
+  const out = { ...row };
   for (const [key, isDefault] of Object.entries(defaults)) {
-    const atDefault = (row: Record<string, unknown>): boolean => !Object.hasOwn(row, key) || isDefault(row[key]);
-    if (atDefault(a) && atDefault(b)) {
-      delete a[key];
-      delete b[key];
-    }
+    if (!Object.hasOwn(out, key) || isDefault(out[key])) delete out[key];
   }
-  // An agent's settings block: both sides carry it, so its members are judged.
-  if (defaults === ENGINE_FILLED_DEFAULTS.toolset && isPlainObject(a.agent_settings) && isPlainObject(b.agent_settings)) {
-    [a.agent_settings, b.agent_settings] = withoutEngineDefaults(AGENT_SETTINGS_DEFAULTS, a.agent_settings, b.agent_settings);
+  // An agent's settings block: its members are judged the same way.
+  if (defaults === ENGINE_FILLED_DEFAULTS.toolset && isPlainObject(out.agent_settings)) {
+    out.agent_settings = withoutEngineDefaults(AGENT_SETTINGS_DEFAULTS, out.agent_settings);
   }
-  return [a, b];
+  return out;
 }
 
 /**
- * A table with every column's `default: null` removed, nested columns too.
+ * A table with every column's empty `default` removed, nested columns too.
  *
- * A uuid primary key is written with no `default` and read back as
- * `default: null` (E2E pass 24), so every merge of a uuid-keyed table differed
- * and never reported up to date. Absent and null mean the same — no default —
- * while `""` stays a value. Copies; the row is untouched.
+ * Absent, `null` and `""` are one state to the engine, and a required column's
+ * default is discarded whatever it says (see the descriptor rule in
+ * `normalize()`). Each one shows up in practice: a uuid primary key is written
+ * with no `default` and read back as `null` (E2E pass 24), and a column with no
+ * default compiles to `""` while a current instance stores `null`
+ * (xano-sdk/sdk-dev#11). `normalize()` fills in only a key that is PRESENT, so
+ * removing the key from one side and not the other makes the table differ.
+ * The key is therefore removed from both sides here. Copies; the row is
+ * untouched.
  */
-function withoutNullColumnDefaults(table: Record<string, unknown>): Record<string, unknown> {
+function withoutEmptyColumnDefaults(table: Record<string, unknown>): Record<string, unknown> {
   const strip = (columns: unknown): unknown =>
     Array.isArray(columns)
       ? columns.map((col) => {
           if (!isPlainObject(col)) return col;
           const { default: d, ...rest } = col;
-          const out = d === null ? rest : col;
+          const out = d === null || d === "" || col.required === true ? rest : col;
           return Array.isArray(out.children) ? { ...out, children: strip(out.children) } : out;
         })
       : columns;
@@ -1692,20 +1695,26 @@ function comparable(
   theirsIn: Record<string, unknown>,
   pinned: boolean,
 ): [unknown, unknown] {
-  let [ours, theirs] = withoutEngineDefaults((Object.hasOwn(ENGINE_FILLED_DEFAULTS, section) ? ENGINE_FILLED_DEFAULTS[section] : undefined), oursIn, theirsIn);
+  return [canonicalRow(section, oursIn, pinned), canonicalRow(section, theirsIn, pinned)];
+}
+
+/**
+ * One side of an object comparison, in the form {@link compareToLive} compares:
+ * two rows are the same object state exactly when their canonical rows are
+ * deep-equal. One-sided, so a row can be digested and the digest compared later
+ * (see `sync-baseline.ts`) under the same rule the comparison uses.
+ */
+export function canonicalRow(section: string, rowIn: Record<string, unknown>, pinned: boolean): unknown {
+  let row = withoutEngineDefaults(Object.hasOwn(ENGINE_FILLED_DEFAULTS, section) ? ENGINE_FILLED_DEFAULTS[section] : undefined, rowIn);
   if (section === "dbo") {
     // `normalize()` strips `index` everywhere, so a table's indexes ride under a
     // key it keeps: an added unique index is drift like any other change.
-    [ours, theirs] = [withoutNullColumnDefaults(ours), withoutNullColumnDefaults(theirs)];
-    [ours, theirs] = [{ ...ours, [INDEX_SET_KEY]: indexKeysOf(oursIn) }, { ...theirs, [INDEX_SET_KEY]: indexKeysOf(theirsIn) }];
+    row = { ...withoutEmptyColumnDefaults(row), [INDEX_SET_KEY]: indexKeysOf(rowIn) };
   }
-  if ((HOSTED_ICON_KINDS as readonly string[]).includes(section)) [ours, theirs] = [withHostedIconIdentity(ours), withHostedIconIdentity(theirs)];
-  if (pinned || !("canonical" in ours || "canonical" in theirs)) {
-    return [normalize(ours), normalize(theirs)];
-  }
-  const { canonical: _a, ...oursRest } = ours;
-  const { canonical: _b, ...theirsRest } = theirs;
-  return [normalize(oursRest), normalize(theirsRest)];
+  if ((HOSTED_ICON_KINDS as readonly string[]).includes(section)) row = withHostedIconIdentity(row);
+  if (pinned || !("canonical" in row)) return normalize(row);
+  const { canonical: _slug, ...rest } = row;
+  return normalize(rest);
 }
 
 /**

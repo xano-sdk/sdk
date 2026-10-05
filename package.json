@@ -1,6 +1,6 @@
 {
   "name": "@xano/sdk",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Xano SDK — your Xano backend as TypeScript. `xanosdk deploy` ships your typed workspace (and an optional static frontend) to a live, auto-expiring ephemeral environment and prints its URL. init → deploy → URL.",
   "keywords": [
     "xanosdk",

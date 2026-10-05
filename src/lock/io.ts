@@ -7,7 +7,8 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { atomicWrite } from "../util/atomic-write.js";
-import { parseLockReport, serializeLock, type LockFile } from "./lock.js";
+import { parseLockReport, serializeLock, type LockFile, type SyncSource } from "./lock.js";
+import { nextBaseline, syncedOn, withSyncBaseline, type SyncDigests } from "./synced.js";
 import { applyLanding, withoutPrunedObjects, type LandingUpdate } from "./landed.js";
 import { tagLockSource } from "./store.js";
 
@@ -93,4 +94,22 @@ export function forgetPrunedInLockFile(path: string, update: Pick<LandingUpdate,
   if (objects === lock.objects) return [];
   writeLockFile(path, { ...lock, objects });
   return Object.keys(lock.objects).filter((key) => !(key in objects));
+}
+
+/**
+ * Record a branch's sync baseline in the lock file at `path` (see
+ * `deploy/sync-baseline.ts`, stored by `synced.ts`). `undefined` when there is no lock there, as for a
+ * landing; otherwise whether the file changed. A sync that found the branch as
+ * the baseline already describes it leaves the file alone.
+ */
+export function recordSyncInLockFile(
+  path: string,
+  destKey: string,
+  branch: string,
+  sync: { digests: SyncDigests; by: SyncSource; complete: boolean },
+): { changed: boolean } | undefined {
+  if (!existsSync(path)) return undefined;
+  const lock = readLockFile(path);
+  const baseline = nextBaseline(syncedOn(lock, destKey, branch), sync.digests, sync.by, sync.complete);
+  return { changed: writeLockFile(path, withSyncBaseline(lock, destKey, branch, baseline)) };
 }

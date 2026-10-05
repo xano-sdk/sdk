@@ -110,8 +110,6 @@ export function decodeBundle(
   opts: {
     /** How the report names the documentation-token sidecar the caller writes. */
     secretsFile?: string;
-    /** False when the caller writes no sidecar (`--no-secrets`); the report says so. */
-    writesSecrets?: boolean;
     /**
      * The workspace name to write over the source's — for a source whose name is
      * not the project's (a tenant's handle, a release that carries none).
@@ -121,7 +119,6 @@ export function decodeBundle(
 ): GeneratedProject {
   const ctx = new DecodeContext();
   if (opts.secretsFile !== undefined) ctx.secretsFile = opts.secretsFile;
-  if (opts.writesSecrets !== undefined) ctx.writesSecrets = opts.writesSecrets;
   let raw = bundle.payload ?? {};
   if (opts.workspaceName !== undefined) {
     ctx.fallbackWorkspaceName = opts.workspaceName;

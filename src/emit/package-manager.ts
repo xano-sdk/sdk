@@ -334,11 +334,12 @@ export function removeArgs(manager: PackageManager, pkg: string): string[] {
 }
 
 /**
- * The arguments that add `spec` to the project in the block it belongs in
- * (`dev`), for `manager`. npm's spelling stays `install`, the one npm's own
- * peer retry is written for.
+ * The arguments that add `spec` (one specifier, or several in one run) to the
+ * project in the block it belongs in (`dev`), for `manager`. npm's spelling
+ * stays `install`, the one npm's own peer retry is written for.
  */
-export function addArgs(manager: PackageManager, spec: string, dev = false): string[] {
-  if (manager === "npm") return ["install", spec, ...(dev ? ["--save-dev"] : [])];
-  return ["add", spec, ...(dev ? [manager === "pnpm" ? "--save-dev" : "--dev"] : [])];
+export function addArgs(manager: PackageManager, spec: string | readonly string[], dev = false): string[] {
+  const specs = typeof spec === "string" ? [spec] : [...spec];
+  if (manager === "npm") return ["install", ...specs, ...(dev ? ["--save-dev"] : [])];
+  return ["add", ...specs, ...(dev ? [manager === "pnpm" ? "--save-dev" : "--dev"] : [])];
 }

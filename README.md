@@ -105,9 +105,9 @@ the platform is where it runs.
   objects, and the `xano.lock` every build writes keeps renames as renames, so your public
   URLs stay yours.
 
-- **🧩 The types flow to your frontend.** `import type` a `query()` def for its typed request
-  and response, and read its path and verb from a generated route manifest. Rename a column
-  and every consumer lights up red.
+- **🧩 The types flow to your frontend.** A generated route manifest gives it every path, verb
+  and request type; `import type` a `query()` def for its response. Rename a column and every
+  consumer lights up red.
 
 - **🔁 It works both ways.** Already have a workspace? `init --from workspace` reads it back
   as real, readable TypeScript — then deploys.
@@ -202,7 +202,7 @@ You author declarative def-objects, register them on one `Xano` instance, and Xa
 compiles the whole thing into Xano's importable bundle.
 
 ```ts
-import { workspace, table, query, apiGroup, f, s, ref, c, expr, col } from "@xano/sdk";
+import { workspace, table, query, apiGroup, f, input, s, inp, ref, c, expr, col } from "@xano/sdk";
 
 // A database table — `id` + `created_at` auto-inject, so declare only your own columns.
 const user = table({
@@ -237,10 +237,17 @@ const listPosts = query({
   response: ref("rows"),
 });
 
+const createPost = query({
+  verb: "POST", apiGroup: blog, name: "posts",
+  input: { title: input.text({ required: true }), body: input.text() },
+  stack: [s.db.add({ table: post, row: { title: inp("title"), body: inp("body") }, as: "row" })],
+  response: ref("row"),
+});
+
 export default workspace("blog")
   .registerApiGroups([blog])
   .registerTables([user, post])
-  .registerQueries([listPosts]);
+  .registerQueries([listPosts, createPost]);
 ```
 
 Tab-complete `s.` to discover the entire statement catalog — `s.db.*`, `s.math.*`,
@@ -278,25 +285,27 @@ kind you can author is in [Object kinds](https://github.com/xano-sdk/sdk/blob/ma
 
 ## A type-safe frontend, for free
 
-Because your API is a typed def, the code that *calls* it reuses that def instead of
-re-typing URLs and request bodies. Paths come from a generated route manifest, types
-straight from the defs:
+Because your API is a typed def, the code that *calls* it never re-types a URL or a request
+body: paths and request types come from a generated route manifest, responses from the defs:
 
 ```bash
 npx xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts   # scaffolds run this before dev/build/typecheck
 ```
 
 ```ts
-import { ROUTES, routePath } from "../xano/routes.gen.js"; // plain data, imports nothing
+import { ROUTES, routePath, type RouteInputs } from "../xano/routes.gen.js"; // plain data, imports nothing
 import type { post } from "../xano/index.js";            // the model above
 import type { InferRow } from "@xano/sdk";
 
 const BASE = window.XANO_HOST ?? import.meta.env.VITE_XANO_HOST; // deploy injects it; .env.local in dev
 
+type NewPost = RouteInputs["POST posts"];              // { title: string; body?: string }
 type Post = InferRow<typeof post>;                     // { id: number; created_at: number; title: string; … }
 
-async function fetchPosts(): Promise<Post[]> {
-  const res = await fetch(BASE + routePath("GET list_posts"), { method: ROUTES["GET list_posts"].verb });
+async function createPost(body: NewPost): Promise<Post> {
+  const res = await fetch(BASE + routePath("POST posts"), {
+    method: ROUTES["POST posts"].verb, headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  });
   return res.json();                                   // typed end to end
 }
 ```
@@ -304,15 +313,16 @@ async function fetchPosts(): Promise<Post[]> {
 - **`routePath("GET blog/{slug}", { slug })`** → the endpoint path, resolved from your code
   (or the frozen `xano.lock`). Keys are `"<VERB> <name>"` and are checked at compile time,
   `{param}` names included: a backend rename is a compile error rather than a 404.
-- **`InferInput<typeof someQuery>`** → the request-payload type, derived from a query's
-  `input` map. **No codegen, always in sync.**
+- **`RouteInputs["POST posts"]`** → the request-payload type, under the same keys
+  (`ChannelInputs`/`MessageInputs` for realtime); `InferInput<typeof q>` is the def-side twin.
 - **`InferRow<typeof post>`** / **`InferResponse<typeof someQuery>`** → the table's row type
   and the endpoint's response type, closing the round trip. Rename or retype a column and
   every consumer breaks at compile time — exactly where you want it.
+- **Runtime validation:** `npx xanosdk marketplace install zod` adds zod schemas to the file,
+  keyed alike (`ROUTE_SCHEMAS["POST posts"].parse(body)`) and typechecked against the types.
 
-Import defs into a frontend with `import type` only — a def imported as a value runs its
-factory calls at module load and carries the SDK runtime into your bundle. The measured bundle
-numbers, the full response-inference rules, and the realtime helpers are in
+Import defs with `import type` only: a def imported as a value carries the SDK runtime into
+your bundle. Bundle numbers, inference rules, and the realtime helpers are in
 [The typed frontend surface](https://github.com/xano-sdk/sdk/blob/main/guides/typed-frontend.md).
 
 ---

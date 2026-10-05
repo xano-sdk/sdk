@@ -418,7 +418,10 @@ export type RealtimeChannelHandle<
  * without repeating it.
  */
 export function realtimeChannel<
-  const I extends Record<string, InputDescriptor>,
+  // Default `Record<never, never>`, matching `query()`: a channel with no
+  // `input` has no params, and without the default `I` falls back to its
+  // constraint, so `InferInput` read an index signature instead of `{}`.
+  const I extends Record<string, InputDescriptor> = Record<never, never>,
   const N extends string = string,
 >(def: RealtimeChannelDef<I, N>): RealtimeChannelHandle<I, N> {
   // Fail on the line the author wrote: a {param} with no matching SCALAR input

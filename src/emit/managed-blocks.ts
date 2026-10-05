@@ -79,6 +79,29 @@ export const HASH_DIALECT: BlockDialect = {
   parseStamp: (block) => /^# xanosdk (\S+) — generated/m.exec(block)?.[1] ?? null,
 };
 
+/**
+ * `<!-- BEGIN:<name> -->` / `<!-- END:<name> -->` — for Markdown, whose only comment
+ * is HTML's, with the stamp in the same syntax so it stays invisible when rendered.
+ *
+ * Keyed on a NAME rather than a package, and not by preference: the module's
+ * marker checks derive the package-independent prefix from `begin("")` (see
+ * {@link assertNoForgedMarkers} and {@link linesOutsideBlocks}), which needs the
+ * package to be the marker's TAIL — and an HTML comment cannot end with its
+ * package, because `-->` has to follow it. So a Markdown file carries one block
+ * per name, and the name says what the block holds: the agent brief's
+ * `xanosdk-agent-rules`, the README's `xanosdk-built-with`.
+ */
+export function htmlDialect(name: string): BlockDialect {
+  const begin = `<!-- BEGIN:${name} -->`;
+  const end = `<!-- END:${name} -->`;
+  return {
+    begin: () => begin,
+    end: () => end,
+    stamp: (version) => `<!-- xanosdk ${version} — generated; edits inside this block are overwritten -->`,
+    parseStamp: (block) => /<!-- xanosdk (\S+) — generated/.exec(block)?.[1] ?? null,
+  };
+}
+
 /** Git's conflict markers, as they appear at the start of a line. */
 const CONFLICT_MARKERS = ["<<<<<<<", ">>>>>>>"] as const;
 

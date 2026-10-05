@@ -21,7 +21,7 @@
 import type { FrontendPreset, LandingContent } from "./frontend-presets.js";
 import type { PackageManager } from "./package-manager.js";
 import type { ProjectCli } from "./invocation.js";
-import { composeBlock, gitattributesSpec, upsertBlock } from "./managed-blocks.js";
+import { blockVersion, composeBlock, gitattributesSpec, htmlDialect, upsertBlock, type BlockSpec } from "./managed-blocks.js";
 import { decodeMarkerWith } from "./decode-record.js";
 import {
   colorTokens,
@@ -664,23 +664,82 @@ VITE_XANO_HOST=https://your-instance.xano.io
 /** The badge every scaffolded README opens with: this project runs on Xano. */
 const XANO_BADGE = "[![Built on Xano](https://img.shields.io/badge/built_on-Xano-0055FF)](https://xano.com)";
 
-/**
- * The closing section both scaffolded READMEs share: where the rest of the
- * documentation is, for the SDK and for the platform under it. A project's
- * README is what a visitor to its repository reads, so it says what Xano is.
- */
-function renderReadmeLearnMore(): string {
-  return `## Learn more
+/** Where `init` puts the project README, from the project root. */
+export const README_PATH = "README.md";
 
-- [Xano SDK guides](https://github.com/xano-sdk/sdk/blob/main/guides/README.md) — signing in
-  and deploying, releasing to production, the typed frontend, every CLI command.
-- [Xano](https://xano.com) is the platform this app deploys to: the database, APIs, auth,
-  background tasks, realtime, file storage and AI agents behind \`xano/\`, with
-  [docs](https://docs.xano.com) and a [community](https://community.xano.com).`;
+/**
+ * The README's `## Built with` footer, as a managed block.
+ *
+ * A project's README is what a visitor to its repository reads, and the one
+ * file in the scaffold that is rewritten most — by the people who own it and,
+ * increasingly, by the coding agents working for them. Three things about how
+ * it is written here decide what survives that:
+ *
+ * - **It is credits, not a description of the platform.** A section explaining
+ *   what Xano is reads as off-topic in a README about someone's app and gets
+ *   cut; a "built with" section with the same links and the same facts reads as
+ *   attribution and is left alone.
+ * - **It is a managed block.** The markers and stamp say the SDK owns the span
+ *   and a refresh (`xanosdk upgrade`, or the courtesy on a compile — see
+ *   `agent-file-refresh.ts`) rewrites it, which is true, and what README
+ *   generators have trained every editor to step around.
+ * - **It carries the platform facts the rest of the README no longer repeats**,
+ *   so the opening paragraph can stay short enough to be rewritten around
+ *   rather than replaced.
+ *
+ * `README_BUILT_WITH_BLOCK` is the identity the refresh locates it by; the
+ * stamp carries the SDK version that rendered it.
+ */
+export const README_BUILT_WITH_BLOCK: BlockSpec = {
+  dialect: htmlDialect("xanosdk-built-with"),
+  pkg: "xanosdk-built-with",
+  file: README_PATH,
+};
+
+const README_BUILT_WITH_BODY = `## Built with
+
+- [Xano](https://xano.com) hosts everything under [\`xano/\`](xano/): the database, APIs,
+  auth, background tasks, realtime, file storage and AI agents. It runs on your machine as
+  the Xano Engine and in the cloud from the same command. [Docs](https://docs.xano.com) ·
+  [Community](https://community.xano.com)
+- [Xano SDK](https://github.com/xano-sdk/sdk) is the TypeScript the backend is authored in.
+  The [guides](https://github.com/xano-sdk/sdk/blob/main/guides/README.md) cover signing in
+  and deploying, releasing to production, the typed frontend, and every CLI command.`;
+
+/** The footer both scaffolded READMEs end with, stamped with the SDK version rendering it. */
+export function renderReadmeBuiltWith(sdkVersion: string): string {
+  return composeBlock(README_BUILT_WITH_BLOCK, [README_BUILT_WITH_BODY], sdkVersion);
+}
+
+/** The SDK version stamped into a README's `## Built with` block, or null when it carries none. */
+export function readmeBuiltWithVersion(text: string): string | null {
+  return blockVersion(text, README_BUILT_WITH_BLOCK);
+}
+
+/**
+ * A README's `## Built with` block brought up to `sdkVersion`, the rest of the
+ * file untouched. The caller has already established the file carries one;
+ * this never adds a block to a README that lacks it.
+ */
+export function refreshReadmeBuiltWith(existing: string, sdkVersion: string): string {
+  return upsertBlock(existing, README_BUILT_WITH_BLOCK, renderReadmeBuiltWith(sdkVersion)).text;
+}
+
+/**
+ * The line under the badge that is the owner's to replace: what the app is.
+ *
+ * The scaffold cannot know, so it leaves the one sentence a README has to open
+ * with as a visible slot. That is also what keeps the paragraph after it: an
+ * editor describing the app has an obvious target to rewrite and leaves the
+ * neighbour that says how it is built, where an opener that was ALL platform
+ * had to be replaced wholesale to say anything about the app.
+ */
+function renderReadmeDescriptionSlot(appName: string): string {
+  return `_Describe ${appName} here: what it does and who it is for._`;
 }
 
 export function renderReadme(
-  { appName, install }: TemplateVars,
+  { appName, install, sdkVersion }: TemplateVars,
   preset: FrontendPreset,
   choice: ThemeChoice = defaultThemeChoice(),
 ): string {
@@ -688,11 +747,13 @@ export function renderReadme(
 
 ${XANO_BADGE}
 
-A full-stack app on [Xano](https://xano.com). The backend is TypeScript under
-[\`xano/\`](xano/), authored with the [Xano SDK](https://github.com/xano-sdk/sdk). It runs on
-your machine on the **Xano Engine**, and one command deploys it to Xano's cloud. The
+${renderReadmeDescriptionSlot(appName)}
+
+The backend under [\`xano/\`](xano/) is TypeScript, authored with the
+[Xano SDK](https://github.com/xano-sdk/sdk) and running on [Xano](https://xano.com). It runs
+on your machine as the **Xano Engine** and ships to Xano's cloud with the same command. The
 ${preset.label} frontend under [\`frontend/\`](frontend/) takes its request paths and types
-from the backend defs, so the two can't drift.
+from the backend defs rather than hand-typing them.
 
 ## Quick start
 
@@ -791,8 +852,9 @@ export again. Every \`lock\` subcommand finds \`xano/xano.lock\` from the projec
 ## The one contract
 
 [\`frontend/src/lib/api.ts\`](frontend/src/lib/api.ts) takes request paths from
-\`xano/routes.gen.ts\` (\`routePath("GET notes/{id}", { id })\`) and request/response
-types from the query defs (\`import type\` + \`InferInput\` / \`InferResponse\`).
+\`xano/routes.gen.ts\` (\`routePath("GET notes/{id}", { id })\`), request types from the
+same file (\`RouteInputs["POST create_note"]\`, \`MessageInputs[...]\` for realtime), and
+response types from the query defs (\`import type\` + \`InferResponse\`).
 Never hand-type a URL or a request body — change a def and the frontend follows.
 
 \`npm run xano:routes\` writes \`xano/routes.gen.ts\` from the defs; \`dev\`, \`build\`
@@ -834,7 +896,7 @@ Xano SDK is composable with other \`@xano-sdk/*\` packages:
 None of these ship with the scaffold. Install one only when you need it — an
 add-on you never register is weight in \`package.json\` for nothing.
 
-${renderReadmeLearnMore()}
+${renderReadmeBuiltWith(sdkVersion)}
 `;
 }
 export function renderXanoIndex({ appName }: TemplateVars): string {
@@ -1006,8 +1068,11 @@ URL or a request body:
   groups share is keyed \`"<group>:<VERB> <name>"\`). Run
   \`npm run xano:routes\` after adding or renaming an endpoint (\`dev\`, \`build\` and
   \`typecheck\` also run it) and commit the file.
-- **Shapes** come from the defs with \`import type\` — \`InferInput\`/\`InferResponse\`
-  erase to nothing.
+- **Request types** come from the same file: \`RouteInputs["POST create_note"]\`
+  (\`ChannelInputs\`/\`MessageInputs\` for realtime). For runtime validation,
+  \`npx xanosdk marketplace install zod\` adds zod schemas under the same keys.
+- **Response types** come from the defs with \`import type\` — \`InferResponse\`
+  erases to nothing.
 - Never import a def as a value in the frontend. Its \`s.*\`/\`c.*\` stack calls run
   at module load, so one import for its \`getPath()\` pulls the backend graph it
   references and the SDK runtime into the bundle.
@@ -1100,7 +1165,7 @@ export function renderCodegenMarker(
  * project around it.
  */
 export function renderCodegenReadme(
-  { appName }: TemplateVars,
+  { appName, sdkVersion }: TemplateVars,
   origin: CodegenOrigin,
   envNames: readonly string[],
   preset: FrontendPreset,
@@ -1137,10 +1202,12 @@ cleartext, which is why it is gitignored too.
 
 ${XANO_BADGE}
 
-A full-stack app on [Xano](https://xano.com), pulled from
-${describeCommittedOrigin(origin)} with the [Xano SDK](https://github.com/xano-sdk/sdk). The Xano
-backend lives in [\`xano/\`](xano/) as readable TypeScript; the ${preset.label} frontend
-under [\`frontend/\`](frontend/) is a starter — the pull carries a backend, not a UI.
+${renderReadmeDescriptionSlot(appName)}
+
+The backend under [\`xano/\`](xano/) is TypeScript pulled from ${describeCommittedOrigin(origin)}
+with the [Xano SDK](https://github.com/xano-sdk/sdk), and runs on [Xano](https://xano.com). The
+${preset.label} frontend under [\`frontend/\`](frontend/) is a starter — the pull carries a
+backend, not a UI.
 
 ## Run it
 
@@ -1174,13 +1241,13 @@ ${secrets}
 npm run dev            # run the starter frontend
 npm run typecheck      # the whole project, both halves
 npm run xano:export    # compile the backend to workspace.json (don't commit it)
-npm run xano:routes    # regenerate xano/routes.gen.ts, the frontend's paths
+npm run xano:routes    # regenerate xano/routes.gen.ts: the frontend's paths and request types
 \`\`\`
 
 [\`frontend/src/lib/api.ts\`](frontend/src/lib/api.ts) shows the one contract: paths
-from \`routePath()\` in \`xano/routes.gen.ts\`, types from the query defs in \`xano/\`.
+and request types from \`xano/routes.gen.ts\`, response types from the query defs in \`xano/\`.
 
-${renderReadmeLearnMore()}
+${renderReadmeBuiltWith(sdkVersion)}
 `;
 }
 
@@ -1537,9 +1604,9 @@ ${extra}`;
 }
 
 export function renderApiTs(): string {
-  return `// The one contract: endpoint paths come from the generated route manifest, and
-// request/response *types* from your xanosdk query defs. Never hand-type a URL
-// or a request body: change a def and everything here follows.
+  return `// The one contract: endpoint paths and request types come from the generated
+// route manifest, and response *types* from your xanosdk query defs. Never
+// hand-type a URL or a request body: change a def and everything here follows.
 //
 // Keep the backend out of the browser bundle:
 //   • Paths and verbs: \`routePath()\` / \`ROUTES\` from xano/routes.gen.ts, plain data
@@ -1547,16 +1614,20 @@ export function renderApiTs(): string {
 //     regenerate it). Never import a def as a VALUE for its getPath()/verb:
 //     its s.*/c.* factory calls run at module load, so one import pulls in the
 //     backend graph it references and the SDK runtime that builds it.
-//   • Shapes: \`import type\` only. InferInput/InferResponse erase to nothing.
+//   • Request types: \`RouteInputs["<VERB> <name>"]\` from the same file
+//     (\`ChannelInputs\` / \`MessageInputs\` for realtime), types only. For
+//     runtime validation, \`npx xanosdk marketplace install zod\` adds zod
+//     schemas under the same keys.
+//   • Response types: \`import type\` the def. InferResponse erases to nothing.
 //
 // Nothing here imports the manifest yet — an add-on's endpoints may already be
 // in it. Wire an endpoint (one in xano/, or an add-on's) like:
 //
-//   import type { InferInput, InferResponse } from "@xano/sdk";
+//   import type { InferResponse } from "@xano/sdk";
 //   import type { createNoteQuery } from "../../../xano/api/create-note.js";
-//   import { ROUTES, routePath } from "../../../xano/routes.gen.js";
+//   import { ROUTES, routePath, type RouteInputs } from "../../../xano/routes.gen.js";
 //
-//   export type CreateNoteBody = InferInput<typeof createNoteQuery>;
+//   export type CreateNoteBody = RouteInputs["POST create_note"];
 //   export type Note = InferResponse<typeof createNoteQuery>;
 //
 //   export async function createNote(body: CreateNoteBody): Promise<Note> {

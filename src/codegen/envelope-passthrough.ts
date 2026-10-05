@@ -71,8 +71,9 @@ export interface EnvelopePassthrough {
    * This is the floor under that: applied by {@link applyUnauthoredEnvelope}
    * ONLY when the factory produced no binding of its own, so it can never
    * override or mask one a decoder recovered properly. Two statements in the
-   * audit corpus reached it (`db_transaction` and `redis.remove`, both since
-   * given real arguments), and losing the binding is not cosmetic: every later
+   * audit corpus reached it: `redis.remove`, since given a real argument, and
+   * `db_transaction`, which still lands here — its binding is always `null`, so
+   * the factory offers none. Losing the binding is not cosmetic: every later
    * step reads the variable by that name, so a dropped `as` turns a valid
    * workspace into one whose references resolve to nothing.
    */

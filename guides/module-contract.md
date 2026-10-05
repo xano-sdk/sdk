@@ -163,6 +163,7 @@ const plugin: ToolchainPlugin = {
   answersFromConfig: (config) => ({ ... }),
   onBundle: async (ctx) => ({ ... }),
   onPreflight: async (ctx) => ({ ... }),
+  routesManifest: (ctx) => ({ imports: [...], source: "..." }),
 };
 
 export default plugin;
@@ -175,10 +176,11 @@ guessing which would run code the manifest did not describe.
 Every hook is optional. A module that only adds a `.gitattributes` line declares
 `contributes` alone.
 
-Five hooks, and deliberately no more. This contract was designed from one example, and a
-contract designed from one example generalizes badly, so it covers exactly what that first
-module needed and stops. The second toolchain module is the one that should widen it, with a
-real second set of requirements in hand.
+Six hooks, and deliberately no more. The first five were designed from one example (a module
+that renders the workspace to a committed tree) and cover exactly what it needed. The sixth,
+`routesManifest`, was added when a second module, `@xano-sdk/zod`, brought a second real set
+of requirements: writing into a file the SDK generates rather than a tree of its own. A hook
+is added when a module needs it, not in anticipation.
 
 ## Questions
 
@@ -452,6 +454,78 @@ reason to blank.
 A project whose plugins declare no `onPreflight` never pays for the engine's rendering at all,
 so declaring the hook is what turns that fetch on.
 
+## `routesManifest`
+
+```ts
+import type { ToolchainPlugin } from "@xano/sdk/plugin";
+
+const plugin: ToolchainPlugin = {
+  kind: "toolchain",
+  routesManifest: (ctx) => ({
+    imports: [{ from: "zod", names: ["z"] }],
+    source: `export const ROUTE_SCHEMAS = ...;`,
+  }),
+};
+```
+
+Your module's section of the route manifest, `xano/routes.gen.ts`. It runs wherever that file
+is written: `xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts` (the scaffold's
+`xano:routes`), `pull`, `generate`, and the refresh `marketplace install`, `reinstall` and
+`remove` make, so your block lands with your module.
+
+| `RoutesManifestContext` | What it carries |
+|---|---|
+| `inputs` | Every endpoint's, channel's and message's request inputs, under the manifest's final keys (`routes`, `channels`, `messages`), in a fixed order. |
+| `config` | Your block from the project's `package.json` `"xanosdk"` object. |
+| `sdkVersion` | The running `@xano/sdk` version. |
+
+`inputs` is a validator-neutral description (type `RouteInputs` in `@xano/sdk/plugin`, not
+the generated map of the same name): each input's name, type, `required`, `nullable`, list
+bounds, enum values, methods, and children. A database link is one `dbLink` entry carrying the
+linked table's expanded `columns`, to spread into the surrounding object; `columns` is
+`undefined` when the payload does not carry that table, which is not "no columns". Walk this
+rather than the payload: it is the same description the SDK renders its own `RouteInputs`,
+`ChannelInputs` and `MessageInputs` types from, so a validator built from it cannot disagree
+with them.
+
+**Where the section lands.** The SDK composes the file: the merged imports of every module at
+the top, then the core sections, then each module's `source` in a marked block, blocks ordered
+by package name:
+
+```ts
+// xanosdk:begin @xano-sdk/zod
+// xanosdk:version 1.0.3 - generated; edits inside this block are overwritten
+...
+// xanosdk:end @xano-sdk/zod
+```
+
+Your source is in the same file as the core sections, so it names `RouteInputs`,
+`ChannelInputs`, `MessageInputs` and `MessageName` directly, without importing them; all four
+are always emitted, as `{}` when empty. Anything you export is exported from `routes.gen.ts`.
+Your names share one scope with the core sections and every other module's, so a collision
+fails the user's typecheck rather than being renamed. A blank `source` writes no block, and its
+imports are dropped with it: that is how a config that turns the section off removes it.
+
+**Imports are declared, never written.** The core sections import nothing, which is what keeps
+the file free of the SDK runtime in a frontend bundle. Declare yours in `imports`; never put an
+`import` line in `source`. Each `from` must be a bare package name: `@xano/sdk` and its
+subpaths, a relative or absolute path, and a protocol (`node:`) are all refused, naming your
+module. Each name must be a plain identifier, with no `as` rename. A package you import must
+resolve from the user's project, so declare it in your `peerDependencies`:
+`xanosdk marketplace install` adds each peer other than `@xano/sdk` that the project does not
+already declare as a direct dependency, with your range, through the project's package manager.
+
+**Synchronous and pure.** No filesystem, network, clock or randomness: the same context must
+return the same section every time. Every writer of the file must produce the same bytes for
+the same workspace and installed modules, or `routes --emit --strict` passes or fails depending
+on which command last wrote it. A Promise, or any value that is not `{ imports?, source }`, is
+refused, and `source` must not spell a block marker (`// xanosdk:begin`, `// xanosdk:end`).
+
+**A throw is your module failing, not the manifest.** The core sections are still refreshed,
+your previous block is kept exactly as it was, and a warning names your module. On
+`routes --emit --strict` it is fatal instead, because a check that did not run must not read
+as one that passed.
+
 ## `HookResult`: `failed` is not a throw
 
 ```ts
@@ -544,6 +618,8 @@ Things worth proving about your own module:
 - Your `onBundle` writes nothing when `ctx.frozen` is true.
 - Your `onBundle` handles `ctx.entry === undefined`.
 - Your hooks never read `payload.env` values, because they are blanked.
+- `routesManifest` returns the same section for the same context, called twice, and what it
+  writes typechecks beside the core sections of a real `routes.gen.ts`.
 
 ## Publishing
 

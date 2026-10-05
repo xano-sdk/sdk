@@ -49,7 +49,8 @@ export interface PeerRetryResult extends NpmRunOutput {
 
 /**
  * `npm install <specifier>`, retried once with `--legacy-peer-deps` when npm
- * refused over a peer range.
+ * refused over a peer range. Several specifiers (a toolchain module's peers)
+ * are added in ONE run, with the same retry and the same budget.
  *
  * Shared because both installers need it and only one had it. Every module
  * published today peers on `@xano/sdk` with a range that names no
@@ -67,21 +68,16 @@ export interface PeerRetryResult extends NpmRunOutput {
  * relabel; a warning written there would be erased by the next frame.
  */
 export async function installWithPeerRetry(
-  specifier: string,
+  spec: string | readonly string[],
   cwd: string,
-  opts: {
-    readonly onRetry?: () => void;
-    readonly timeoutMs?: number;
-    readonly manager?: PackageManager;
-    /** Arguments that aim the add at the project (`-w <member>`, `--ignore-workspace`); see `installSite`. */
-    readonly scope?: readonly string[];
-  } = {},
+  opts: InstallOptions = {},
 ): Promise<PeerRetryResult> {
+  const specs = typeof spec === "string" ? [spec] : spec;
   const scope = opts.scope ?? [];
   // pnpm, yarn and bun add the package their own way and warn on a peer range
   // rather than refuse it, so there is nothing to retry.
   if (opts.manager !== undefined && opts.manager !== "npm") {
-    const only = await runNpmQuiet([...addArgs(opts.manager, specifier), ...scope], cwd, { manager: opts.manager, ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}) });
+    const only = await runNpmQuiet([...addArgs(opts.manager, specs), ...scope], cwd, { manager: opts.manager, ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}) });
     return { ...only, peerConflict: null, retried: false };
   }
   // ONE budget for the episode, not one per attempt. Two calls each given the
@@ -92,7 +88,7 @@ export async function installWithPeerRetry(
   const budget = opts.timeoutMs ?? NPM_RUN_TIMEOUT_MS;
   const deadline = Date.now() + budget;
 
-  const first = await runNpmQuiet(["install", specifier, ...scope], cwd, { timeoutMs: budget });
+  const first = await runNpmQuiet(["install", ...specs, ...scope], cwd, { timeoutMs: budget });
   if (first.status === 0 || !isPeerConflict(first.output)) {
     return { ...first, peerConflict: null, retried: false };
   }
@@ -103,8 +99,17 @@ export async function installWithPeerRetry(
   if (remaining <= 0) return { ...first, peerConflict: first.output, retried: false };
 
   opts.onRetry?.();
-  const second = await runNpmQuiet(["install", specifier, ...scope, "--legacy-peer-deps"], cwd, {
+  const second = await runNpmQuiet(["install", ...specs, ...scope, "--legacy-peer-deps"], cwd, {
     timeoutMs: remaining,
   });
   return { ...second, peerConflict: first.output, retried: true };
+}
+
+/** How {@link installWithPeerRetry} runs. */
+export interface InstallOptions {
+  readonly onRetry?: () => void;
+  readonly timeoutMs?: number;
+  readonly manager?: PackageManager;
+  /** Arguments that aim the add at the project (`-w <member>`, `--ignore-workspace`); see `installSite`. */
+  readonly scope?: readonly string[];
 }

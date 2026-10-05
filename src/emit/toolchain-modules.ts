@@ -46,8 +46,10 @@
  * `peerDependencies["@xano/sdk"]` range this SDK falls outside of is REFUSED
  * on every host and both postures, before its plugin file is imported, because
  * the thing it would otherwise do is indistinguishable from success — see
- * {@link assertSdkInPeerRange}. A warning would be scrolled past on exactly the
- * runs that needed it.
+ * {@link sdkPeerRefusal}. A warning would be scrolled past on exactly the
+ * runs that needed it. The route-manifest writers and the marketplace
+ * reconcile are the exceptions, each for a reason it states (see
+ * {@link DiscoveryOptions.peerSkew}).
  *
  * Node-only; reached from the commands, which the CLI imports lazily.
  */
@@ -96,7 +98,7 @@ export interface DeclaredPlugin {
    * Read here because this is the only place that holds the module's own
    * manifest, and checked before the import because an out-of-range SDK is the
    * one skew the SDK cannot detect from the plugin OBJECT — see
-   * {@link assertSdkInPeerRange}.
+   * {@link sdkPeerRefusal}.
    */
   readonly sdkPeerRange: string | null;
   /**
@@ -152,7 +154,7 @@ export interface Discovery {
  * said nothing else about it wants what the module does — that is why it is in
  * `dependencies`. Only an explicit `enabled: false` turns it off.
  */
-function isEnabled(config: ToolchainConfig | null): boolean {
+export function isEnabled(config: ToolchainConfig | null): boolean {
   return config?.["enabled"] !== false;
 }
 
@@ -291,8 +293,8 @@ function manifestVersion(manifest: Record<string, unknown>): string {
 }
 
 /**
- * Refuse a module whose declared peer range this SDK is outside of, BEFORE
- * importing it.
+ * The refusal for a module whose declared peer range this SDK is outside of,
+ * or null when it is in range. Checked BEFORE the module is imported.
  *
  * ── The skew no shape check can see ─────────────────────────────────────────
  *
@@ -308,19 +310,21 @@ function manifestVersion(manifest: Record<string, unknown>): string {
  *
  * The module's own declared range is the fact that IS available to both sides,
  * so it is what this reads. A module cannot do this for itself at the moment it
- * matters: `sdkVersion` reaches it only through `onBundle` and `onPreflight`,
- * which fire on `export` and `deploy` — long after the reconcile that quietly
- * wrote nothing. The install-time peer warning does not cover it either, being
+ * matters: `sdkVersion` reaches it only through `onBundle`, `onPreflight` and
+ * `routesManifest`, which fire on `export`, `deploy`, `preflight` and the
+ * route-manifest writers — long after the reconcile that quietly wrote
+ * nothing. The install-time peer warning does not cover it either, being
  * routinely bypassed by `--legacy-peer-deps`, by pnpm/yarn peer handling, or by
  * an SDK downgraded after the install.
  *
  * ── Why a refusal rather than a skip ────────────────────────────────────────
  *
  * A skip is a warning that `export` and `deploy` scroll past, and the entire
- * failure being closed here is that it LOOKS EXACTLY LIKE SUCCESS. So this
- * throws on every host and both postures, frozen or not, the same way a
- * contract-skew refusal does: it is deterministic, and re-running cannot fix
- * it.
+ * failure being closed here is that it LOOKS EXACTLY LIKE SUCCESS. So
+ * discovery throws it on every host and both postures, frozen or not, the same
+ * way a contract-skew refusal does: it is deterministic, and re-running cannot
+ * fix it. Only a caller whose skip is already loud asks otherwise
+ * ({@link DiscoveryOptions.peerSkew}).
  *
  * The message carries the escape hatch because someone pinned to an older SDK
  * must not be locked out of every command by one module. `"enabled": false` is
@@ -333,11 +337,11 @@ function manifestVersion(manifest: Record<string, unknown>): string {
  * range shape `satisfiesRange` declines to parse. A guard that costs a working
  * module over its own parser's gap would be worse than the silence.
  */
-function assertSdkInPeerRange(declared: DeclaredPlugin, sdkVersion: string): void {
+function sdkPeerRefusal(declared: DeclaredPlugin, sdkVersion: string): UsageError | null {
   const range = declared.sdkPeerRange;
-  if (range === null) return;
-  if (satisfiesRange(sdkVersion, range) !== false) return;
-  throw new UsageError(
+  if (range === null) return null;
+  if (satisfiesRange(sdkVersion, range) !== false) return null;
+  return new UsageError(
     `${declared.pkg} requires \`@xano/sdk\` ${range}, and this is ${sdkVersion} — so it would ` +
       `load, register, and apply nothing, which reads exactly like a module that had nothing to add.`,
     {
@@ -396,8 +400,11 @@ export async function discoverToolchainPlugins(
     // BEFORE the import, from the manifest alone: a module built for a newer
     // SDK may fail obscurely at its own top level, and a refusal naming the
     // version skew has to win that race.
-    if (declared.sdkPeerRange !== null) {
-      assertSdkInPeerRange(declared, await runningSdkVersion());
+    const refusal = declared.sdkPeerRange === null ? null : sdkPeerRefusal(declared, await runningSdkVersion());
+    if (refusal !== null) {
+      if (opts.peerSkew !== "skip") throw refusal;
+      skipped.push({ pkg: declared.pkg, why: `${refusal.message} ${refusal.suggestion ?? ""}`.trim() });
+      continue;
     }
 
     if (declared.pluginFile === null) {
@@ -479,6 +486,19 @@ export interface DiscoveryOptions {
    * that is the fact it reports.
    */
   readonly configOverride?: Readonly<Record<string, ToolchainConfig>>;
+  /**
+   * What a module outside its declared `@xano/sdk` range is: a refusal (the
+   * default), or `"skip"`, an ordinary skipped module.
+   *
+   * The refusal exists because on `export` or `deploy` a skewed module looks
+   * exactly like success. The route-manifest writers do not have that problem:
+   * a skipped module keeps its committed block, is named in a warning, and
+   * fails `--strict`. Refusing there instead would abort `pull`, `generate` and
+   * every `xano:routes` over a module that may not even write a section. The
+   * marketplace reconcile skips too: a skipped module is untouchable there, and
+   * its refusal came after npm had already changed the project.
+   */
+  readonly peerSkew?: "refuse" | "skip";
   /**
    * The running `@xano/sdk` version the peer-range check compares against.
    *

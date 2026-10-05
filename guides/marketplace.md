@@ -169,6 +169,23 @@ that arrived some other way is configured by this run too: a plain `npm install`
 pull request, a `git pull` that changed `package.json`. It also means nothing has to recover
 a package name out of a `file:` or tarball specifier in order to configure it.
 
+A **toolchain module** gets two more steps, and `reinstall` runs both as well. Its peers other
+than `@xano/sdk` (`zod`, say) are added as direct dependencies through the project's package
+manager: yarn never installs peers, and pnpm does not link them where `routes.gen.ts` can import
+them. Then, when the project keeps a `routes.gen.ts` beside its entry, the file is regenerated,
+so the module's section lands with the module rather than at the next `xano:routes`. Under
+`--json`, `peers` lists the specs that were added (`["zod@^4.0.0"]`, or `[]`), and `routes` says
+what happened to the file:
+
+| `routes` | Meaning |
+|---|---|
+| `written` | Regenerated. |
+| `unchanged` | Already up to date. |
+| `absent` | The project has no `routes.gen.ts` to refresh. |
+| `skipped` | It could not be regenerated here. The warning says why; run `npm run xano:routes`. |
+
+`remove` reports `routes` the same way, for the file it regenerates without the removed module.
+
 `init` takes the same names and resolves them the same way — `--marketplace auth` is
 `@xano-sdk/auth`, and an unlisted name exits 8 before anything is written — so a project can be
 scaffolded with its add-ons already installed and registered:
@@ -206,6 +223,10 @@ What happens then depends on whether the module predates the command:
 | `install` added it this run | Refused and **uninstalled again**, so the project is exactly as it was. Upgrade the SDK and re-run. |
 | `install` re-run over a module already in `dependencies`, or `reinstall` | Refused and **left alone**, settings included, because deleting a module you already had over a version mismatch is not a repair. Upgrade the SDK, or `marketplace remove` it. |
 | `init --marketplace` | Reported as a module that was not added and taken back off disk. The scaffold itself completes and works. |
+
+A *different* installed module that is out of range does not stop the verb. `install`, `reinstall`
+and `remove` skip it with a warning naming its range and the fix, and leave its settings and its
+`routes.gen.ts` block exactly as they were. `export`, `deploy` and `preflight` still refuse it.
 
 The point of undoing the install is that the alternative is worse: a module whose hooks were
 built against a contract this SDK does not have registers and applies **nothing**, so

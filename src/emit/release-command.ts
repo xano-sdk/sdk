@@ -117,6 +117,8 @@ import { backendDirIn } from "./backend-dir.js";
 import { withArticle } from "../util/article.js";
 import { destinationKey } from "../lock/landed.js";
 import { landedRecordFor, landingLockPath, recordForeignLanding, recordLanding, type LandingReport } from "./landing-record.js";
+import { recordSync, type SyncReport } from "./sync-record.js";
+import { objectDigests, syncDigests } from "../deploy/sync-baseline.js";
 import { REFERENCEABLE_KIND_PAYLOAD_KEYS, rawDeriveGuid } from "../refs/guid.js";
 import { envValuesOf, payloadOf, planTypeSection, rowLabeler, sectionKind, uniqueIndexLabels } from "../deploy/live-diff.js";
 import { assertStorageModesKept, discloseCanonicalMoves, storageChangesPayload, movesClause, type CanonicalMove, type PairedColumns } from "./plan-disclosure.js";
@@ -4381,6 +4383,7 @@ export async function runReleaseCommand(
         // Always present; a dry run records nothing — what it would land is
         // not landed, and the record is what a prune deletes by.
         landingRecord: null,
+        syncBaseline: null,
         workspaceId,
         destination: destinationPayload(resolvedDest, dest, auth),
         // The verdict the real run would reach, said up front: a wrapper
@@ -4527,6 +4530,7 @@ export async function runReleaseCommand(
         workspaceRename: losses.workspaceRename ?? null,
         workspaceSettingsNotApplied: withheldSettings,
         landingRecord: null,
+        syncBaseline: null,
         ...(seeded.length > 0 ? { seedRows: seeded } : {}),
       });
       // Off a terminal, the refusal every landing carries, with this run and
@@ -4734,12 +4738,16 @@ export async function runReleaseCommand(
           priorStored,
           req.mode === "replace" ? "rebuild" : "merge",
         );
+  // A bundle sent with no lock named is checked against the project it runs
+  // in; an entry file's lock is the one beside it.
+  const sentForeign = args.file === undefined && args.lockPath === undefined;
+  const landingLock = sentForeign ? landingLockPath(args) : landingLockPath(args, { entryFile: args.file, fromProject: false });
   const landingRecord =
     landingDest === undefined
       ? null
-      : args.file === undefined && args.lockPath === undefined
+      : sentForeign
         ? recordForeignLanding({
-            lockPath: landingLockPath(args),
+            lockPath: landingLock,
             instance: auth.instance,
             dest: landingDest,
             bundle: parsedOrUndefined(bundle),
@@ -4748,7 +4756,7 @@ export async function runReleaseCommand(
             ...(storedAfter !== undefined ? { stored: storedAfter } : {}),
           })
         : recordLanding({
-            lockPath: landingLockPath(args, { entryFile: args.file, fromProject: false }),
+            lockPath: landingLock,
             instance: auth.instance,
             dest: landingDest,
             update: {
@@ -4757,6 +4765,48 @@ export async function runReleaseCommand(
               removed: pruned,
             },
           });
+
+  // The sync baseline for the branch this landed on (see
+  // `deploy/sync-baseline.ts`): what that branch holds now that it matches
+  // this project. Recorded on an up-to-date run too, which writes nothing:
+  // that is still a moment the two sides agree.
+  const syncBaseline = landingDest?.kind !== "workspace" ? null : await recordDeploySync();
+
+  /**
+   * Digested from the branch AS STORED, the way a verified promote records it:
+   * a field the engine stores differently from the compile, and that the
+   * comparison does not normalize, then reads as "changed here" on the next
+   * diff (deploy again, harmless) rather than "changed there" (pull first,
+   * which a guard would refuse the deploy over). An up-to-date run already
+   * holds that read; a run that wrote reads the branch back once. Only the
+   * objects this deploy sent are the project's; the rest of the branch is
+   * kept apart, so one showing up in `unexpected` later is not something this
+   * project deleted.
+   *
+   * When the read-back fails, what was sent stands in for the project's
+   * objects and the read before the write for the rest (a new branch is a
+   * clone of live; a replace leaves nothing else).
+   */
+  async function recordDeploySync(): Promise<SyncReport | null> {
+    // No lock, no baseline: and no read-back for one.
+    if (landingDest?.kind !== "workspace" || landingLock === undefined || !existsSync(landingLock)) return null;
+    const sent = parsedOrUndefined(bundle);
+    const branch = req.mode === "replace" ? DEFAULT_BRANCH_LABEL : (applyResponse?.branch ?? preview.branch);
+    // A replace keeps only the default branch, so it is the live one; a merge
+    // without `--branch` landed on live.
+    const stored = upToDate ? live : (await readLive(auth, resolvedDest, req.branch !== undefined ? branch : undefined)).live;
+    const digests =
+      stored !== undefined
+        ? syncDigests({ held: [stored], heldLabels: new Set(Object.keys(objectDigests(sent, "carried"))) })
+        : syncDigests({ held: [sent], others: req.mode === "replace" ? [] : [live] });
+    return recordSync({
+      lockPath: landingLock,
+      target: { instance: auth.instance, workspaceId: landingDest.workspaceId, branch },
+      digests,
+      by: "deploy",
+      complete: stored !== undefined || req.mode === "replace" || live !== undefined,
+    });
+  }
 
   // What the instance SERVES, reported whether or not an import ran.
   //
@@ -4858,6 +4908,8 @@ export async function runReleaseCommand(
     declined: boolean;
     /** What this landing recorded in the lock for `--prune` (see `lock/landed.ts`), or `null`. */
     landingRecord: LandingReport | null;
+    /** The sync baseline recorded for the branch this landed on (see `deploy/sync-baseline.ts`), or `null`. */
+    syncBaseline: SyncReport | null;
     /** The frontends a `--replace` took down (see `static-teardown.ts`), less one `--static` served again. */
     staticRemoved?: StaticTeardown;
   } = {
@@ -4869,6 +4921,7 @@ export async function runReleaseCommand(
     dryRun: false,
     declined: false,
     landingRecord,
+    syncBaseline,
     workspaceId,
     plan: planForOutput(plan, presented, destIsTenant, converged),
     conflicts: conflictsForOutput((applyResponse ?? preview).conflicts, planContext),

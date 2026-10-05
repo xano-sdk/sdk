@@ -135,6 +135,38 @@ export async function addDependency(
   });
 }
 
+/** What adding several registry dependencies in one run did. */
+export interface AddManyOutcome extends PeerRetryResult {
+  readonly site: InstallSite;
+  /** The names the project's package.json does not list afterwards; every one when the run failed. */
+  readonly unrecorded: readonly string[];
+}
+
+/**
+ * Add several registry specifiers (`zod@^4.0.0`) to the project at `dir` in
+ * ONE manager run — the peers a toolchain module needs — and read back which
+ * of them package.json lists.
+ */
+export async function addDependencies(
+  dir: string,
+  specifiers: readonly string[],
+  opts: { readonly onRetry?: () => void; readonly rerun?: string } = {},
+): Promise<AddManyOutcome> {
+  const names = specifiers.map(packageNameOf);
+  const check = interruptedCheck(names.join(", "), installSite(dir), opts.rerun);
+  return trackLocalWrite({ what: `the install of ${names.join(", ")}`, check }, async () => {
+    const { site, link } = await prepareInstallSite(dir);
+    if (link !== null && link.status !== 0) return { ...link, peerConflict: null, retried: false, site, unrecorded: names };
+    const result = await installWithPeerRetry(specifiers, site.cwd, {
+      ...(opts.onRetry === undefined ? {} : { onRetry: opts.onRetry }),
+      scope: site.scope,
+      ...(site.manager !== "npm" ? { manager: site.manager } : {}),
+    });
+    const after = dependenciesOf(dir);
+    return { ...result, site, unrecorded: result.status === 0 ? names.filter((n) => !after.has(n)) : names };
+  });
+}
+
 /** What removing one dependency did. */
 export interface RemoveOutcome extends NpmRunOutput {
   readonly site: InstallSite;

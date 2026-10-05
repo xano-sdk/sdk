@@ -5236,6 +5236,16 @@ export function checkNonJsonValues(
           obj,
         );
       }
+      // A trigger's inputs are the engine's own implied set, which it supplies on every run.
+      for (const off of payloadKey === "trigger" ? [] : findRequiredInputDefaults(obj)) {
+        bag.warn(
+          "field.input-required-default-ignored",
+          `The \`default\` at ${owner}, input "${off.name}" is ${JSON.stringify(off.text)}, but the input is \`required: true\` — ` +
+            `the engine refuses a request that leaves a required input out ("Missing param") before it reads the ` +
+            `default, so the default is never applied. Drop \`required\` to use the default, or drop the \`default\`.`,
+          obj,
+        );
+      }
     }
     const found = findNonJson(obj);
     if (found === undefined) continue;
@@ -5345,6 +5355,32 @@ function findInputDefaultsRefused(root: unknown): Array<{ path: string; text: st
       }
     }
   });
+  return hits;
+}
+
+/**
+ * Every input that is `required` and carries a non-empty `default`, in source
+ * order. The engine refuses a missing required input before it consults the
+ * default, so that default is dead: every request omitting the input 400s. A
+ * table column's `required` + `default` is a different path, and a trigger's
+ * inputs are supplied by the engine, so the caller skips `dbo` and `trigger`.
+ * Read from the def's `input` list down through object `children`, so each
+ * hit is named by its dotted path (`addr.zip`).
+ */
+function findRequiredInputDefaults(root: unknown): Array<{ name: string; text: string }> {
+  const hits: Array<{ name: string; text: string }> = [];
+  const visit = (fields: unknown, prefix: string): void => {
+    if (!Array.isArray(fields)) return;
+    for (const node of fields) {
+      const field = node as { name?: unknown; type?: unknown; required?: unknown; default?: unknown; children?: unknown };
+      if (typeof field?.name !== "string" || typeof field.type !== "string") continue;
+      const name = `${prefix}${field.name}`;
+      const text = typeof field.default === "string" || typeof field.default === "number" ? String(field.default) : "";
+      if (field.required === true && text !== "") hits.push({ name, text });
+      visit(field.children, `${name}.`);
+    }
+  };
+  visit((root as { input?: unknown } | null)?.input, "");
   return hits;
 }
 

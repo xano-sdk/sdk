@@ -286,24 +286,24 @@ function documentationEntry(
     // with the gate OFF, and a deploy counts only gated scopes as needing a
     // value — saying "deploy refuses" for one of those is a claim no deploy makes.
     const gated = block.require_token === true;
+    // One wording whatever `--no-secrets` says. This text lands in the decoded
+    // README, and a README that changed with the flag made a pull of an
+    // unchanged backend rewrite it (xano-sdk/sdk-dev#10). What THIS run wrote
+    // is the CLI's warning to say, not the tree's.
+    const sidecar = `\`${a.ctx.secretsFile}\``;
     a.ctx.problem(
       "expected-omission",
       gated
         ? `${documentationScopeLabel(scope)} gates its documentation with a token, which is a SECRET ` +
-            `and is not carried into the generated tree. ` +
-            (a.ctx.writesSecrets
-              ? `The source declares the gate and the value is written to \`${a.ctx.secretsFile}\` — ` +
-                `gitignored, and read back by every command that builds a bundle, so a deploy restores ` +
-                `the gate with no further step. Until it is supplied, \`deploy\` refuses rather than ` +
-                `clearing the live token.`
-              : `The source declares the gate; the value was NOT written anywhere (--no-secrets). ` +
-                `Supply it at deploy time with \`--doc-token\` or \`--secrets-file\` — until then ` +
-                `\`deploy\` refuses rather than clearing the live token.`)
+            `and is not carried into the generated tree. The source declares the gate. A decode writes the ` +
+            `value to ${sidecar} (gitignored), and every command that builds a bundle reads it back, so a ` +
+            `deploy restores the gate with no further step. A decode run with \`--no-secrets\` does not ` +
+            `write it: supply it at deploy time with \`--doc-token\` or \`--secrets-file\`. Until the ` +
+            `value is supplied, \`deploy\` refuses rather than clearing the live token.`
         : `${documentationScopeLabel(scope)} stores a documentation token with \`require_token: false\` — ` +
-            `the documentation is not gated. The token is a SECRET and is not carried into the generated tree; ` +
-            (a.ctx.writesSecrets
-              ? `it is written to \`${a.ctx.secretsFile}\` (gitignored) so a deploy carries it across.`
-              : `it was NOT written anywhere (--no-secrets). A deploy does not need it.`),
+            `the documentation is not gated. The token is a SECRET and is not carried into the generated tree. ` +
+            `A decode writes it to ${sidecar} (gitignored) so a deploy carries it across; a decode run ` +
+            `with \`--no-secrets\` does not. A deploy does not need it.`,
     );
   }
   return cells.length === 0 ? null : ["documentation", obj(cells)];

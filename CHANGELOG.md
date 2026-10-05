@@ -8,6 +8,21 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.5 — The Xano Engine is the default
+
+_2026-10-05_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.5)
+
+This release makes the **Xano Engine**, the engine that runs on your machine, the default place your code goes. A bare `xanosdk deploy` now runs your backend locally with no Xano account, and `--ephemeral` sends it to Xano's cloud as the bare command used to. The engine is now called `local` everywhere in the CLI, and `publish` can put a frontend on it. ⚠️ Scripts that run a bare `deploy` expecting an ephemeral, or that use the `local-engine` spellings, need the changes below.
+
+- ⚠️ `xanosdk deploy` goes to the Xano Engine by default
+- ⚠️ The engine is `local` in the CLI
+- `xanosdk publish` reaches the Xano Engine
+- ⚠️ Scaffolded projects deploy locally first
+- The README and scaffolded README introduce Xano
+- The SDK lives at github.com/xano-sdk/sdk
+
+---
+
 ## 1.0.4 — Marketplace moves to its new catalogue
 
 _2026-10-03_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.4)

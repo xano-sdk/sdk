@@ -1,6 +1,6 @@
 # Consuming defs from a client
 
-> Read when a frontend imports a def (`getPath()`/`InferResponse`) or calls the deployed backend — what the import costs, `window.XANO_HOST`, local dev, file URLs, and a Node spot-check.
+> Read when a frontend calls the deployed backend or imports a def — request types and zod schemas without the import, its cost, `window.XANO_HOST`, local dev, file URLs, a Node spot-check.
 
 Importing a def into a browser bundle or a Node script — for `getPath()`, `getUrl()`, `verb`, or `InferResponse` — runs its factory calls; these are the costs and the checks.
 
@@ -15,6 +15,16 @@ Importing a def into a browser bundle or a Node script — for `getPath()`, `get
   plain data importing NOTHING, still compile-checked: `routePath("GET blog/{slug}", { slug })`
   `channelPath("rooms/{room_id}", { room_id })`, `socketUrl("chat", baseUrl)` (tenant base
   URLs lifted to `wss://h/ws/<tenant>:<canonical>`). A rename is a type error, not a 404.
+- **Request types without the def.** `routes.gen.ts` also exports types-only `RouteInputs`,
+  `ChannelInputs`, `MessageInputs` (and `MessageName`), keyed like `ROUTES`, `CHANNELS`, and
+  `"<channel key> <message name>"`: `type NewListing = RouteInputs["POST listings"]`. A
+  frontend types bodies, channel params and payloads from these, not `InferInput` on a def;
+  keep `InferInput` in code that already imports defs. They match `InferInput`, except a
+  `dbLink` input appears as the linked table's columns (what the server accepts). Responses
+  are not in the file: `InferResponse` on an `import type` of the def.
+  Runtime validation: `xanosdk marketplace install zod` adds `@xano-sdk/zod`, which writes
+  `ROUTE_SCHEMAS`/`CHANNEL_SCHEMAS`/`MESSAGE_SCHEMAS` into the file under the same keys, each
+  checked against its type at typecheck; the file then imports `zod`, never `@xano/sdk`.
 - **Verifying a def outside a bundler.** Inside a bundler (Vite/webpack) importing a
   query def to read `getPath()`/`verb` works directly. To spot-check from Node, run a REAL
   file with `tsx <file.ts>` **from inside the project root** — not `tsx -e "import …"`

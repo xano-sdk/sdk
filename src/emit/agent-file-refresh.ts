@@ -1,5 +1,6 @@
 /**
- * Keeps a project's agent guidance matching the `@xano/sdk` it has installed.
+ * Keeps the blocks the SDK owns in a project matching the `@xano/sdk` it has
+ * installed: the `AGENTS.md` brief, and the README's `## Built with` footer.
  *
  * ## Why this exists
  *
@@ -7,15 +8,17 @@
  * them. Upgrade the package and that pointer is frozen at whatever shipped the
  * day the project was created — which defeats the reason the docs ship inside
  * the package at all. Version-matched documentation that stops being
- * version-matched is just documentation.
+ * version-matched is just documentation. The README footer rides along for a
+ * different reason: its markers promise a refresh rewrites it, and a marker
+ * nothing honours is one an editor learns to ignore.
  *
  * ## What it will not do
  *
  * It refreshes a managed block that is ALREADY there and does nothing otherwise.
- * It never creates the file and never adds a block to a file that lacks one: a
+ * It never creates a file and never adds a block to a file that lacks one: a
  * project without a managed block is one whose owner passed `--no-agents-md`,
- * deleted the file, or wrote their own, and a courtesy refresh overriding any of
- * those is a write nobody asked for.
+ * deleted the file or the block, or wrote their own, and a courtesy refresh
+ * overriding any of those is a write nobody asked for.
  *
  * Three further gates, cheapest first: CI, then agent detection, then staleness.
  * An unrecognized environment counts as "no agent", so the failure mode is a
@@ -34,6 +37,11 @@ import {
   type FrontendGuidance,
   type GuidanceMode,
 } from "./init-ai-presets.js";
+import {
+  README_PATH,
+  readmeBuiltWithVersion,
+  refreshReadmeBuiltWith,
+} from "./init-templates.js";
 import { detectFrontendGuidance } from "./project-detect.js";
 import { CODEGEN_MARKER } from "./scaffold.js";
 import { warn } from "./ui.js";
@@ -145,43 +153,72 @@ function appNameFor(projectDir: string): string {
 /** Repo-relative paths whose managed block was rewritten. */
 export type RefreshResult = readonly string[];
 
+/** One file the SDK owns a block in: where it is, whether it carries the block, and what the block should now say. */
+interface ManagedFile {
+  readonly path: string;
+  /** The version stamped into the file's block, or null when it carries none. */
+  readonly stampedVersion: (text: string) => string | null;
+  /** The file with its block brought current and everything outside it untouched. */
+  readonly refreshed: (existing: string) => string;
+}
+
+/** The two files, in the order their paths are reported. */
+function managedFiles(opts: RefreshOptions): readonly ManagedFile[] {
+  return [
+    {
+      path: AGENTS_MD_PATH,
+      stampedVersion: managedBlockVersion,
+      refreshed: (existing) => {
+        const manager = detectPackageManager(opts.projectDir);
+        return upsertManagedBlock(
+          existing,
+          renderAgentsMd(opts.appName ?? appNameFor(opts.projectDir), opts.mode ?? guidanceModeFor(opts.projectDir), {
+            version: opts.sdkVersion,
+            frontend: opts.frontend ?? detectFrontendGuidance(opts.projectDir),
+            cli: projectFileCli(opts.projectDir, manager),
+            sdkDir: projectSdkDir(opts.projectDir, manager),
+          }),
+        );
+      },
+    },
+    {
+      path: README_PATH,
+      stampedVersion: readmeBuiltWithVersion,
+      refreshed: (existing) => refreshReadmeBuiltWith(existing, opts.sdkVersion),
+    },
+  ];
+}
+
 /**
- * Refresh `AGENTS.md` when its managed block differs from what this version
- * renders. Returns the paths it rewrote — empty when a gate closed, when the
- * file carries no block, or when the block is already current.
+ * Refresh `AGENTS.md` and the README's footer where the managed block differs
+ * from what this version renders. Returns the paths it rewrote — empty when a
+ * gate closed, when no file carries a block, or when every block is current.
  */
 export function refreshAgentFiles(opts: RefreshOptions): RefreshResult {
   const env = opts.env ?? process.env;
   if (opts.explicit !== true && (isCI(env) || !codingAgentDetected(env))) return [];
+  return managedFiles(opts)
+    .filter((file) => refreshFile(opts, file))
+    .map((file) => file.path);
+}
 
-  const path = AGENTS_MD_PATH;
-  const absolute = join(opts.projectDir, path);
-  if (!existsSync(absolute)) return [];
+/** Whether `file` was (or, under `write: false`, would be) rewritten. */
+function refreshFile(opts: RefreshOptions, file: ManagedFile): boolean {
+  const absolute = join(opts.projectDir, file.path);
+  if (!existsSync(absolute)) return false;
   try {
     const existing = readFileSync(absolute, "utf8");
+    if (file.stampedVersion(existing) === null) return false;
     // Stale by CONTENT, not only by stamp: a block stamped with this version can
     // still carry another version's text — the CLI that ran an upgrade rendered
     // it with its own, older templates before stamping the new version on it.
-    if (managedBlockVersion(existing) === null) return [];
-
-    const manager = detectPackageManager(opts.projectDir);
-    const rendered = renderAgentsMd(
-      opts.appName ?? appNameFor(opts.projectDir),
-      opts.mode ?? guidanceModeFor(opts.projectDir),
-      {
-        version: opts.sdkVersion,
-        frontend: opts.frontend ?? detectFrontendGuidance(opts.projectDir),
-        cli: projectFileCli(opts.projectDir, manager),
-        sdkDir: projectSdkDir(opts.projectDir, manager),
-      },
-    );
-    const updated = upsertManagedBlock(existing, rendered);
-    if (updated === existing) return [];
+    const updated = file.refreshed(existing);
+    if (updated === existing) return false;
     if (opts.write !== false) writeFileSync(absolute, updated);
-    return [path];
+    return true;
   } catch (err) {
     // A refresh is a courtesy. It must never be the reason a compile fails.
-    warn(`could not refresh ${path}: ${err instanceof Error ? err.message : String(err)}`, "agents.refresh-failed");
-    return [];
+    warn(`could not refresh ${file.path}: ${err instanceof Error ? err.message : String(err)}`, "agents.refresh-failed");
+    return false;
   }
 }

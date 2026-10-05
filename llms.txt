@@ -1,4 +1,4 @@
-# xanosdk v1.0.5
+# xanosdk v1.0.6
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 
@@ -39,7 +39,7 @@ plain file read resolves them at the version you have.
 
 - [Object kinds](llms/object-kinds.md): Read when deciding WHAT to build — every authorable primitive, what each is, and which factory + register method builds it. Also when `register*` will not typecheck an array built by `.flatMap()`/`.concat()`.
 - [Core def shapes](llms/kinds-core.md): Read when authoring a function, query, api group, task, workflow test, middleware, tool, or addon — and for the `response` and `expr` shapes every one of them uses.
-- [Consuming defs from a client](llms/client.md): Read when a frontend imports a def (`getPath()`/`InferResponse`) or calls the deployed backend — what the import costs, `window.XANO_HOST`, local dev, file URLs, and a Node spot-check.
+- [Consuming defs from a client](llms/client.md): Read when a frontend calls the deployed backend or imports a def — request types and zod schemas without the import, its cost, `window.XANO_HOST`, local dev, file URLs, a Node spot-check.
 - [Toolchain modules](llms/toolchain.md): Read when `package.json` has a `"xanosdk"` block or you run `xanosdk marketplace`.
 - [Error index](llms/errors.md): Read when a request, test, build, or pull fails with a message you did not write — the string, its cause, and where the fix is.
 - [Saved unit tests, assertions, and mocks](llms/tests.md): Read when authoring a `workflowTest()` stack, when a query/function/middleware carries `tests`, when a statement needs a `mock`, or when running a deployed environment's tests.
@@ -436,7 +436,7 @@ Non-obvious authoring rules:
   checked only by the `xanosdk export`/`deploy` CLI path. Only `deploy` ships seed rows.
   - Entry points: the `node:fs` writers (`writeBundle`/`writeArtifact`) and lock-file I/O
     import from `@xano/sdk/node`, NOT the browser-safe `@xano/sdk` entry (a frontend
-    imports defs from it for `getPath()`/`InferInput`). `@xano/sdk/internal` is the
+    imports from it; request types come from `routes.gen.ts`). `@xano/sdk/internal` is the
     compiler machinery, never needed to author. READING a bundle back is `@xano/sdk/bundle`
     — a statement walker (`2.if.0` paths), a structural hash, `mvp:*` catalog, `tableRefOf`.
 - **Intra-workspace imports use `.js` specifiers** (`../tables/links.js`), not

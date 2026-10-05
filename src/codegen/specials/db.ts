@@ -1138,17 +1138,13 @@ const dbIncrement: SpecialDecoder = (a) => {
   return prove(a.ctx, a.stored, "db.increment", [runtime], [obj(entries)]);
 };
 
-/** `db.transaction { … }` — a nested `run[]`, and the result binding it carries. */
+/**
+ * `db.transaction { … }` — a nested `run[]`. A stored `as` (always `null` at
+ * run time) has no argument here and rides the envelope spread.
+ */
 const dbTransaction: SpecialDecoder = (a) => {
   const body = a.decodeStack(getPath(a.stored.context, "run"));
-  const entries: Array<[string, Expr]> = [["body", arr(body.exprs)]];
-  const runtime: Record<string, unknown> = { body: body.statements };
-  const as = (a.stored as { as?: unknown }).as;
-  if (typeof as === "string" && as !== "") {
-    entries.push(["as", lit(as)]);
-    runtime.as = as;
-  }
-  return prove(a.ctx, a.stored, "db.transaction", [runtime], [obj(entries)]);
+  return prove(a.ctx, a.stored, "db.transaction", [{ body: body.statements }], [obj([["body", arr(body.exprs)]])]);
 };
 
 // ---------------------------------------------------------------------------

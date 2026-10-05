@@ -330,7 +330,10 @@ registerKind(realtimeMessageKind);
  * `InferResponse<typeof msg>` types what it RECEIVES.
  */
 export function realtimeMessage<
-  const I extends Record<string, InputDescriptor>,
+  // Default `Record<never, never>`, matching `query()`: a message with no
+  // `input` carries no payload keys, and without the default `I` falls back to
+  // its constraint, so `InferInput` read an index signature instead of `{}`.
+  const I extends Record<string, InputDescriptor> = Record<never, never>,
   Res = never,
   Resp extends ResponseDef = ResponseDef,
   // Default `readonly []` (not `readonly Statement[]`), matching `query()`: an

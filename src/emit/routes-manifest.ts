@@ -21,9 +21,15 @@
  * known at export time. Writing it out as plain data yields the same typed,
  * rename-safe contract at near-zero bundle cost.
  *
- * The emitted file imports NOTHING. It is generated TypeScript with an inline
- * interpolator, so the guarantee is structural rather than a tree-shaking hope:
- * there is no `@xano/sdk` specifier in it for a bundler to follow.
+ * The core sections of the emitted file import NOTHING. They are generated
+ * TypeScript with an inline interpolator, so the guarantee is structural rather
+ * than a tree-shaking hope: there is no `@xano/sdk` specifier in it for a
+ * bundler to follow. Only a block an installed module contributes may import,
+ * and only the packages it declares — never `@xano/sdk`.
+ *
+ * The file also types every route's, channel's and message's request inputs
+ * (`RouteInputs`, `ChannelInputs`, `MessageInputs`; see `route-input-types.ts`),
+ * read off the same payload under the same keys, as types only.
  *
  * Keyed by `"<VERB> <name>"` — the verb and the query's real `name`, both
  * strings the def already carries — so no identifier is invented from either,
@@ -56,6 +62,10 @@
  */
 import { parsePathParams } from "../kinds/path-params.js";
 import { pathSegment, type HttpVerb } from "../kinds/query.js";
+import type { MessageInputSet, RouteInputSet, RouteInputs } from "../plugin.js";
+import { describeInputs, tableColumns } from "./route-inputs.js";
+import { NO_ROUTE_INPUTS, renderRouteInputTypes } from "./route-input-types.js";
+import { byCodeUnit } from "../util/code-unit.js";
 
 /** One endpoint, as the emitter needs it. */
 export interface RouteEntry {
@@ -117,6 +127,56 @@ export function qualifiedRouteKey(route: { verb: HttpVerb; name: string; group: 
   return `${route.group}:${routeKey(route)}`;
 }
 
+/**
+ * Every route's FINAL manifest key, in manifest order (canonical, then name,
+ * then verb).
+ *
+ * A short key held by more than one endpoint is ambiguous: each of those is
+ * keyed by its group instead. One function, read by the `ROUTES` renderer and
+ * by the planner's input description alike, because a section keyed by one
+ * reading and a `ROUTES` keyed by another would name different endpoints under
+ * the same key.
+ *
+ * It never throws. Two endpoints that land on the SAME final key (one verb+name
+ * in two groups of one name) are the renderer's to refuse; here both keep that
+ * key, so planning a workspace the manifest cannot describe still succeeds —
+ * `xanosdk routes` lists such a workspace without writing anything.
+ */
+export function keyRoutes<R extends RouteEntry>(
+  routes: readonly R[],
+): Array<{ route: R; key: string; short: string; group: string }> {
+  const sorted = [...routes].sort(
+    (a, b) =>
+      a.canonical.localeCompare(b.canonical) ||
+      a.name.localeCompare(b.name) ||
+      a.verb.localeCompare(b.verb),
+  );
+  const holders = new Map<string, number>();
+  for (const route of sorted) holders.set(routeKey(route), (holders.get(routeKey(route)) ?? 0) + 1);
+  return sorted.map((route) => {
+    const short = routeKey(route);
+    const group = route.group ?? route.canonical;
+    return { route, key: holders.get(short)! > 1 ? qualifiedRouteKey({ ...route, group }) : short, short, group };
+  });
+}
+
+/**
+ * Every channel's FINAL manifest key, in manifest order (path, then server): the
+ * path alone when one server owns it, `"<server>:<path>"` on each when two do.
+ * Shared by the `CHANNELS` renderer and the planner for the reason given on
+ * {@link keyRoutes}, and like it never throws.
+ */
+export function keyChannels<C extends RealtimeChannelEntry>(channels: readonly C[]): Array<{ channel: C; key: string }> {
+  const holders = new Map<string, number>();
+  for (const channel of channels) holders.set(channel.name, (holders.get(channel.name) ?? 0) + 1);
+  return [...channels]
+    .sort((a, b) => a.name.localeCompare(b.name) || a.server.localeCompare(b.server))
+    .map((channel) => ({
+      channel,
+      key: holders.get(channel.name)! > 1 ? `${channel.server}:${channel.name}` : channel.name,
+    }));
+}
+
 /** A TypeScript string literal for `value`, safe in single quotes. */
 function literal(value: string): string {
   return JSON.stringify(value);
@@ -172,13 +232,10 @@ function renderRealtime(realtime: RealtimeManifest): string {
     seenServer.add(server.name);
   }
 
-  const holders = new Map<string, number>();
-  for (const channel of realtime.channels) holders.set(channel.name, (holders.get(channel.name) ?? 0) + 1);
   const ambiguous = new Map<string, string[]>();
   const seenChannel = new Set<string>();
-  const channels = [...realtime.channels]
-    .sort((a, b) => a.name.localeCompare(b.name) || a.server.localeCompare(b.server))
-    .map((channel) => {
+  const channels = keyChannels(realtime.channels)
+    .map(({ channel, key }) => {
       if (!known.has(channel.server)) {
         throw new RouteManifestError(
           `The channel "${channel.name}" names the realtime server "${channel.server}", which is not in ` +
@@ -186,7 +243,6 @@ function renderRealtime(realtime: RealtimeManifest): string {
             `be registered too.`,
         );
       }
-      const key = holders.get(channel.name)! > 1 ? `${channel.server}:${channel.name}` : channel.name;
       if (seenChannel.has(key)) {
         throw new RouteManifestError(
           `The realtime server "${channel.server}" has two channels both named "${channel.name}". Rename one.`,
@@ -248,29 +304,23 @@ ${realtimeImplementation(ambiguousKeys.length > 0)}`;
  *
  * The realtime section is emitted only for a workspace that has one, so a
  * query-only manifest carries no empty realtime block.
+ *
+ * `inputs` is the planner's description (`RoutePlan.inputs`), already keyed
+ * and ordered like the sections above; omitted, every input map is empty. Its
+ * types are the LAST core section: they sit after every overload set and its
+ * implementation, and a module's block (when one is installed) follows them.
  */
 export function renderRouteManifest(
   routes: readonly RouteEntry[],
   realtime?: RealtimeManifest,
+  inputs: RouteInputs = NO_ROUTE_INPUTS,
 ): string {
-  const sorted = [...routes].sort(
-    (a, b) =>
-      a.canonical.localeCompare(b.canonical) ||
-      a.name.localeCompare(b.name) ||
-      a.verb.localeCompare(b.verb),
-  );
-
   // A short key held by more than one endpoint is ambiguous: each of those is
-  // keyed by its group instead, and the short key is left out.
-  const holders = new Map<string, number>();
-  for (const route of sorted) holders.set(routeKey(route), (holders.get(routeKey(route)) ?? 0) + 1);
+  // keyed by its group instead (`keyRoutes`), and the short key is left out.
   const ambiguous = new Map<string, string[]>();
 
   const seen = new Map<string, string>();
-  const rows = sorted.map((route) => {
-    const short = routeKey(route);
-    const group = route.group ?? route.canonical;
-    const key = holders.get(short)! > 1 ? qualifiedRouteKey({ ...route, group }) : short;
+  const rows = keyRoutes(routes).map(({ route, key, short, group }) => {
     const clash = seen.get(key);
     if (clash !== undefined) {
       throw new RouteManifestError(
@@ -319,7 +369,7 @@ const AMBIGUOUS: Record<string, readonly string[]> = ${objectLiteral(
       ? renderRealtime(realtime)
       : "";
 
-  return `${HEADER}${FILL_PARAMS}${ambiguousSection}
+  return `${MANIFEST_HEADER}${FILL_PARAMS}${ambiguousSection}
 export const ROUTES = ${objectLiteral(entries)} as const;
 
 /**
@@ -329,7 +379,7 @@ export const ROUTES = ${objectLiteral(entries)} as const;
 export type RouteName = keyof typeof ROUTES;
 ${rows.length > 1 ? MANY_ROUTES : ""}
 ${rows.length > 1 ? UNION_OVERLOAD : ""}${ambiguousOverloads ? `${ambiguousOverloads}\n` : ""}${overloadsFor("routePath", rows.map((r) => ({ name: r.key, params: r.params })))}
-${implementation(ambiguousKeys.length > 0)}${realtimeSection}`;
+${implementation(ambiguousKeys.length > 0)}${realtimeSection}${renderRouteInputTypes(inputs)}`;
 }
 
 /**
@@ -348,13 +398,16 @@ const MANY_ROUTES = `
 type ManyRoutes<N> = [(N extends unknown ? (x: N) => void : never) extends (x: infer I) => void ? I : never] extends [never] ? N : never;
 `;
 
-const HEADER = `/**
+export const MANIFEST_HEADER = `/**
  * GENERATED by \`xanosdk routes --emit\`. Do not edit.
  *
- * Plain data plus one interpolator — this file imports nothing, so a frontend
- * gets the typed path/verb (and socket) contract without pulling the SDK runtime
- * into its bundle. Regenerate after changing an endpoint's name, verb, or api
- * group, or a realtime server's or channel's name.
+ * Plain data plus one interpolator, and the request input types of every
+ * endpoint, channel and message. The core sections import nothing; the only
+ * imports are the packages an installed module's block declares, never the
+ * SDK itself. So a frontend gets the typed path/verb (and socket) contract
+ * without pulling the SDK runtime into its bundle. Regenerate after changing an
+ * endpoint's name, verb, api group or inputs, or a realtime server's, channel's
+ * or message's name or inputs.
  */
 `;
 
@@ -647,6 +700,14 @@ export interface RoutePlan {
   unresolvedServers: string[];
   /** Channels of the servers in {@link RoutePlan.servers}. */
   channels: RealtimeChannelEntry[];
+  /**
+   * The request inputs of every route in {@link RoutePlan.resolved}, every
+   * channel in {@link RoutePlan.channels}, and every message on one of those
+   * channels, under the keys the rendered manifest uses. Planned here, beside
+   * the keys, so every writer of the manifest reads inputs the one way it reads
+   * routes.
+   */
+  inputs: RouteInputs;
 }
 
 /**
@@ -679,15 +740,20 @@ export function planRouteManifest(
     if (resolved) canonicalByGuid.set(guid, resolved);
   }
 
+  // Each planned row's stored `input[]`, by identity: the rows are the plan's
+  // public shape, and the input rows are only read on the way to `inputs`.
+  const storedInputs = new Map<object, unknown>();
   const rows: PlannedRoute[] = list("query").map((q) => {
     const group = ref(q.app);
-    return {
+    const row: PlannedRoute = {
       verb: q.verb as HttpVerb, // already an uppercase HttpVerb in the bundle
       // Match getPath(): the path segment drops any leading slash on the name.
       name: pathSegment(typeof q.name === "string" ? q.name : ""),
       canonical: group !== undefined ? canonicalByGuid.get(group) : undefined,
       ...(group !== undefined && groupByGuid.has(group) ? { group: groupByGuid.get(group)! } : {}),
     };
+    storedInputs.set(row, q.input);
+    return row;
   });
   rows.sort((a, b) => (a.canonical ?? "").localeCompare(b.canonical ?? "") || a.name.localeCompare(b.name));
 
@@ -701,6 +767,7 @@ export function planRouteManifest(
   });
   const servers = serverRows.flatMap((s) => (s.canonical ? [{ name: s.name, canonical: s.canonical }] : []));
   const describable = new Set(servers.map((s) => s.name));
+  const channelGuids = new Map<object, string | undefined>();
   const channels = list("channel").flatMap((c) => {
     const name = text(c.name);
     if (name === undefined) return [];
@@ -710,18 +777,54 @@ export function planRouteManifest(
     // exactly what could not be resolved. (A channel pointing at a server this
     // workspace never registered cannot reach here: `export()` refuses it.)
     if (server === undefined || !describable.has(server)) return [];
-    return [{ name, server }];
+    const channel: RealtimeChannelEntry = { name, server };
+    channelGuids.set(channel, text(c.guid));
+    storedInputs.set(channel, c.input);
+    return [channel];
   });
+
+  const resolved: RouteEntry[] = rows.flatMap((r) => {
+    if (!r.canonical) return [];
+    const entry: RouteEntry = { name: r.name, verb: r.verb, canonical: r.canonical, ...(r.group !== undefined ? { group: r.group } : {}) };
+    storedInputs.set(entry, storedInputs.get(r));
+    return [entry];
+  });
+
+  // Inputs, under the keys the renderer will give their routes and channels. A
+  // message joins its channel by guid and takes that channel's key, so it is
+  // dropped exactly when its channel is: an unresolved server, or a channel the
+  // payload does not carry.
+  const tables = tableColumns(payload);
+  const routeInputs: RouteInputSet[] = keyRoutes(resolved).map(({ route, key }) => ({
+    key,
+    inputs: describeInputs(storedInputs.get(route), tables),
+  }));
+  const channelKeyByGuid = new Map<string, string>();
+  const channelInputs: RouteInputSet[] = keyChannels(channels).map(({ channel, key }) => {
+    const guid = channelGuids.get(channel);
+    if (guid !== undefined) channelKeyByGuid.set(guid, key);
+    return { key, inputs: describeInputs(storedInputs.get(channel), tables) };
+  });
+  const messageInputs: MessageInputSet[] = list("message").flatMap((m) => {
+    const name = text(m.name);
+    const guid = ref(m.channel);
+    const channel = guid !== undefined ? channelKeyByGuid.get(guid) : undefined;
+    if (name === undefined || channel === undefined) return [];
+    return [{ key: `${channel} ${name}`, channel, name, inputs: describeInputs(m.input, tables) }];
+  });
+  // Code-unit order, unlike the ROUTES/CHANNELS sorts above (kept as committed
+  // output has them): a module renders from this order, and a locale-dependent
+  // one would make two machines write different bytes for one workspace.
+  messageInputs.sort((a, b) => byCodeUnit(a.key, b.key));
 
   return {
     rows,
-    resolved: rows.flatMap((r) =>
-      r.canonical ? [{ name: r.name, verb: r.verb, canonical: r.canonical, ...(r.group !== undefined ? { group: r.group } : {}) }] : [],
-    ),
+    resolved,
     unresolved: rows.filter((r) => !r.canonical),
     servers,
     unresolvedServers: serverRows.filter((s) => !s.canonical).map((s) => s.name),
     channels,
+    inputs: { routes: routeInputs, channels: channelInputs, messages: messageInputs },
   };
 }
 
@@ -754,5 +857,6 @@ export function renderPlannedManifest(plan: RoutePlan, entry = "<entry>"): strin
   return renderRouteManifest(
     plan.resolved,
     plan.servers.length > 0 ? { servers: plan.servers, channels: plan.channels } : undefined,
+    plan.inputs,
   );
 }

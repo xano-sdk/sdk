@@ -36,6 +36,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { UsageError } from "./errors.js";
+import { byCodeUnit } from "../util/code-unit.js";
 
 /**
  * Which loader owns a module.
@@ -214,6 +215,24 @@ export function readInstalledManifestState(dir: string, pkg: string): InstalledM
 export function readInstalledManifest(dir: string, pkg: string): Record<string, unknown> | null {
   const state = readInstalledManifestState(dir, pkg);
   return state.kind === "ok" ? state.manifest : null;
+}
+
+/**
+ * The peers a module needs besides `@xano/sdk`, name → declared range, sorted
+ * by name. A peer `peerDependenciesMeta` marks optional is not needed, and a
+ * range that is not a string is not one a manager could be handed.
+ */
+export function requiredPeersOf(manifest: Record<string, unknown>): [name: string, range: string][] {
+  const peers = manifest["peerDependencies"];
+  if (typeof peers !== "object" || peers === null) return [];
+  const meta = manifest["peerDependenciesMeta"];
+  const optional = (name: string): boolean => {
+    const entry = typeof meta === "object" && meta !== null ? (meta as Record<string, unknown>)[name] : undefined;
+    return typeof entry === "object" && entry !== null && (entry as { optional?: unknown }).optional === true;
+  };
+  return Object.entries(peers as Record<string, unknown>)
+    .filter((e): e is [string, string] => e[0] !== "@xano/sdk" && typeof e[1] === "string" && !optional(e[0]))
+    .sort(([a], [b]) => byCodeUnit(a, b));
 }
 
 /**

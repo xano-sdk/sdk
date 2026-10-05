@@ -14,3 +14,15 @@ shipped defaults. `marketplace reinstall <pkg>` re-asks with the current setting
 defaults and re-enables a disabled one; `marketplace remove <pkg>` drops block, lines and
 dependency together — a plain `npm uninstall` leaves the block, and a package it names
 that is no longer installed fails every `--frozen-lock` run.
+
+**A module's section of `xano/routes.gen.ts`.** A module with a `routesManifest` hook (types:
+`@xano/sdk/plugin`) writes a block between `// xanosdk:begin <pkg>` and `// xanosdk:end <pkg>`
+after the core sections, on every write of the file (`routes --emit`, `xano:routes`, `pull`,
+`generate`, `marketplace install|reinstall|remove`). Edits inside the block are overwritten.
+Install also adds the module's non-SDK peers (e.g. `zod`) as direct dependencies.
+The hook is synchronous and pure: given
+the request inputs under the manifest's keys and its config, it returns `{ imports?, source }`,
+imports as bare package names (`@xano/sdk*`, relative and `node:` are refused). A module that
+fails to load or throws leaves its previous block as it was, with a warning naming it, and the
+core sections still refresh; under `routes --emit --strict` it is fatal. `@xano-sdk/zod`
+(`xanosdk marketplace install zod`) is one: it adds `ROUTE_SCHEMAS` and its siblings.

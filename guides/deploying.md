@@ -1243,6 +1243,58 @@ object with the same key *and* the same identity, so a lock cannot pin a guid th
 never had. If none of the lock's identities appear in the source, that is what pointing a
 project at an unrelated backend looks like, and the pull is refused unless you pass `--yes`.
 
+### Which side changed: the sync baseline
+
+When a workspace and this project differ, `workspace diff` also says **which side moved** since
+they last matched. Every command that makes them match records a baseline in `xano.lock`, under
+`synced`. A baseline is one content digest per object, kept per workspace and per branch. The
+commands that record one are `deploy --to workspace`, a verified `promote`, `pull workspace`
+and `init --from workspace`. Commit it with the rest of the lock.
+
+```bash
+xanosdk workspace diff ./xano/index.ts --json
+```
+
+```jsonc
+{
+  "matched": false,
+  "differing": ["query:GET list (apiGroup orders)", "table:order"],
+  "baseline": { "at": "2026-10-05T13:36:31.000Z", "by": "pull" },
+  "changedThere": ["query:GET list (apiGroup orders)"], // edited in Xano since the baseline
+  "changedHere": ["table:order"],                        // edited in this project since
+  "changedBoth": [],                                     // edited on both sides: a conflict
+  "unclassified": []                                     // differs, direction unknown
+}
+```
+
+- `changedThere`: pull before you deploy, or the deploy overwrites that edit.
+- `changedHere`: deploy it.
+- `changedBoth`: reconcile by hand.
+- `unclassified`: the baseline cannot tell. The object has no baseline entry, both sides
+  already differed when it was taken, or it is the workspace's own settings row, which is
+  never digested. A changed slug also shows only here, because digests leave slugs out.
+
+Additions and deletions are classified as well. The baseline keeps this project's objects apart
+from the rest of the branch, so an object the project never held (another source's, or a section
+a pull does not write into `xano/`) is never reported as deleted here; it shows up only when it
+changes in Xano. An object that is new in Xano counts as `changedThere` only when the baseline is
+**complete**: a pull, an `init --from`, a verified
+`promote` and a `--replace` record every object on the branch, and so does a merge deploy
+that read the branch first. With no baseline for the branch, `baseline` is `null` and the
+four lists are empty. A run that finds the branch exactly as recorded leaves the lock alone.
+
+A few things to know about the baseline:
+
+- It records what the branch holds after the sync, read back from the branch where the command
+  can do so, so an object stored differently from how it compiles is not reported as changed in
+  Xano. It is recorded whoever's objects landed (a `--bundle` from elsewhere, a release another
+  project cut), because it describes the branch, not ownership.
+- A baseline taken by a different SDK version under an older digest scheme is set aside
+  (`baseline: null`) and replaced by the next sync, rather than read as every object changed.
+- An SDK older than this feature drops `synced` when it rewrites `xano.lock`. Nothing breaks: the
+  next sync records a new baseline.
+- On a merge conflict in `xano.lock`, keep either side's baseline for a branch, or delete it.
+
 ### Deploying to a branch
 
 `--branch <label>` stages on a Xano branch instead of the live one, which is the safer shape
