@@ -415,6 +415,15 @@ export const FLAGS = {
   all: { spec: "--all", summary: "Every stored profile, not just the active one" },
   "all-workspaces": { spec: "--all-workspaces", summary: "Enumerate across every workspace, not just the token's" },
   guest: { spec: "--guest, -g", summary: "Mint a read-only guest session (browse only)" },
+  stdio: {
+    spec: "--stdio",
+    summary:
+      "Run as an MCP stdio server that forwards to the live engine with its current bearer — the command a coding agent's MCP config launches",
+  },
+  project: {
+    spec: "--project <dir>",
+    summary: "The project whose engine to reach, when the agent launches the bridge outside it (default: the current directory)",
+  },
   "url-only": { spec: "--url-only, -u", summary: "Print the dashboard URL instead of opening a browser" },
   prompt: { spec: "--prompt", summary: "Print only the add-on wiring prompt, for piping to a coding agent" },
   port: { spec: "--port <n>", summary: "Loopback callback port (default: 47100)" },
@@ -441,8 +450,9 @@ export const FLAGS = {
   name: { spec: "--name <n>", summary: "Name for what this command produces" },
   framework: {
     spec: "--framework <id>",
-    summary: "Frontend framework to scaffold: react (default), svelte",
-    values: ["react", "svelte"],
+    summary:
+      "Frontend to scaffold in a new project: react (default), svelte, or none for the backend only. A non-empty directory always gets the backend only",
+    values: ["react", "svelte", "none"],
   },
   theme: {
     spec: "--theme <id>",
@@ -534,6 +544,11 @@ export const FLAGS = {
    * takes both.
    */
   force: { spec: "--force", summary: "Overwrite something that already exists" },
+  agent: {
+    spec: "--agent <id>",
+    summary:
+      "Which agent to act for, instead of the ones detected (repeatable): claude-code, agents (the shared ~/.agents directory), codex, cursor, copilot, gemini, amp, opencode",
+  },
   "backend-dir": {
     spec: "--backend-dir <path>",
     summary:
@@ -841,7 +856,7 @@ const SCAFFOLD = [
   {
     key: "force",
     summary:
-      "Write into a non-empty target directory. Over an existing project it lists every file it would overwrite and confirms first (--yes without a terminal); files the scaffold does not write are kept",
+      "Write over what clashes when adding the backend to a non-empty target directory: an existing xano/, a file init would write, a xano:* script with another command. It lists every file and script it would overwrite and confirms first (--yes without a terminal); files the scaffold does not write are kept",
   },
   "no-install",
 ] as const satisfies readonly FlagRef[];
@@ -975,7 +990,8 @@ export const COMMANDS = {
     // Toolchain modules contribute their own question flags; see the field's
     // doc for the obligation this takes on.
     deferUnknownFlags: true,
-    summary: "Scaffold a Xano SDK project — empty, or filled from an existing backend",
+    summary:
+      "Scaffold a Xano SDK project — empty, or filled from an existing backend. In a non-empty directory, add the backend to the project there",
     args: [{ name: "dir", required: false, path: true }],
     // Two axes on top of the shared scaffold flags: WHERE `xano/` comes from
     // (`--from`) and HOW the options were collected (`--web`). They compose —
@@ -1638,6 +1654,18 @@ export const COMMANDS = {
         args: [{ name: "name", required: false }],
         example: "XANO_META_TOKEN=$(xanosdk local token)",
       },
+      mcp: {
+        // Details by default, a bridge only on `--stdio`: an agent that runs
+        // this through its own shell tool must get an answer, not a server
+        // waiting on stdin.
+        summary:
+          "Print how a coding agent connects to a Xano Engine's MCP server (look at the backend, seed rows, run " +
+          "functions, tasks, triggers, endpoints and tests); `--stdio` runs the bridge the agent's MCP config " +
+          "launches (default: the engine this project deployed to)",
+        args: [{ name: "name", required: false }],
+        flags: ["stdio", "project"],
+        example: "xanosdk local mcp",
+      },
       stop: {
         // The name is optional because `--all` stands in for it — and `--all`
         // is the form most runs want, since it covers every project.
@@ -1941,6 +1969,33 @@ export const COMMANDS = {
     summary: "Install the latest @xano/sdk, or report an available upgrade with --check",
     flags: ["check"],
     example: "xanosdk upgrade --check",
+  },
+  "agent-skill": {
+    group: "Maintenance",
+    display: "agent-skill <install|uninstall|status>",
+    summary: "Install the xano-backend skill into the coding agents on this machine",
+    subcommands: {
+      install: {
+        summary:
+          "Write the skill into the user-level skill directory of each detected agent; an edited copy is left alone unless --force",
+        flags: [
+          "agent",
+          { key: "dry-run", summary: "Report what would change and write nothing" },
+          { key: "force", summary: "Replace a copy that was edited since it was installed" },
+        ],
+        example: "xanosdk agent-skill install --agent claude-code",
+      },
+      uninstall: {
+        summary: "Remove the copies install wrote; an edited copy is reported and kept",
+        flags: ["agent", { key: "dry-run", summary: "Report what would be removed and remove nothing" }],
+        example: "xanosdk agent-skill uninstall",
+      },
+      status: {
+        summary: "Report each copy as current, stale, edited or absent",
+        flags: ["agent"],
+        example: "xanosdk agent-skill status --json",
+      },
+    },
   },
   help: {
     group: "Maintenance",

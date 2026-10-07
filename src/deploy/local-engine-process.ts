@@ -512,7 +512,69 @@ function runVerb(args: readonly string[], opts: EngineCommandOptions): EngineRun
  * engine beside one that is already serving.
  */
 export function listEngines(opts: EngineCommandOptions): LocalEngine[] {
-  const result = runVerb(["list", "--json"], opts);
+  return readListing(runVerb(["list", "--json"], opts));
+}
+
+/** The asynchronous seam {@link listEnginesAsync} goes through. */
+export type EngineRunAsync = (
+  executable: string,
+  args: readonly string[],
+  options: { env: NodeJS.ProcessEnv },
+) => Promise<EngineRunResult>;
+
+/** What {@link listEnginesAsync} takes: the synchronous verbs' options, with an async seam. */
+export interface AsyncEngineCommandOptions {
+  entry: EngineCacheEntry;
+  env?: NodeJS.ProcessEnv;
+  run?: EngineRunAsync;
+  /** How long the enumeration may take. Defaults to {@link HANDSHAKE_TIMEOUT_MS}. */
+  timeoutMs?: number;
+}
+
+/**
+ * {@link listEngines} without blocking the event loop, for a long-lived process
+ * that keeps answering while it enumerates. Bounded in time and in bytes like a
+ * start, so a wedged binary cannot hold the caller forever or fill its memory.
+ */
+export async function listEnginesAsync(opts: AsyncEngineCommandOptions): Promise<LocalEngine[]> {
+  const env = opts.env ?? process.env;
+  const run = opts.run ?? boundedRun(opts.timeoutMs ?? HANDSHAKE_TIMEOUT_MS);
+  return readListing(await run(verifiedEngineExecutable(opts.entry, env), ["list", "--json"], { env: engineChildEnv(env) }));
+}
+
+function boundedRun(timeoutMs: number): EngineRunAsync {
+  return (executable, args, options) =>
+    new Promise((resolve, reject) => {
+      const child = nodeSpawn(executable, [...args], { env: options.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+      const settle = (fn: () => void): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn();
+      };
+      const giveUp = (why: string): void =>
+        settle(() => {
+          child.kill();
+          reject(new Error(`The engine could not list what is running: ${why}.`));
+        });
+      const timer = setTimeout(() => giveUp(`it did not answer within ${Math.round(timeoutMs / 1000)}s`), timeoutMs);
+      child.stdout.on("data", (chunk: Buffer) => {
+        if (settled) return;
+        stdout += String(chunk);
+        if (stdout.length > MAX_HANDSHAKE_BYTES) giveUp("it printed more than a listing holds");
+      });
+      child.stderr.on("data", (chunk: Buffer) => {
+        if (!settled && stderr.length < MAX_STDERR_BYTES) stderr += String(chunk);
+      });
+      child.on("error", (err) => settle(() => reject(err)));
+      child.on("close", (status) => settle(() => resolve({ status, stdout, stderr })));
+    });
+}
+
+function readListing(result: EngineRunResult): LocalEngine[] {
   if (result.status !== 0) {
     throw new Error(
       `The engine could not list what is running` +

@@ -19,6 +19,7 @@ network. When it's ready, one command puts the same code live on Xano's cloud.**
 [The model](#the-model) ·
 [Typed frontend](#a-type-safe-frontend-for-free) ·
 [Already on Xano?](#already-have-a-xano-workspace) ·
+[Agent skill](#the-agent-skill) ·
 [Deploying](#deploying) ·
 [Reference](#reference)
 
@@ -120,8 +121,8 @@ The three commands at the top of this page are the whole local loop. Here it is 
 time, then out to the cloud.
 
 **1. Scaffold.** No sign-in needed. `init` writes a Vite frontend under `frontend/` (React 19 +
-shadcn/ui by default, or SvelteKit with `--framework svelte`), a Xano SDK backend under
-`xano/`, and the `xano:deploy*` scripts already wired.
+shadcn/ui by default, SvelteKit with `--framework svelte`, none with `--framework none`), a Xano
+SDK backend under `xano/`, and the `xano:deploy*` scripts already wired.
 
 ```bash
 npx @xano/sdk init my-app && cd my-app
@@ -130,6 +131,12 @@ npx @xano/sdk init my-app && cd my-app
 Theme it with a flag (`--theme zinc-blue --dark toggle`) or pick everything in a browser with
 `--web`. The starter backend is empty but already deploys — grow it from `xano/EXAMPLE.md`.
 Flags, presets, theming and add-ons: [The scaffolded project](https://github.com/xano-sdk/sdk/blob/main/guides/scaffold.md).
+
+**Already have an app?** Run `init` inside it. In a directory that already has files, `init`
+adds only the backend, with no prompt: it writes `xano/`, merges the `xano:*` scripts and
+dependencies into your `package.json`, and writes no frontend. Anything it would overwrite is
+listed and refused unless you pass `--force`
+([details](https://github.com/xano-sdk/sdk/blob/main/guides/scaffold.md#no-frontend-and-existing-apps)).
 
 **2. Run it on the Xano Engine.** The first deploy downloads the engine for your platform and
 pins its version in `package.json`; every one after starts in seconds, offline.
@@ -183,9 +190,12 @@ your laptop. `xanosdk deploy` brings one up and deploys into it — it is where 
   commit it and every checkout runs the same engine. Newer ones are offered, never forced.
 - **Every command reaches it.** After a local deploy, `test run-all`, `tables`, `env set`,
   `impersonate` and `status` target the engine without a flag, and with no account.
+- **An MCP server for your agent.** `init` connects Claude Code and Cursor to it: they read tables and
+  rows, seed data, and run functions and tests. Code still changes in `xano/` and ships with a deploy.
 
 ```bash
 npx xanosdk local list          # the engines running on this machine
+npx xanosdk local mcp           # how a coding agent connects to the engine's MCP server
 npx xanosdk local stop <name>   # stop one
 npx xanosdk local update        # move the pin to the latest engine
 npx xanosdk local cache clear   # reclaim the disk space
@@ -354,6 +364,22 @@ values travel, the doc-site token, and how to read the decode report are in
 
 ---
 
+## The agent skill
+
+`xano-backend` is an agent skill (`SKILL.md`) for the coding agent you already use: Claude Code,
+Codex, Cursor, Copilot, Gemini CLI, Amp or OpenCode. When a project needs a backend and has none,
+it has the agent confirm Xano with you, run `init`, deploy, and follow the `AGENTS.md` that `init`
+wrote. (It is unrelated to `knowledge()`, the docs your workspace's own AI agents read.)
+
+```bash
+npx @xano/sdk agent-skill install   # into each coding agent on this machine (also: status, uninstall)
+npx skills add xano-sdk/sdk         # or with the skills installer
+```
+
+In Claude Code: `/plugin marketplace add xano-sdk/sdk`, then `/plugin install xano@xano-sdk`.
+
+---
+
 ## Deploying
 
 Code moves through three places: the **Xano Engine** on your machine, a disposable
@@ -410,12 +436,12 @@ reference, the guides carry the shape of a project and the behavior that will bi
 | Guide | What's in it |
 |---|---|
 | [Project structure](https://github.com/xano-sdk/sdk/blob/main/guides/project-structure.md) | How a `xano/` project is laid out, why registration is explicit, wiring one by hand |
-| [The scaffolded project](https://github.com/xano-sdk/sdk/blob/main/guides/scaffold.md) | What `xanosdk init` writes, the two frontend presets, theming, add-ons, SvelteKit rules |
+| [The scaffolded project](https://github.com/xano-sdk/sdk/blob/main/guides/scaffold.md) | What `xanosdk init` writes, the two frontend presets, no frontend, existing apps, theming, add-ons, SvelteKit rules |
 | [The marketplace](https://github.com/xano-sdk/sdk/blob/main/guides/marketplace.md) | Finding add-ons, the two kinds of module, and the install/reinstall/remove lifecycle |
 | [The module contract](https://github.com/xano-sdk/sdk/blob/main/guides/module-contract.md) | Building an add-on: the manifest fields, the plugin types, every hook, and what is refused |
 | [Object kinds](https://github.com/xano-sdk/sdk/blob/main/guides/object-kinds.md) | Every authorable kind, and splitting a workspace across microservices |
 | [Authoring reference](https://github.com/xano-sdk/sdk/blob/main/guides/authoring.md) | Tables and fields, statements, values, inputs, middleware, seed data |
-| [CLI](https://github.com/xano-sdk/sdk/blob/main/guides/cli.md) | Every command, shell completion, and what failures look like |
+| [CLI](https://github.com/xano-sdk/sdk/blob/main/guides/cli.md) | Every command, the agent skill, shell completion, and what failures look like |
 | [Warning and error codes](https://github.com/xano-sdk/sdk/blob/main/guides/codes.md) | Every code the CLI and the build emit, with what it means |
 | [Signing in & deploying](https://github.com/xano-sdk/sdk/blob/main/guides/deploying.md) | Auth, ephemerals, `--static`, releasing to production, `xanosdk preflight` |
 | [Environment & identity](https://github.com/xano-sdk/sdk/blob/main/guides/environment.md) | Every environment variable, and how `xano.lock` pins identity |

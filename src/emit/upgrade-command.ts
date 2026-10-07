@@ -30,6 +30,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import type { ParsedArgs } from "./cli.js";
 import { readEnvVar } from "../util/env.js";
+import { holdsProjectManifest } from "../util/project-root.js";
 import { isMachineOutput, writeJson } from "./output.js";
 import { runNpmQuiet, runNpmStreaming } from "./npm.js";
 import { trackLocalWrite } from "../util/sent-writes.js";
@@ -700,7 +701,7 @@ function indentOf(raw: string): string | number {
 function sdkProjectDir(start: string): string {
   let nearest: string | undefined;
   for (let dir = start; ; dir = dirname(dir)) {
-    if (existsSync(join(dir, "package.json"))) {
+    if (holdsProjectManifest(dir)) {
       nearest ??= dir;
       try {
         if (sdkBlock(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as Record<string, unknown>) !== undefined) return dir;

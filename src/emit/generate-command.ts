@@ -88,6 +88,7 @@ import { yesRerun } from "./retry-command.js";
 import { ROUTES_MANIFEST_BASENAME } from "./routes-manifest.js";
 import { readVersion } from "./cli.js";
 import { projectRootFrom } from "./backend-dir.js";
+import { holdsProjectManifest } from "../util/project-root.js";
 import { shellWord } from "./command-line.js";
 import { ensureSecretPathGitignored, type IgnorePlacement } from "./gitignore.js";
 import { WORKSPACE_ENV_BASENAME } from "./workspace-env.js";
@@ -204,7 +205,7 @@ async function loadSource(args: ParsedArgs, raw: string, cwd: string): Promise<L
  */
 function ignoreRootFor(root: string): string {
   const project = projectRootFrom(dirname(root));
-  const isProject = existsSync(join(project, "package.json")) || existsSync(join(project, ".git"));
+  const isProject = holdsProjectManifest(project) || existsSync(join(project, ".git"));
   return isProject ? project : root;
 }
 
@@ -469,7 +470,7 @@ export async function runGenerateCommand(args: ParsedArgs): Promise<void> {
   }
   const routesNotes = (): void => {
     if (routesDeferred.length === 0) return;
-    const bare = !existsSync(join(projectRootFrom(dirname(root)), "package.json"));
+    const bare = !holdsProjectManifest(projectRootFrom(dirname(root)));
     for (const line of routesDeferred) {
       warn(
         bare

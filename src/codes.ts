@@ -131,6 +131,7 @@ export type WarningCode =
   | "logout.revoke-failed"
   | "logout.shared-file"
   | "logout.unreadable"
+  | "merge.symlink"
   | "microservice.failed"
   | "microservice.starting"
   | "microservice.status-unreadable"

@@ -9,6 +9,8 @@ with `@xano/sdk` installed, run them as `npx xanosdk …`; anywhere else, `npx @
 ```bash
 xanosdk init my-app                         # scaffold a full project (frontend/ + xano/)
 xanosdk init my-app --framework svelte      # SvelteKit instead of the default React
+xanosdk init my-api --framework none        # a new project with the backend only (no frontend/)
+xanosdk init                                # inside an existing app: add xano/ and the xano:* scripts, no frontend (lists clashes and writes nothing; --force overwrites)
 xanosdk init my-app --no-agents-md --no-install  # skip AGENTS.md and npm install
 xanosdk init my-app --theme zinc-blue --dark toggle --icons tabler  # the look
 xanosdk init my-app --marketplace @xano-sdk/auth,@xano-sdk/vector  # install add-ons AND register them
@@ -62,6 +64,8 @@ xanosdk deploy ./xano/index.ts --local=~/Downloads/engine.tar.gz   # override: r
 XANOSDK_ENGINE_OVERRIDE=v0.1.8 npm run xano:deploy   # the same override for every deploy in the shell
 xanosdk local list                   # Xano Engines on this machine, marking the ones xanosdk started
 xanosdk local token                  # print its meta API bearer: XANO_META_TOKEN=$(xanosdk local token)
+xanosdk local mcp                    # how a coding agent connects to its MCP server (url, command, config); never the bearer
+xanosdk local mcp --stdio            # the bridge an agent's .mcp.json launches: follows restarts, brings the current bearer
 xanosdk local stop <name>            # stop one (--all: every one xanosdk started, and what a crashed one left running)
 xanosdk local update                 # move this project's pinned engine to the latest (--version <v>: that one) and restart it — commit package.json
 xanosdk local cache list             # each cached engine version, its size, and the engines running on it
@@ -133,6 +137,9 @@ xanosdk logout                              # revoke the active profile and remo
 xanosdk version                             # print the installed @xano/sdk version
 xanosdk upgrade --check                     # is a newer @xano/sdk published? exits 7 if so, 0 if current
 xanosdk upgrade                             # install it: globally (npm i -g) for a global CLI; in a project, into the block that lists it (--save-prod or --save-dev)
+xanosdk agent-skill install                 # put the xano-backend skill into each coding agent detected on this machine (--agent <id> to pick)
+xanosdk agent-skill status                  # each copy: current, stale, edited or absent
+xanosdk agent-skill uninstall               # remove the copies install wrote (an edited copy is kept)
 xanosdk help                                # grouped command reference (also the no-arg default)
 xanosdk <command> --help                    # that command's usage, subcommands, and flags (`xanosdk deploy --help`)
 xanosdk <noun> <verb> --help                # scoped to one verb (`xanosdk workspace export --help`)
@@ -319,6 +326,68 @@ caret) and restamps the managed blocks in your
 `global` or `local` to override the detection. Run through `npx` (or `pnpm dlx`, `yarn dlx`, `bunx`)
 outside a project, it installs nothing (`status: "not-installed"`): that copy is temporary,
 and `npx @xano/sdk@latest` already runs the newest release.
+
+## Adding the backend to an existing app
+
+`init` decides what to write from its target directory. An empty or missing directory is a
+**new** project: a full app, `react` unless `--framework` says otherwise, with a framework
+prompt on a terminal whose choices include "No frontend" (`--framework none`, the backend
+alone). Any other directory is an **existing** project: `init` writes `xano/` and merges the
+`xano:*` scripts and the backend's dependencies into its `package.json`, with no prompt and no
+frontend. [The scaffolded project](scaffold.md#no-frontend-and-existing-apps) lists exactly
+what each mode writes and merges.
+
+Each of these is a **clash**: an existing `xano/`, any other file `init` would write that is
+already there, and a `xano:*` script the project defines with another command. `init` lists
+every clash and writes nothing. `--force` lists what it would overwrite and asks first
+(`--yes` answers without a terminal).
+
+`--framework react` or `--framework svelte` is refused in an existing project, and the
+frontend-only flags (`--theme`, `--radius`, `--dark`, `--font`, `--font-mono`,
+`--font-heading`, `--icons`) are refused wherever no frontend is written, rather than
+silently ignored. `init --from` follows the same two modes
+([Pulling an existing workspace](codegen.md#running-it)).
+
+```bash
+xanosdk init --json   # inside the app; then run the command in `next`
+```
+
+`init --json` reports `mode` (`new` or `existing`), `files` (every file it wrote or merged
+into, relative to the project) and `next` (the command to run next: the install when one is
+still needed, then `xano:deploy`).
+
+## The agent skill
+
+`xano-backend` is an agent skill for coding agents such as Claude Code, Codex and Cursor: it
+tells the agent when to set up a Xano backend and hands it to `init`, then to the project's
+`AGENTS.md` and `llms.txt`. It is not a `knowledge()` def; those are docs your workspace's own
+AI agents read. The package ships it at `skills/xano-backend/SKILL.md`.
+
+```bash
+xanosdk agent-skill install                       # every coding agent detected on this machine
+xanosdk agent-skill install --agent claude-code   # …or name one (repeatable)
+xanosdk agent-skill install --dry-run             # report what would change, write nothing
+xanosdk agent-skill status --json                 # each copy, as data
+xanosdk agent-skill uninstall
+```
+
+It writes at most two copies. Claude Code reads `~/.claude/skills/xano-backend/SKILL.md`
+(under `$CLAUDE_CONFIG_DIR` when that is set). Codex, Cursor, Copilot, Gemini CLI, Amp and
+OpenCode read the shared `~/.agents/skills/xano-backend/SKILL.md`. An agent is detected by its
+home config directory; `--agent` takes `claude-code`, `agents` (the shared directory),
+`codex`, `cursor`, `copilot`, `gemini`, `amp` or `opencode` instead. When no agent is detected
+and none is named, `install` refuses.
+
+Each copy carries the SDK version and a digest. `status` reports a copy as **current**,
+**stale** (an older version, unedited), **edited** (changed since it was installed) or
+**absent**. `install` writes a missing or stale copy and leaves a current one unchanged; it
+leaves an edited copy alone unless `--force`. `uninstall` removes only unedited copies. A
+symlinked skill directory belongs to another installer, and neither command touches it.
+Nothing prompts, so both run unattended; `--json` reports one entry per target.
+
+The skill also installs without the CLI, from the public repository:
+`npx skills add xano-sdk/sdk`, or in Claude Code `/plugin marketplace add xano-sdk/sdk`
+followed by `/plugin install xano@xano-sdk`.
 
 ## Checking what an installed SDK can do
 

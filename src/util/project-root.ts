@@ -2,11 +2,57 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 /**
+ * Whether a parsed `package.json` is only Node's per-folder module-type
+ * marker: an object whose one key is `type`, set to `"module"`.
+ *
+ * `init` writes one as `xano/package.json` in an existing project whose own
+ * `package.json` is not `"type": "module"`, so Node loads `xano/` as ES
+ * modules without the project's manifest changing. See
+ * {@link holdsProjectManifest} for when it is not a project root.
+ */
+export function isModuleTypeMarker(manifest: unknown): boolean {
+  if (typeof manifest !== "object" || manifest === null || Array.isArray(manifest)) return false;
+  const keys = Object.keys(manifest);
+  return keys.length === 1 && (manifest as { type?: unknown }).type === "module";
+}
+
+/**
+ * Whether `dir` holds a `package.json` that makes it a project root.
+ *
+ * Any `package.json` does, except a {@link isModuleTypeMarker} marker whose
+ * parent directory holds a `package.json` that is not one: that is `init`'s
+ * `xano/package.json`, part of the project above it. A marker with no project
+ * directly above is a project of its own — the bare tree a load error asks for
+ * a `{"type": "module"}` beside — so it stays a root. An unreadable or
+ * non-JSON `package.json` counts, as its mere presence always has.
+ *
+ * The one test every upward walk for "the project" uses — the env, the lock,
+ * the profile pointer, the toolchain — so they cannot disagree about where the
+ * project is. (`entryIsCommonJs` deliberately reads the marker: deciding the
+ * module type is what it is for.)
+ */
+export function holdsProjectManifest(dir: string): boolean {
+  const marker = (at: string): boolean | undefined => {
+    const manifest = join(at, "package.json");
+    if (!existsSync(manifest)) return undefined;
+    try {
+      return isModuleTypeMarker(JSON.parse(readFileSync(manifest, "utf8")));
+    } catch {
+      return false;
+    }
+  };
+  const own = marker(dir);
+  if (own === undefined) return false;
+  return !own || marker(dirname(resolve(dir))) !== false;
+}
+
+/**
  * The project root an entry file belongs to.
  *
  * The same upward walk `nearestLockPath` uses, and for the same reason: the env
  * default, the lock default and the secrets-file default must agree about where
- * "the project" is. Stops at the nearest `package.json` so a deploy run from a
+ * "the project" is. Stops at the nearest `package.json` (never the module-type
+ * marker, see {@link holdsProjectManifest}) so a deploy run from a
  * subdirectory finds the project's own file rather than a parent project's.
  *
  * Lives in `util/` so a module outside the CLI (the hosted-file reader) can use
@@ -20,7 +66,7 @@ export function projectRootFrom(from: string): string {
   const start = resolve(from);
   let dir = start;
   for (;;) {
-    if (existsSync(join(dir, "package.json"))) return dir;
+    if (holdsProjectManifest(dir)) return dir;
     // A tree with no `package.json` above it must still be BOUNDED at the repo,
     // the way `pointerRootFor` bounds its own walk. Without this a project whose
     // root carries no manifest resolves the default to `xano/xano/.env` — a path

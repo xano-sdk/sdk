@@ -72,7 +72,23 @@ import type { Source } from "./source-selector.js";
 import { getEngineRecord } from "../deploy/local-engine-state.js";
 import { detail, info, step, success, warn, blank, style, stdoutStyle, terminalText } from "./ui.js";
 import { isMachineOutput, writeJson } from "./output.js";
-import { loginNextStep, planProfilePin, projectCli, projectShellFiles, sanitizeAppName, templateVarsFor, reportWorkflowPlacement } from "./init-command.js";
+import {
+  backendShellFiles,
+  type BackendShell,
+  deployNextCommand,
+  ephemeralNextStep,
+  loginNextStep,
+  planProfilePin,
+  projectCli,
+  projectShellFiles,
+  refuseFrontendOnlyFlags,
+  resolveInitFrontend,
+  runFiles,
+  sanitizeAppName,
+  settleClashes,
+  templateVarsFor,
+  reportWorkflowPlacement,
+} from "./init-command.js";
 import {
   adoptFromBundle,
   CANONICAL_PAYLOAD_KEYS,
@@ -93,7 +109,8 @@ import { readLockFile, writeLockFile } from "../lock/io.js";
 import { confirm } from "./prompt.js";
 import { yesRerun } from "./retry-command.js";
 import { describeDecodeReplace, filesUnder, planDecodeReplace, planTouchesExisting, readDecodeRecord } from "./backend-tree.js";
-import { resolveFrontendPreset } from "./frontend-resolve.js";
+import { resolveFrameworkValue, resolveFrontendPreset } from "./frontend-resolve.js";
+import { detectPackageManager, installCommandFor } from "./package-manager.js";
 import { resolveThemeChoice } from "./theme-resolve.js";
 import {
   valueProblem,
@@ -118,8 +135,10 @@ import {
 } from "./secrets-file.js";
 import {
   changedOnDisk,
+  CODEGEN_MARKER,
   decideOverwrite,
   isNonEmptyDir,
+  MERGED_IN_EXISTING,
   plannedAgentsMd,
   PRESERVED_ON_REFRESH,
   SHELL_FILES_IN_BACKEND,
@@ -129,6 +148,7 @@ import {
   type ScaffoldFile,
 } from "./scaffold.js";
 import {
+  BACKEND_TSCONFIG_PATH,
   describeOrigin,
   codegenLanding,
   renderCodegenMarker,
@@ -1075,12 +1095,45 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
   // BEFORE the read: a directory the scaffold is going to refuse must cost
   // nothing — not a sign-in, not a download, not a "Writing …" line.
   const target = resolve(pathArg);
-  if (decideOverwrite(target, { force: args.force, regenerable: true }) === "refuse") {
-    throw new UsageError(
-      `Target directory ${target} is not empty. Re-run with --force to scaffold into it anyway, ` +
-        `or pick an empty directory.`,
-      { hintFor: { command: "init" } },
+  // A non-empty directory this command did not write is an existing project,
+  // which gets the backend only, merged in as plain `init` merges it. One a
+  // previous `init --from` wrote (its marker is in `xano/`) is refreshed in
+  // place, as before.
+  const isRefresh = isNonEmptyDir(target) && existsSync(join(target, CODEGEN_MARKER));
+  const existing = isNonEmptyDir(target) && !isRefresh;
+  // A refresh of a project a previous run wrote with no frontend — the backend
+  // added to an existing app, or a `--framework none` project — stays one. Its
+  // `xano/` type-checks under `xano/tsconfig.json`, which the lambda config
+  // extends; the full app's shell would point that config at a root
+  // `tsconfig.json` the project does not have. Read off the signals
+  // `detectProjectFrontend` uses, plus the line-ending rule only an existing
+  // project keeps inside `xano/`.
+  const refreshedBackend: BackendShell["kind"] | undefined =
+    isRefresh && !existsSync(join(target, "frontend")) && existsSync(join(target, BACKEND_TSCONFIG_PATH))
+      ? existsSync(join(target, XANO_DIR, ".gitattributes"))
+        ? "existing"
+        : "new"
+      : undefined;
+  if (refreshedBackend !== undefined) {
+    if (args.framework !== undefined && resolveFrameworkValue(args.framework) !== null) {
+      throw new UsageError(
+        `\`--framework ${args.framework}\` writes a new frontend, and ${target} is a project with no frontend: ` +
+          `re-running init refreshes its backend only. Drop --framework, or run init in an empty directory for a full app.`,
+        { helpFor: { command: "init" } },
+      );
+    }
+    refuseFrontendOnlyFlags(args, `${target} has no frontend, so re-running init refreshes its backend only`);
+  }
+  let overrideScripts: readonly string[] = [];
+  if (existing) {
+    await resolveInitFrontend(args, target, "existing");
+    const settled = await settleClashes(
+      target,
+      backendShellFiles(templateVarsFor(sanitizeAppName(args.name ?? basename(target)), target), { kind: "existing", dir: target }),
+      args,
     );
+    if (settled === "cancelled") return;
+    overrideScripts = settled;
   }
 
   const { bundle, origin, credentialRead, seed, syncTarget } =
@@ -1103,7 +1156,8 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
   const vars: TemplateVars = templateVarsFor(appName, out);
   // Resolved first for the same reason as in `init`: the framework decides
   // what the project is, and feeds the agent-brief prose.
-  const preset = await resolveFrontendPreset(args.framework);
+  const preset = existing || refreshedBackend !== undefined ? null : await resolveFrontendPreset(args.framework);
+  if (preset === null && !existing && refreshedBackend === undefined) refuseFrontendOnlyFlags(args, "`--framework none` writes none");
   // `codegen` scaffolds the same project shell as `init`, so it takes the same
   // theme questionnaire — a pulled workspace has no more reason to look like
   // stock shadcn than a fresh one does.
@@ -1138,16 +1192,13 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
     entry: shellWord(isAbsolute(cwdEntry) || cwdEntry.startsWith(".") ? cwdEntry : `./${cwdEntry}`),
     deferred: routesDeferred,
   });
+  const readme = renderCodegenReadme(vars, origin, Object.keys(project.env), preset);
   const files: ScaffoldFile[] = [
-    ...projectShellFiles(
-      vars,
-      preset,
-      {
-        readme: renderCodegenReadme(vars, origin, Object.keys(project.env), preset),
-        landing: codegenLanding(vars, origin),
-      },
-      choice,
-    ),
+    ...(existing || refreshedBackend === "existing"
+      ? backendShellFiles(vars, { kind: "existing", dir: out })
+      : preset === null
+        ? backendShellFiles(vars, { kind: "new", readme })
+        : projectShellFiles(vars, preset, { readme, landing: codegenLanding(vars, origin) }, choice)),
     ...generated,
     {
       path: `${XANO_DIR}/${CODEGEN_MARKER_BASENAME}`,
@@ -1180,11 +1231,12 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
   });
   const replace = await planXanoReplace(
     out,
-    files,
+    // An existing project's merged files are not overwrites: only the backend's own are listed.
+    existing ? files.filter((f) => !MERGED_IN_EXISTING.has(f.path)) : files,
     bundle.payload as Record<string, unknown>,
     args,
     describeOrigin(origin),
-    agentsMd,
+    existing ? undefined : agentsMd,
   );
   if (replace === "cancelled") {
     info("Cancelled. Nothing was written.");
@@ -1208,6 +1260,9 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
     frontend: preset,
     theme: choice,
     ...(replace.removals === undefined ? {} : { xanoRemovals: replace.removals }),
+    // An existing project's clashes were settled before the read, and its
+    // manifest is merged into with the project winning.
+    ...(existing ? { overwrite: "full" as const, mergePackageJson: "project" as const, overrideScripts } : {}),
   });
   reportXanoReplace(replace);
   for (const line of routesDeferred) warn(line, "routes.not-written");
@@ -1331,10 +1386,17 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
   summarize(args, project, verified, out, origin, scaffold.install, mode, {
     dir: out,
     name: appName,
-    framework: preset.id,
-    theme: choice.theme.id,
-    dark: choice.dark,
+    mode: existing || isRefresh ? "existing" : "new",
+    framework: preset?.id ?? "none",
+    theme: preset === null ? null : choice.theme.id,
+    dark: preset === null ? null : choice.dark,
     install: scaffold.install,
+    files: runFiles(scaffold.written, lock === null ? [] : [relative(out, lock).split(sep).join("/")]),
+    next: deployNextCommand(
+      out === process.cwd() ? null : pathArg,
+      scaffold.install === "installed" || existsSync(join(out, "node_modules", "@xano", "sdk")) ? null : installCommandFor(out),
+      detectPackageManager(out),
+    ),
     pinnedProfile,
     lock,
     // What `pull --json` reports for the same refresh: the files kept because
@@ -1898,7 +1960,7 @@ function summarize(
     (verified === null ? `  npm run xano:check     # confirm the tree compiles and the lock agrees\n` : ``) +
     `  npm run xano:deploy    # run it on the Xano Engine, on this machine\n` +
     loginNextStep(pin, out) +
-    `  npm run xano:deploy:ephemeral   # build the frontend, then deploy → live ephemeral URL`;
+    ephemeralNextStep(scaffolded.framework !== "none");
   // Every line is indented, so `detail` leaves them where they are: nested
   // under the heading here, where plain `init` nests them too.
   detail(`Next steps:\n` + steps.replace(/^ {2}/gm, "    "));

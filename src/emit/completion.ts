@@ -288,8 +288,12 @@ const PROFILE_NAMES_JS = [
   // A leading `~` the shell left unexpanded (quoted, or after `--config=`) is the home directory.
   'const tl=(f)=>f&&(f==="~"||f.startsWith("~/"))?p.join(os.homedir(),f.slice(1)):f;',
   "cfg=tl(cfg||process.env.XANO_CONFIG);",
+  // `package.json` as `holdsProjectManifest` reads it: the `{"type":"module"}`
+  // marker `init` writes in `xano/`, under the project's own manifest, is no root.
+  'const mk=(d)=>{const f=p.join(d,"package.json");if(!fs.existsSync(f))return undefined;try{const j=JSON.parse(fs.readFileSync(f,"utf8"));return !!j&&typeof j==="object"&&!Array.isArray(j)&&Object.keys(j).length===1&&j.type==="module";}catch{return false;}};',
+  'const pr=(d)=>{const m=mk(d);return m!==undefined&&(!m||mk(p.dirname(d))!==false);};',
   "const localFile=()=>{const home=p.resolve(os.homedir()),start=process.cwd();let d=start;for(;;){",
-  'if(["xano.profile.json","package.json",".git"].some((m)=>fs.existsSync(p.join(d,m))))return p.join(d,".xano","auth.json");',
+  'if(["xano.profile.json",".git"].some((m)=>fs.existsSync(p.join(d,m)))||pr(d))return p.join(d,".xano","auth.json");',
   'const up=p.dirname(d);if(up===d||d===home)return p.join(start,".xano","auth.json");d=up;}};',
   'const shared=tl(process.env.XANO_GLOBAL_CONFIG)||p.join(os.homedir(),".xanosdk","auth.json");',
   "let file;if(cfg)file=cfg;else if(local)file=localFile();",
@@ -299,7 +303,7 @@ const PROFILE_NAMES_JS = [
 ].join("");
 
 /** The `local` verbs whose positional is an engine's name. */
-const ENGINE_NAME_VERBS = ["stop", "token"] as const;
+const ENGINE_NAME_VERBS = ["stop", "token", "mcp"] as const;
 
 /**
  * The Xano Engine records' home and file — `LOCAL_ENGINE_HOME_ENV` and

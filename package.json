@@ -1,6 +1,6 @@
 {
   "name": "@xano/sdk",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Xano SDK — your Xano backend as TypeScript. `xanosdk deploy` ships your typed workspace (and an optional static frontend) to a live, auto-expiring ephemeral environment and prints its URL. init → deploy → URL.",
   "keywords": [
     "xanosdk",
@@ -86,6 +86,7 @@
     "llms-full.txt",
     "llms",
     "guides",
+    "skills",
     "README.md",
     "CHANGELOG.md"
   ],
@@ -107,6 +108,8 @@
     "audit:output-flag": "tsx scripts/audit-output-flag.ts",
     "audit:decode-coverage": "tsx scripts/audit-decode-coverage.ts",
     "audit:dts": "npm run build && tsx scripts/audit-dts.ts",
+    "eval:skill-trigger": "tsx scripts/eval-skill-trigger.ts",
+    "eval:skill-scenarios": "tsx scripts/eval-skill-scenarios.ts",
     "manifest": "tsx scripts/manifest.ts",
     "codes": "tsx scripts/codes.ts",
     "changelog": "tsx scripts/changelog.ts",
@@ -152,7 +155,7 @@
     "eslint": "^9.0.0",
     "gpt-tokenizer": "^3.4.0",
     "tsup": "^8.0.0",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.15",
     "typescript": "^5.5.0",
     "vitest": "^4.1.11"
   },

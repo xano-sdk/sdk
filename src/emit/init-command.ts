@@ -9,7 +9,14 @@
  *
  * Which framework fills `frontend/` is a `FrontendPreset` (see
  * `frontend-presets.ts`). `--framework <id>` selects it non-interactively; in a
- * TTY with no flag, `init` prompts; otherwise React.
+ * TTY with no flag, `init` prompts; otherwise React. `--framework none` (or "No
+ * frontend" at the prompt) writes the backend alone.
+ *
+ * That is for an empty or missing directory. Any other directory is an EXISTING
+ * project ({@link InitMode}): it already has its own app, so `init` adds the
+ * backend only — `xano/`, and what the backend needs merged into the files the
+ * project already has — with no prompt, and refuses a frontend framework and
+ * the frontend-only options rather than dropping them.
  *
  * How it LOOKS is a `ThemeChoice` (see `theme-presets.ts`): a shadcn/ui base
  * color, an optional accent over it, a corner radius, and what switches the app
@@ -74,16 +81,20 @@ import { npmViewVersion } from "./npm.js";
 import { ROUTES_MANIFEST_BASENAME } from "./routes-manifest.js";
 import {
   changedOnDisk,
-  decideOverwrite,
+  describeClash,
+  existingProjectClashes,
   isNonEmptyDir,
-  plannedAgentsMd,
+  MERGED_IN_EXISTING,
   scaffoldProject,
   XANO_DIR,
-  type OverwriteMode,
   type ScaffoldFile,
 } from "./scaffold.js";
 import {
   renderPackageJson,
+  renderBackendPackageJson,
+  renderBackendReadme,
+  renderBackendTsconfig,
+  BACKEND_TSCONFIG_PATH,
   renderTsconfig,
   renderLambdaTsconfig,
   renderViteConfig,
@@ -96,6 +107,7 @@ import {
   checkWorkflowName,
   checkWorkflowPath,
   renderGitignore,
+  mergeGitignore,
   renderEnvExample,
   renderReadme,
   renderXanoIndex,
@@ -109,7 +121,7 @@ import {
   type ProjectInstall,
   type TemplateVars,
 } from "./init-templates.js";
-import { resolveFrontendPreset } from "./frontend-resolve.js";
+import { NO_FRONTEND, resolveFrameworkValue, resolveFrontendPreset } from "./frontend-resolve.js";
 import {
   renderWorkspaceEnvExample,
   WORKSPACE_ENV_EXAMPLE_FILE,
@@ -118,6 +130,7 @@ import { ensureWorkspaceEnvGitignored } from "./gitignore.js";
 import { readToolchainBlock, readToolchainConfig } from "./project-config.js";
 import type { Discovery } from "./toolchain-modules.js";
 import { resolveThemeChoice } from "./theme-resolve.js";
+import { composeBlock, gitattributesSpec, upsertBlock } from "./managed-blocks.js";
 import { defaultThemeChoice, type ThemeChoice } from "./theme-presets.js";
 import type { FrontendPreset, LandingContent } from "./frontend-presets.js";
 import { detectInstallRoot, detectPackageManager, installCommandFor, userAgentVersion } from "./package-manager.js";
@@ -390,28 +403,157 @@ export function projectShellFiles(
   ]);
 }
 
+/**
+ * Which project `init` writes into its target, decided before any file is
+ * planned: `new` for an empty or missing directory, `existing` for anything
+ * else. An existing project gets the backend only (see {@link backendShellFiles}).
+ */
+export type InitMode = "new" | "existing";
+
+/** Where a project with no frontend sits: a new one owns its root, an existing one (at `dir`) keeps it. */
+export type BackendShell =
+  | { readonly kind: "new"; readonly readme: string }
+  | { readonly kind: "existing"; readonly dir: string };
+
+/**
+ * The project shell for a project with no frontend — everything outside the
+ * backend's own source.
+ *
+ * A NEW project owns its root, so it gets the manifest, the ignore and
+ * attribute rules, the CI check and a README, as a full app does. An EXISTING
+ * project keeps everything at its root: what the backend needs there is merged
+ * in by the scaffold, never written over (see `scaffold.ts`). Either way
+ * `xano/` type-checks under its own `xano/tsconfig.json`, so no root
+ * `tsconfig.json` is written or read.
+ */
+export function backendShellFiles(
+  vars: TemplateVars,
+  shell: BackendShell,
+  contributions: ScaffoldContributions = {},
+  existingXanoSdk?: Readonly<Record<string, unknown>>,
+): ScaffoldFile[] {
+  const backend: ScaffoldFile[] = [
+    { path: BACKEND_TSCONFIG_PATH, content: renderBackendTsconfig() },
+    { path: "xano/lambdas/tsconfig.json", content: renderLambdaTsconfig("backend") },
+  ];
+  // Merged into an existing manifest by the scaffold (`mergePackageJson:
+  // "project"`), which takes only what the backend needs from it. In an
+  // existing project the `xanosdk` block carries only the modules this run
+  // installed: the merge lays it over the stored block, so no other module's
+  // settings can change. A new backend-only project has no stored block to
+  // merge into, so it takes the whole of it.
+  const manifest = {
+    path: "package.json",
+    content: withXanoSdkBlock(
+      renderBackendPackageJson(vars),
+      contributions.xanosdk,
+      shell.kind === "existing" ? undefined : existingXanoSdk,
+    ),
+  };
+  if (shell.kind === "existing") {
+    return spelledForProject(vars, [
+      manifest,
+      ...backend,
+      ...moduleTypeMarker(shell.dir),
+      // The line-ending rule, scoped to `xano/`: a `*` rule at the project's
+      // root would renormalize every file the project already has.
+      { path: `${XANO_DIR}/.gitattributes`, content: renderGitattributes() },
+      ...moduleGitattributes(shell.dir, contributions.gitattributes ?? []),
+      ...gitignoreBlock(shell.dir, vars.sdkVersion),
+    ]);
+  }
+  return spelledForProject(vars, [
+    manifest,
+    ...backend,
+    { path: ".gitignore", content: renderGitignore() },
+    { path: ".gitattributes", content: renderGitattributes(contributions.gitattributes) },
+    { path: checkWorkflowPath(vars.install), content: renderCheckWorkflow(vars.install) },
+    { path: "README.md", content: shell.readme },
+  ]);
+}
+
+/**
+ * `xano/package.json` holding only `"type": "module"`, for an existing project
+ * whose own `package.json` is not `"type": "module"` — or nothing.
+ *
+ * The SDK is ESM-only, and a bare `.ts` file loads as CommonJS under a manifest
+ * without that type (Next.js's, `npm init -y`'s). The project's manifest gains
+ * no top-level key, so Node's per-folder rule carries the type instead: the
+ * nearest `package.json` decides, and for `xano/` that is this one. Every walk
+ * for the project root skips it (`holdsProjectManifest`), so the env, the lock
+ * and the toolchain still resolve to the project. A project with no
+ * `package.json` gets one that already says `"type": "module"`, and an
+ * unparseable one is refused by the clash check, so neither gets it.
+ */
+function moduleTypeMarker(dir: string): ScaffoldFile[] {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+  } catch {
+    return [];
+  }
+  if ((manifest as { type?: unknown } | null)?.type === "module") return [];
+  return [{ path: `${XANO_DIR}/package.json`, content: `${JSON.stringify({ type: "module" }, null, 2)}\n` }];
+}
+
+/**
+ * An existing project's `.gitignore` (or a new one) with the backend's ignore
+ * rules spliced in as a managed block — or nothing, when it already says them.
+ */
+function gitignoreBlock(dir: string, version: string): ScaffoldFile[] {
+  const path = join(dir, ".gitignore");
+  const existing = existsSync(path) ? readFileSync(path, "utf8") : null;
+  const merged = mergeGitignore(existing, version);
+  return merged === existing ? [] : [{ path: ".gitignore", content: merged }];
+}
+
+/**
+ * An existing project's root `.gitattributes` with each module's marked block
+ * spliced in, the way a later `marketplace install` splices it — or nothing,
+ * when no module contributes a rule.
+ */
+function moduleGitattributes(dir: string, contributions: readonly GitattributesContribution[]): ScaffoldFile[] {
+  if (contributions.length === 0) return [];
+  const path = join(dir, ".gitattributes");
+  let text = existsSync(path) ? readFileSync(path, "utf8") : "";
+  for (const { pkg, version, lines } of contributions) {
+    const spec = gitattributesSpec(pkg);
+    text = upsertBlock(text, spec, composeBlock(spec, lines, version)).text;
+  }
+  return [{ path: ".gitattributes", content: text }];
+}
+
 /** `files` with every `npx xanosdk` command spelled as the project's own files spell it ({@link TemplateVars.cli}). */
 function spelledForProject(vars: TemplateVars, files: ScaffoldFile[]): ScaffoldFile[] {
   return files.map((f) => ({ ...f, content: spellProjectSdkDir(spellProjectCli(f.content, vars.cli), vars.sdkDir) }));
 }
 
-/** The `init` file set: the shared shell plus the empty-but-valid starter backend. */
+/** The `init` file set: the shell for this mode and frontend, plus the empty-but-valid starter backend. */
 function buildFileSet(
+  targetDir: string,
   vars: TemplateVars,
-  preset: FrontendPreset,
+  preset: FrontendPreset | null,
+  mode: InitMode,
   choice: ThemeChoice,
   contributions: ScaffoldContributions = {},
   existingXanoSdk?: Readonly<Record<string, unknown>>,
 ): ScaffoldFile[] {
   return [
-    ...projectShellFiles(
-      vars,
-      preset,
-      { readme: renderReadme(vars, preset, choice), landing: initLanding(vars) },
-      choice,
-      contributions,
-      existingXanoSdk,
-    ),
+    ...(preset === null
+      ? backendShellFiles(
+          vars,
+          mode === "new" ? { kind: "new", readme: renderBackendReadme(vars) } : { kind: "existing", dir: targetDir },
+          contributions,
+          existingXanoSdk,
+        )
+      : projectShellFiles(
+          vars,
+          preset,
+          { readme: renderReadme(vars, preset, choice), landing: initLanding(vars) },
+          choice,
+          contributions,
+          existingXanoSdk,
+        )),
     ...spelledForProject(vars, [
       { path: "xano/index.ts", content: renderXanoIndex(vars) },
       { path: "xano/EXAMPLE.md", content: renderXanoExampleMd(vars) },
@@ -483,31 +625,63 @@ function rejectPullOnlyFlags(args: ParsedArgs): void {
   );
 }
 
+/** The options that only mean something to a frontend, as typed — those that were passed. */
+function frontendOnlyFlags(args: ParsedArgs): string[] {
+  return [
+    ...(args.theme !== undefined ? ["--theme"] : []),
+    ...(args.radius !== undefined ? ["--radius"] : []),
+    ...(args.dark !== undefined ? ["--dark"] : []),
+    ...(args.font !== undefined ? ["--font"] : []),
+    ...(args.fontMono !== undefined ? ["--font-mono"] : []),
+    ...(args.fontHeading !== undefined ? ["--font-heading"] : []),
+    ...(args.icons !== undefined ? ["--icons"] : []),
+  ];
+}
+
 /**
- * The least `package.json` `npm install` will accept, written before the
- * modules install so it has a directory to install into.
- *
- * Deliberately not the rendered manifest: that one depends on questionnaire
- * answers this pass has not collected yet. Everything here survives into the
- * full manifest through `mergePackageJson`, and every value is one the second
- * pass restates anyway, so a run that fails between the two leaves a manifest
- * that is thin rather than wrong.
+ * Refuse the frontend-only options when no frontend is being written, rather
+ * than dropping them: a `--theme` that silently did nothing reads as applied.
+ * `why` says why there is no frontend.
  */
-/** How `init` may write into `targetDir`, or the refusal of a non-empty one. */
-function decideScaffoldTarget(targetDir: string, force: boolean): Exclude<OverwriteMode, "refuse"> {
-  const decided = decideOverwrite(targetDir, { force, regenerable: false });
-  if (decided === "refuse") {
-    // Off a terminal, `--force` alone then stops at the overwrite confirmation
-    // naming `--yes`: two refusals for one fix. Both flags, at once.
-    throw new UsageError(
-      `Target directory ${targetDir} is not empty. ` +
-        (process.stdin.isTTY === true
-          ? `Re-run with --force to scaffold into it anyway.`
-          : `Re-run with --force --yes to scaffold into it anyway (--yes confirms the overwrite, which ` +
-            `cannot be asked without a terminal).`),
-    );
+export function refuseFrontendOnlyFlags(args: ParsedArgs, why: string): void {
+  const passed = frontendOnlyFlags(args);
+  if (passed.length === 0) return;
+  const one = passed.length === 1;
+  throw new UsageError(
+    `${passed.join(", ")} ${one ? "applies" : "apply"} only with a frontend, and ${why}. Drop ${one ? "it" : "them"}.`,
+    { helpFor: { command: "init" } },
+  );
+}
+
+/**
+ * The frontend `init` writes, as far as the flags decide it before anything is
+ * written: a preset, `null` for none, or `undefined` while a new project's
+ * framework is still to be asked (a terminal, and no `--framework`).
+ *
+ * An existing project gets no frontend and no prompt: it has its own app, so a
+ * framework that names one is refused rather than written beside it. The
+ * frontend-only options are refused wherever no frontend is written.
+ */
+export async function resolveInitFrontend(
+  args: ParsedArgs,
+  targetDir: string,
+  mode: InitMode,
+): Promise<FrontendPreset | null | undefined> {
+  if (mode === "existing") {
+    if (args.framework !== undefined && resolveFrameworkValue(args.framework) !== null) {
+      throw new UsageError(
+        `\`--framework ${args.framework}\` writes a new frontend, and ${targetDir} is not empty: an existing app gets ` +
+          `the backend only. Drop --framework to add the backend to it, or run init in an empty directory for a full app.`,
+        { helpFor: { command: "init" } },
+      );
+    }
+    refuseFrontendOnlyFlags(args, `${targetDir} is an existing project, which gets the backend only`);
+    return null;
   }
-  return decided;
+  if (args.framework === undefined) return undefined;
+  const preset = resolveFrameworkValue(args.framework);
+  if (preset === null) refuseFrontendOnlyFlags(args, `\`--framework ${NO_FRONTEND}\` writes none`);
+  return preset;
 }
 
 /** How many entries an existing `xano/xano.lock` carries, or undefined when there is none. */
@@ -523,51 +697,78 @@ function readLockEntryCount(targetDir: string): number | undefined {
 }
 
 /**
- * `init --force` over an existing project: name every file it overwrites with
- * different content, and confirm — the way a re-run of `init --from` does. No
- * terminal and no `--yes` is a refusal. Returns false when the answer was no.
- * Files the scaffold does not write (and `xano/xano.lock`) are left alone.
+ * Adding the backend to an existing project: refuse what it would write over,
+ * listing every clash, or — under `--force` — name what it overwrites and
+ * confirm, the way a re-run of `init --from` does. Nothing has been written
+ * when this runs, so a refusal or a "no" leaves the project as it was.
+ *
+ * Returns the clashing scripts `--force` takes over, or "cancelled".
  */
-async function confirmForcedOverwrite(
+export async function settleClashes(
   targetDir: string,
   files: readonly ScaffoldFile[],
   args: ParsedArgs,
-  agents: { appName: string; frontend: FrontendPreset; theme: ThemeChoice },
-): Promise<boolean> {
-  // `AGENTS.md` is written by the scaffold itself, upserted into whatever is
-  // there — so it is compared as it will land, alongside the file set.
-  const agentsMd = plannedAgentsMd(targetDir, {
-    agentsMd: !args.noAgentsMd,
-    appName: agents.appName,
-    regenerable: false,
-    sdkVersion: readVersion(),
-    frontend: agents.frontend,
-    theme: agents.theme,
-  });
-  const changed = changedOnDisk(targetDir, agentsMd === undefined ? files : [...files, agentsMd]);
-  if (changed.length === 0) return true;
-  // The files are the warning's remedy lines, so its `--json` entry names them
-  // rather than ending on a colon (E2E pass 28).
-  warn(
-    `init --force overwrites ${changed.length} file${changed.length === 1 ? "" : "s"} already in ${targetDir}:`,
-    "init.overwrite",
-    [...changed.slice(0, 30), ...(changed.length > 30 ? [`… and ${changed.length - 30} more`] : [])],
-  );
-  if (args.yes === true) return true;
+): Promise<readonly string[] | "cancelled"> {
+  const clashes = existingProjectClashes(targetDir, files);
+  if (clashes.length === 0) return [];
+  const one = clashes.length === 1;
+  if (!args.force) {
+    // Off a terminal, `--force` alone then stops at the overwrite confirmation
+    // naming `--yes`: two refusals for one fix. Both flags, at once.
+    throw new UsageError(
+      `init adds the backend to ${targetDir}, and ${one ? "this clashes" : `these ${clashes.length} clash`} with what ` +
+        `is already there:\n${clashes.map((c) => `  ${describeClash(c)}`).join("\n")}\nNothing was written. ` +
+        (process.stdin.isTTY === true
+          ? `Re-run with --force to write over ${one ? "it" : "them"}.`
+          : `Re-run with --force --yes to write over ${one ? "it" : "them"} (--yes confirms the overwrite, which ` +
+            `cannot be asked without a terminal).`),
+    );
+  }
+  const scripts = clashes.flatMap((c) => (c.kind === "script" ? [c.name] : []));
+  // What actually changes: a clashing file rewritten to the bytes it already
+  // holds is not an overwrite worth asking about.
+  const changed = changedOnDisk(targetDir, files.filter((f) => !MERGED_IN_EXISTING.has(f.path)));
+  const listed = [...changed, ...clashes.filter((c) => c.kind === "script").map(describeClash)];
+  if (listed.length === 0) return scripts;
+  const counted = [
+    ...(changed.length === 0 ? [] : [`${changed.length} file${changed.length === 1 ? "" : "s"}`]),
+    ...(scripts.length === 0 ? [] : [`${scripts.length} script${scripts.length === 1 ? "" : "s"}`]),
+  ].join(" and ");
+  // The entries are the warning's remedy lines, so its `--json` entry names
+  // them rather than ending on a colon (E2E pass 28).
+  warn(`init --force overwrites ${counted} already in ${targetDir}:`, "init.overwrite", [
+    ...listed.slice(0, 30),
+    ...(listed.length > 30 ? [`… and ${listed.length - 30} more`] : []),
+  ]);
+  if (args.yes === true) return scripts;
   const { confirm } = await import("./prompt.js");
   // The question names what it asks about: off a terminal it is the refusal's
   // whole message, where "Overwrite them?" had no referent. The refusal
-  // carries every file as `details.files`.
+  // carries every entry as `details.files`.
   const { yesRerun } = await import("./retry-command.js");
   const { rerun, note } = yesRerun(args, "init");
+  const noun = scripts.length === 0 ? "file" : changed.length === 0 ? "script" : "file and script";
   const ok = await confirm(
-    `Overwrite ${changed.length === 1 ? "this file" : `these ${changed.length} files`} in ${targetDir}?`,
-    { flag: "--yes", refusal: { details: { written: false, files: changed }, rerun, note } },
+    `Overwrite ${listed.length === 1 ? `this ${noun}` : `these ${listed.length} ${noun === "file and script" ? "files and scripts" : `${noun}s`}`} in ${targetDir}?`,
+    { flag: "--yes", refusal: { details: { written: false, files: listed }, rerun, note } },
   );
-  if (!ok) info("Cancelled. Nothing was written.");
-  return ok;
+  if (!ok) {
+    info("Cancelled. Nothing was written.");
+    return "cancelled";
+  }
+  return scripts;
 }
 
+/**
+ * The least `package.json` `npm install` will accept, written before the
+ * modules install so it has a directory to install into.
+ *
+ * Deliberately not the rendered manifest: that one depends on questionnaire
+ * answers this pass has not collected yet. Everything here survives into the
+ * full manifest through `mergePackageJson`, and every value is one the second
+ * pass restates anyway, so a run that fails between the two leaves a manifest
+ * that is thin rather than wrong.
+ */
 function renderMinimalPackageJson(appName: string, sdkVersion: string): string {
   return `${JSON.stringify(
     {
@@ -686,6 +887,9 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
   // the corrected re-run to be refused over.
   await refuseUnknownProfileFlag(args, targetDir);
   const appName = sanitizeAppName(args.name ?? basename(targetDir));
+  // Judged before anything is written: an empty or missing directory is a new
+  // project; anything else is an existing one, which gets the backend only.
+  const mode: InitMode = isNonEmptyDir(targetDir) ? "existing" : "new";
 
   // Read BEFORE pass one, which overwrites `package.json` with a minimal
   // manifest so npm has somewhere to install into — and would therefore destroy
@@ -739,8 +943,8 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
   // cost nothing and leave nothing. (These resolve from flags without prompting
   // when a flag is given; the interactive path still happens below, after the
   // install.)
-  if (args.framework !== undefined) await resolveFrontendPreset(args.framework);
-  await resolveThemeChoice(args);
+  const flagFrontend = await resolveInitFrontend(args, targetDir, mode);
+  if (flagFrontend !== null) await resolveThemeChoice(args);
   // The unknown flags no module could claim, refused before anything is
   // installed. The catalogue carries no question flags, so a flag a module MAY
   // derive (`--frob`) can only be refused once the questionnaire has asked the
@@ -780,40 +984,40 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
   const deferredModules = args.noInstall ? requestedModules : [];
   const modules = args.noInstall ? [] : requestedModules;
 
-  let overwrite: Exclude<OverwriteMode, "refuse"> | undefined;
   let moduleOutcome: ModuleOutcome | undefined;
-  // Judged before pass one writes anything into the target: what `--force` is
-  // about to overwrite, and whether a lock is already there.
-  const forcedOver = args.force && isNonEmptyDir(targetDir);
+  // Judged before pass one writes anything into the target: whether a lock is
+  // already there.
   const hadLock = readLockEntryCount(targetDir);
-  // Resolved here only when pass one is about to write over an existing
-  // project, so the confirmation can list the scaffold's files; reused below.
-  let earlyPreset: FrontendPreset | undefined;
+  // An existing project's clashes, settled before the first write: the scripts
+  // `--force` takes over, or undefined until settled.
+  let overrideScripts: readonly string[] | undefined;
+  /** The backend's files as clash-checked; the modules' contributions only merge, so they never add a clash. */
+  const settle = async (): Promise<readonly string[] | "cancelled"> =>
+    mode === "existing"
+      ? settleClashes(
+          targetDir,
+          buildFileSet(targetDir, { appName, sdkVersion: readVersion() }, null, mode, defaultThemeChoice(), {}, existingXanoSdk),
+          args,
+        )
+      : [];
   // What the target held before pass one wrote into it, so a refusal that only
   // the questionnaire can make (a flag no installed module claims) can undo it.
   let passOne: RollbackSnapshot | undefined;
   if (modules.length > 0) {
-    overwrite = decideScaffoldTarget(targetDir, args.force);
-    if (forcedOver) {
-      earlyPreset = await resolveFrontendPreset(args.framework);
-      const earlyTheme = await resolveThemeChoice(args);
-      const provisional = buildFileSet(
-        { appName, sdkVersion: readVersion() },
-        earlyPreset,
-        earlyTheme,
-        { gitattributes: [], xanosdk: {} },
-        existingXanoSdk,
-      );
-      const agents = { appName, frontend: earlyPreset, theme: earlyTheme };
-      if (!(await confirmForcedOverwrite(targetDir, provisional, args, agents))) return;
-    }
+    const settled = await settle();
+    if (settled === "cancelled") return;
+    overrideScripts = settled;
     passOne = snapshotForRollback(targetDir);
     mkdirSync(targetDir, { recursive: true });
-    writeFileSync(
-      join(targetDir, "package.json"),
-      renderMinimalPackageJson(appName, readVersion()),
-      "utf8",
-    );
+    // An existing project's manifest is the project's: the modules' install
+    // adds to it, and nothing here writes over it.
+    if (mode === "new" || !existsSync(join(targetDir, "package.json"))) {
+      writeFileSync(
+        join(targetDir, "package.json"),
+        renderMinimalPackageJson(appName, readVersion()),
+        "utf8",
+      );
+    }
     blank();
     moduleOutcome = await installModules(targetDir, modules);
     // A toolchain module's other peers, as `marketplace install` adds them (one
@@ -845,7 +1049,10 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
 
     // The framework is resolved first: it is the structural choice (it decides
     // what the project *is*), and its answer feeds the prose `AGENTS.md` renders.
-    const preset = earlyPreset ?? (await resolveFrontendPreset(args.framework));
+    const preset = flagFrontend !== undefined ? flagFrontend : await resolveFrontendPreset(args.framework);
+    // "No frontend" chosen at the prompt: the options a frontend would have
+    // used are refused here, as `--framework none` refuses them up front.
+    if (preset === null && flagFrontend === undefined) refuseFrontendOnlyFlags(args, "no frontend was chosen");
     // Theme never prompts — it is flags only, so it does not sit in the
     // questionnaire at all and resolving it here costs no round trip.
     const choice = await resolveThemeChoice(args);
@@ -905,22 +1112,22 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
 
     const vars = templateVarsFor(appName, targetDir);
 
-    // Without add-ons nothing has been written yet, so the directory is judged
-    // here — after every usage error has had its turn, and before the line below
-    // announces a scaffold that a non-empty directory is about to refuse.
-    overwrite ??= decideScaffoldTarget(targetDir, args.force);
-    const fileSet = buildFileSet(vars, preset, choice, { gitattributes, xanosdk: pluginConfig }, existingXanoSdk);
-    // Over an existing project, what `--force` overwrites is named and confirmed
-    // first (pass one already asked when it had to write before this point).
-    if (
-      forcedOver &&
-      earlyPreset === undefined &&
-      !(await confirmForcedOverwrite(targetDir, fileSet, args, { appName, frontend: preset, theme: choice }))
-    )
-      return;
+    // Without add-ons nothing has been written yet, so an existing project's
+    // clashes are judged here — after every usage error has had its turn, and
+    // before the line below announces a scaffold they are about to refuse.
+    if (overrideScripts === undefined) {
+      const settled = await settle();
+      if (settled === "cancelled") return;
+      overrideScripts = settled;
+    }
+    const fileSet = buildFileSet(targetDir, vars, preset, mode, choice, { gitattributes, xanosdk: pluginConfig }, existingXanoSdk);
 
     step(
-      `Scaffolding ${style.bold(appName)} (${preset.label}, ${choice.theme.label}) in ${targetDir}`,
+      mode === "existing"
+        ? `Adding a Xano backend to ${style.bold(appName)} in ${targetDir}`
+        : preset === null
+          ? `Scaffolding ${style.bold(appName)} (no frontend) in ${targetDir}`
+          : `Scaffolding ${style.bold(appName)} (${preset.label}, ${choice.theme.label}) in ${targetDir}`,
     );
 
     // Decided before the write, so the pointer is among the files listed.
@@ -936,9 +1143,14 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
       // An `init` project's `xano/` is hand-authored, never machine-written: it is
       // not refreshable, and `--force` must not clear it.
       regenerable: false,
-      overwrite,
-      // Only this path writes package.json twice, so only this path merges.
-      mergePackageJson: modules.length > 0,
+      // A new project's directory is empty, and an existing one's clashes were
+      // settled above: nothing here is refused.
+      overwrite: "full",
+      // An existing project's manifest is the user's, merged into with the
+      // project winning. Otherwise only the module path writes package.json
+      // twice, so only that path merges.
+      mergePackageJson: mode === "existing" ? "project" : modules.length > 0 ? "rendered" : undefined,
+      overrideScripts,
       // A project install failing for the reason an add-on's already did (the
       // manifest they share names a range npm has no version for) is that one
       // failure, already warned — not a second warning repeating npm's text.
@@ -966,7 +1178,7 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
     pin.report();
     const pinnedProfile = pin.name;
 
-    info(`Theme: ${choice.theme.label} — dark mode: ${choice.dark}`);
+    if (preset !== null) info(`Theme: ${choice.theme.label} — dark mode: ${choice.dark}`);
 
     if (deferredModules.length > 0) {
       recordDeferredModules(targetDir, deferredModules);
@@ -1135,10 +1347,11 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
       );
     }
     const cdHint = targetDir === process.cwd() ? "" : `  cd ${shellWord(targetArg)}\n`;
+    const needsInstall = !(result.install === "installed" || sdkResolves(targetDir));
     detail(
       `Next steps:\n` +
         cdHint +
-        (result.install === "installed" || sdkResolves(targetDir) ? `` : `  ${installLine}\n`) +
+        (needsInstall ? `  ${installLine}\n` : ``) +
         // A declared name with no line in xano/.env refuses the deploy, so the
         // step that supplies it comes first.
         (addonEnv.length > 0
@@ -1147,9 +1360,9 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
         // The Xano Engine first: it needs no account, so sign-in waits for
         // the cloud deploy that does.
         `  npm run xano:deploy    # run the backend on the Xano Engine, on this machine\n` +
-        `  npm run dev            # run the frontend, pointed at it\n` +
+        (preset === null ? `` : `  npm run dev            # run the frontend, pointed at it\n`) +
         loginNextStep(pin, targetDir) +
-        `  npm run xano:deploy:ephemeral   # build the frontend, then deploy → live ephemeral URL\n` +
+        `${ephemeralNextStep(preset !== null)}\n` +
         `\n` +
         (hadLock !== undefined
           ? `xano/xano.lock was kept (${hadLock} ${hadLock === 1 ? "entry" : "entries"}). An entry the new xano/index.ts\n` +
@@ -1171,11 +1384,18 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
       writeJson({
         dir: targetDir,
         name: appName,
-        framework: preset.id,
-        theme: choice.theme.id,
-        dark: choice.dark,
+        // `new` or `existing`: whether this run wrote a project, or added the
+        // backend to one that was already there.
+        mode,
+        framework: preset?.id ?? NO_FRONTEND,
+        theme: preset === null ? null : choice.theme.id,
+        dark: preset === null ? null : choice.dark,
         install: result.install,
         pinnedProfile,
+        // Every file this run wrote or merged into, project-relative.
+        files: runFiles(result.written, derived),
+        // The one command to run next, from where `init` was typed.
+        next: deployNextCommand(cdHint === "" ? null : targetArg, needsInstall ? installLine : null, manager),
         // `--no-install` still names what it added: recorded in package.json,
         // not installed, not wired.
         ...(moduleOutcome === undefined && deferredModules.length > 0
@@ -1436,6 +1656,27 @@ async function envCredentialSet(): Promise<boolean> {
  */
 export function loginNextStep(pin: Pick<ProfilePin, "signedIn">, projectDir: string): string {
   return pin.signedIn ? "" : `  ${projectCli(projectDir)} login       # authenticate with Xano\n`;
+}
+
+/** The `xano:deploy:ephemeral` line of the next steps, without its newline: a project with no frontend has none to build. */
+export function ephemeralNextStep(frontend: boolean): string {
+  return frontend
+    ? `  npm run xano:deploy:ephemeral   # build the frontend, then deploy → live ephemeral URL`
+    : `  npm run xano:deploy:ephemeral   # deploy the backend → live ephemeral URL`;
+}
+
+/**
+ * The `--json` `next` command: the one command to run next, from where the
+ * command was typed. `cdArg` is null when that is the project, `install` when
+ * the project's install is not needed.
+ */
+export function deployNextCommand(cdArg: string | null, install: string | null, manager: string): string {
+  return (cdArg === null ? "" : `cd ${shellWord(cdArg)} && `) + (install === null ? "" : `${install} && `) + `${manager} run xano:deploy`;
+}
+
+/** The `--json` `files` list: every path written, once each, sorted. */
+export function runFiles(...groups: ReadonlyArray<readonly string[]>): string[] {
+  return [...new Set(groups.flat())].sort();
 }
 
 /**

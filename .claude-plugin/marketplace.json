@@ -1,0 +1,19 @@
+{
+  "name": "xano-sdk",
+  "owner": {
+    "name": "Xano"
+  },
+  "metadata": {
+    "description": "The official Xano agent skill: build and run application backends on Xano with @xano/sdk."
+  },
+  "plugins": [
+    {
+      "name": "xano",
+      "source": "./",
+      "description": "Build and run application backends on Xano, authored as TypeScript with @xano/sdk.",
+      "license": "MIT",
+      "strict": false,
+      "skills": ["./skills/xano-backend"]
+    }
+  ]
+}

@@ -278,6 +278,12 @@ export interface DeploySummary {
      */
     engineVersion?: string;
     /**
+     * Where the engine serves its MCP server for coding agents, or null when it
+     * serves none. A url, not a credential: the agent reaches it through
+     * `xanosdk local mcp --stdio`, which brings the bearer.
+     */
+    mcpUrl: string | null;
+    /**
      * What this run did to the project's pinned engine version in
      * `package.json`: `created` (first run pinned it), `moved` (an update was
      * accepted), `unchanged` (a pin was read and kept), or `none` (no pin is in
@@ -1772,6 +1778,16 @@ async function deployToLocalEngine(
   // Pointed at rather than printed: this output lands in terminals and CI logs,
   // and the bearer is only for the caller who asks for it.
   detail(`Meta API bearer (the local XANO_META_TOKEN): \`xanosdk local token\``);
+  // The MCP server is how a coding agent looks at the deployed backend, seeds
+  // rows and runs objects. Named here because this is the one output every
+  // developer sees, including on projects scaffolded before it existed.
+  if (engine.mcpUrl !== undefined) {
+    detail(`MCP server for coding agents: ${engine.mcpUrl} — connect one with \`xanosdk local mcp\``);
+  } else if (choice.override === undefined) {
+    detail("This engine serves no MCP server for coding agents; `xanosdk local update` moves the project to one that does.");
+  } else {
+    detail("This engine serves no MCP server for coding agents; choose a newer engine to get one.");
+  }
   detail(`Stop it with \`xanosdk local stop ${engine.name}\``);
   // After the import, as on an ephemeral: the static host lives in the very
   // workspace the import replaces. Never fails the backend deploy.
@@ -1798,6 +1814,7 @@ async function deployToLocalEngine(
       name: engine.name,
       workspaceId: engine.workspaceId,
       logPath: engine.logPath,
+      mcpUrl: engine.mcpUrl ?? null,
       ...(engineVersion === undefined ? {} : { engineVersion }),
       pin: pin.outcome(),
       ...(choice.override === undefined ? {} : { override: choice.override }),

@@ -1397,6 +1397,12 @@ export function addGitignoreRule(
       : relForwardSlash(root, containingDir) + "/"; // dedicated dir → ignore the dir
 
   const gitignorePath = join(root, ".gitignore");
+  // A symlinked `.gitignore` points at a file other projects share; appending
+  // this project's rule would change all of them. Thrown, so each caller says
+  // what to add by hand (and a caller about to write a secret refuses).
+  if (lstatSync(gitignorePath, { throwIfNoEntry: false })?.isSymbolicLink() === true) {
+    throw new Error(`${gitignorePath} is a symlink, so it was left untouched`);
+  }
   const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf8") : "";
   // The line check FIRST: it is free, the bytes are already in hand, and it
   // answers the common case (the exact rule is already there). The subprocess

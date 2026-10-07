@@ -18,6 +18,7 @@ import { atomicWrite } from "../util/atomic-write.js";
 import { assertValidProfileName } from "./profile-select.js";
 import { UsageError } from "../emit/errors.js";
 import { shellQuote } from "../util/shell-quote.js";
+import { holdsProjectManifest } from "../util/project-root.js";
 
 /** The committed pointer file's name, at the project root. */
 export const POINTER_FILE = "xano.profile.json";
@@ -90,7 +91,7 @@ function walkUp(startDir: string): { pointer?: string; root: string; bounded: bo
     if (existsSync(candidate)) return { pointer: candidate, root: dir, bounded: true };
     // The project's root is as far as its identity can come from; walking past
     // a package.json adopts another project's.
-    if (existsSync(join(dir, "package.json"))) return { root: dir, bounded: true };
+    if (holdsProjectManifest(dir)) return { root: dir, bounded: true };
     // A tree with no package.json above it must still be BOUNDED. Unbounded,
     // a stray `xano.profile.json` in $HOME — or in a world-writable /tmp —
     // would silently retarget every run started anywhere beneath it.

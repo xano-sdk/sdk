@@ -46,7 +46,7 @@ export function projectDirFrom(start: string): string | undefined {
  * `--backend-env-file` to `envFile`). A test pins this list to every flag the
  * command registry declares as taking a path.
  */
-export const RELATIVE_PATH_ARGS = ["out", "lockPath", "entryPath", "static", "bundle", "envFile", "secretsFile", "backendDir", "emit", "path"] as const;
+export const RELATIVE_PATH_ARGS = ["out", "lockPath", "entryPath", "static", "bundle", "envFile", "secretsFile", "backendDir", "emit", "path", "project"] as const;
 
 /** Path-valued variables read relative to the working directory, pinned for a run entered at its root. */
 const PATH_VARS = ["XANO_CONFIG", "XANO_GLOBAL_CONFIG", "XANO_CLIENT_FILE", "XANOSDK_UPDATE_CACHE", "XANOSDK_PROVE_DIFF", "XANOSDK_ENGINE_HOME", "XANOSDK_ENGINE_OVERRIDE"] as const;

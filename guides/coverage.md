@@ -72,3 +72,8 @@ can learn the SDK without reading source:
 Both derive from the SDK's own sources of truth (so they can't drift), regenerate with
 `npm run manifest`, and are available at runtime via `buildManifest()` / `renderLlmsTxt()`,
 both exported from `@xano/sdk/internal`.
+
+The package also ships the `xano-backend` agent skill at `skills/xano-backend/SKILL.md`. It
+carries no reference of its own: it tells a coding agent when to set up a Xano backend, runs it
+through `init` and the first deploy, and hands it to the project's `AGENTS.md` and `llms.txt`.
+Installing it is in the [CLI guide](cli.md#the-agent-skill).

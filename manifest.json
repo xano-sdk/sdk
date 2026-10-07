@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -8998,6 +8998,48 @@
   ],
   "cli": [
     {
+      "command": "agent-skill install",
+      "flags": [
+        {
+          "flag": "--agent <id>",
+          "description": "Which agent to act for, instead of the ones detected (repeatable): claude-code, agents (the shared ~/.agents directory), codex, cursor, copilot, gemini, amp, opencode"
+        },
+        {
+          "flag": "--dry-run",
+          "description": "Report what would change and write nothing"
+        },
+        {
+          "flag": "--force",
+          "description": "Replace a copy that was edited since it was installed"
+        }
+      ],
+      "description": "Write the skill into the user-level skill directory of each detected agent; an edited copy is left alone unless --force"
+    },
+    {
+      "command": "agent-skill status",
+      "flags": [
+        {
+          "flag": "--agent <id>",
+          "description": "Which agent to act for, instead of the ones detected (repeatable): claude-code, agents (the shared ~/.agents directory), codex, cursor, copilot, gemini, amp, opencode"
+        }
+      ],
+      "description": "Report each copy as current, stale, edited or absent"
+    },
+    {
+      "command": "agent-skill uninstall",
+      "flags": [
+        {
+          "flag": "--agent <id>",
+          "description": "Which agent to act for, instead of the ones detected (repeatable): claude-code, agents (the shared ~/.agents directory), codex, cursor, copilot, gemini, amp, opencode"
+        },
+        {
+          "flag": "--dry-run",
+          "description": "Report what would be removed and remove nothing"
+        }
+      ],
+      "description": "Remove the copies install wrote; an edited copy is reported and kept"
+    },
+    {
       "command": "compile",
       "args": "<file>",
       "flags": [
@@ -9655,10 +9697,11 @@
         },
         {
           "flag": "--framework <id>",
-          "description": "Frontend framework to scaffold: react (default), svelte",
+          "description": "Frontend to scaffold in a new project: react (default), svelte, or none for the backend only. A non-empty directory always gets the backend only",
           "values": [
             "react",
-            "svelte"
+            "svelte",
+            "none"
           ]
         },
         {
@@ -9777,7 +9820,7 @@
         },
         {
           "flag": "--force",
-          "description": "Write into a non-empty target directory. Over an existing project it lists every file it would overwrite and confirms first (--yes without a terminal); files the scaffold does not write are kept"
+          "description": "Write over what clashes when adding the backend to a non-empty target directory: an existing xano/, a file init would write, a xano:* script with another command. It lists every file and script it would overwrite and confirms first (--yes without a terminal); files the scaffold does not write are kept"
         },
         {
           "flag": "--no-install",
@@ -9851,7 +9894,7 @@
           ]
         }
       ],
-      "description": "Scaffold a Xano SDK project — empty, or filled from an existing backend"
+      "description": "Scaffold a Xano SDK project — empty, or filled from an existing backend. In a non-empty directory, add the backend to the project there"
     },
     {
       "command": "local cache",
@@ -9875,6 +9918,21 @@
     {
       "command": "local list",
       "description": "List Xano Engines on this machine, marking the ones xanosdk started"
+    },
+    {
+      "command": "local mcp",
+      "args": "[name]",
+      "flags": [
+        {
+          "flag": "--stdio",
+          "description": "Run as an MCP stdio server that forwards to the live engine with its current bearer — the command a coding agent's MCP config launches"
+        },
+        {
+          "flag": "--project <dir>",
+          "description": "The project whose engine to reach, when the agent launches the bridge outside it (default: the current directory)"
+        }
+      ],
+      "description": "Print how a coding agent connects to a Xano Engine's MCP server (look at the backend, seed rows, run functions, tasks, triggers, endpoints and tests); `--stdio` runs the bridge the agent's MCP config launches (default: the engine this project deployed to)"
     },
     {
       "command": "local stop",

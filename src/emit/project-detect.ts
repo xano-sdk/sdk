@@ -156,6 +156,19 @@ export function detectDarkMode(projectDir: string): DarkMode | undefined {
 }
 
 /**
+ * The frontend half of the agent brief for THIS project, where the scaffold's
+ * `frontend/` decides first: a project without one (a backend-only `init`, or
+ * the backend added to an existing app, whose own frontend lives elsewhere)
+ * gets `null`, the brief with no frontend slots — whatever its dependencies
+ * name, since an existing React app's `react` is not this scaffold's React.
+ * Otherwise {@link detectFrontendGuidance}.
+ */
+export function detectProjectFrontend(projectDir: string): FrontendGuidance | null | undefined {
+  if (!existsSync(join(projectDir, "frontend"))) return null;
+  return detectFrontendGuidance(projectDir);
+}
+
+/**
  * The frontend half of the agent brief, describing THIS project.
  *
  * Returns `undefined` when the framework cannot be identified — the framework

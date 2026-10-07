@@ -181,6 +181,14 @@ export function gitattributesSpec(pkg: string): BlockSpec {
 }
 
 /**
+ * The `.gitignore` block `init` adds to an existing project: the ignore rules
+ * the backend needs, in a file whose every other line is the project's.
+ */
+export function gitignoreSpec(): BlockSpec {
+  return { dialect: HASH_DIALECT, pkg: "@xano/sdk", file: ".gitignore" };
+}
+
+/**
  * Every non-blank line of `text` that lies OUTSIDE every package's managed
  * block, trimmed — what a caller needs to tell an unmarked hand-written rule
  * from one the SDK already owns.

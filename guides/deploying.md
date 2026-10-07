@@ -652,6 +652,34 @@ re-importing the backend. One command cannot serve it and refuses it by name: `r
 | `xanosdk local cache list` | Each cached engine version, its size on disk, and the engines running on it. |
 | `xanosdk local cache clear` | Removes every cached engine (`--version <v>`: just that one). An engine running on a removed version is stopped first; the next deploy fetches it again. |
 
+#### Connecting a coding agent
+
+The Xano Engine serves an MCP server for coding agents, and a local deploy prints where. It is
+for looking at the deployed backend (objects, table schemas, rows, run history), seeding and
+editing rows, and running functions, tasks, triggers, endpoints and tests by hand, each
+answering its result and logs. It never changes a primitive: tables, endpoints, functions and
+every other object change in `xano/` and ship with `xanosdk deploy`.
+
+`xanosdk init` connects Claude Code (`.mcp.json`) and Cursor (`.cursor/mcp.json`) to it with one
+server, `xano-local`, that launches a bridge:
+
+```json
+{ "mcpServers": { "xano-local": { "command": "npx", "args": ["--yes", "--package", "@xano/sdk", "xanosdk", "local", "mcp", "--stdio"] } } }
+```
+
+Nothing has to be started or installed by hand: the agent launches the server itself, using the
+project's own `@xano/sdk` when it is installed and fetching it when it is not (a fresh clone opened
+before `npm install`). The config holds no url and no token. The engine may come back on a new port after a restart and
+always mints a new bearer, so the bridge looks both up when it needs them, and again when the
+engine stops answering or refuses the bearer. Before the first deploy the server connects and
+lists no tools; once an engine is up it tells the agent its tools changed. A call cut off after
+it reached the engine is reported as unknown, never sent twice. `xanosdk local mcp` prints the
+details and each agent's config line, and `init` in an existing project adds the server beside
+the ones a config already declares. An engine too old to serve MCP says so on deploy, and
+`xanosdk local update` moves the project to one that does. Claude Code asks once before it
+starts a project's server; a Cursor version that does not pick up the tool change needs the
+`xano-local` server refreshed in its MCP settings after the first deploy.
+
 #### A frontend on the Xano Engine, and server rendering
 
 `xanosdk deploy <entry> --local --static <dir>` publishes a built frontend to the

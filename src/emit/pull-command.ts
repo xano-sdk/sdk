@@ -65,6 +65,7 @@ import { rerenderEnvExample } from "./env-example-refresh.js";
 import { readVersion, refreshAgentGuidance } from "./cli.js";
 import { CODEGEN_MARKER, PRESERVED_ON_REFRESH, SHELL_FILES_IN_BACKEND, XANO_DIR, type ScaffoldFile } from "./scaffold.js";
 import { backendDirIn, resolveBackendDir } from "./backend-dir.js";
+import { holdsProjectManifest } from "../util/project-root.js";
 import { WORKSPACE_SECRETS_BASENAME } from "../workspace/documentation-token.js";
 import { ensureSecretPathGitignored } from "./gitignore.js";
 import {
@@ -351,7 +352,7 @@ function projectBackendAbove(cwd: string): string | undefined {
     // The scaffolded `xano/` is checked anywhere; the scan for a renamed backend
     // only at a project root, or every ancestor's listing is read — the OS temp
     // dir, a home full of checkouts.
-    const backend = existsSync(join(dir, "package.json")) ? backendDirIn(dir) : join(dir, XANO_DIR);
+    const backend = holdsProjectManifest(dir) ? backendDirIn(dir) : join(dir, XANO_DIR);
     if (existsSync(join(backend, "index.ts"))) return relative(cwd, backend).split(sep).join("/");
   }
 }

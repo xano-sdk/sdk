@@ -42,7 +42,7 @@ import {
   readmeBuiltWithVersion,
   refreshReadmeBuiltWith,
 } from "./init-templates.js";
-import { detectFrontendGuidance } from "./project-detect.js";
+import { detectProjectFrontend } from "./project-detect.js";
 import { CODEGEN_MARKER } from "./scaffold.js";
 import { warn } from "./ui.js";
 import { projectFileCli, projectSdkDir } from "./invocation.js";
@@ -101,7 +101,8 @@ export interface RefreshOptions {
   readonly mode?: GuidanceMode;
   /**
    * The frontend the brief should describe. Defaults to whatever
-   * {@link detectFrontendGuidance} can read off `projectDir`.
+   * {@link detectProjectFrontend} can read off `projectDir` — `null`, the brief
+   * with no frontend, when the project has no `frontend/`.
    *
    * A refresh runs in a process that never saw the `init` flags, and nothing
    * records them, so rendering the DEFAULT frontend would write "React" and
@@ -109,7 +110,7 @@ export interface RefreshOptions {
    * falsehood in the file agents are told to trust, which no hand-fix survives
    * because the next refresh overwrites it again.
    */
-  readonly frontend?: FrontendGuidance;
+  readonly frontend?: FrontendGuidance | null;
   readonly env?: NodeJS.ProcessEnv;
   /**
    * The user asked for this refresh by name (`xanosdk upgrade`), rather than
@@ -174,7 +175,7 @@ function managedFiles(opts: RefreshOptions): readonly ManagedFile[] {
           existing,
           renderAgentsMd(opts.appName ?? appNameFor(opts.projectDir), opts.mode ?? guidanceModeFor(opts.projectDir), {
             version: opts.sdkVersion,
-            frontend: opts.frontend ?? detectFrontendGuidance(opts.projectDir),
+            frontend: opts.frontend !== undefined ? opts.frontend : detectProjectFrontend(opts.projectDir),
             cli: projectFileCli(opts.projectDir, manager),
             sdkDir: projectSdkDir(opts.projectDir, manager),
           }),

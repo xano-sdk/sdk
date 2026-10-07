@@ -8,6 +8,12 @@
  *
  * The preset table itself lives in `frontend-presets.ts` as a static record —
  * see the note there on why it is not a register-by-side-effect registry.
+ *
+ * "No frontend" is the value {@link NO_FRONTEND} on the same choice, not a
+ * preset: it resolves to `null`, and a scaffold that receives `null` writes the
+ * backend alone. It is not in `FRAMEWORKS`, because everything that reads that
+ * list (preset lookup, project detection, the e2e build) is about a framework
+ * that renders something.
  */
 import { createInterface } from "node:readline/promises";
 import {
@@ -15,11 +21,16 @@ import {
   FRAMEWORKS,
   allFrontendPresets,
   findFrontendPreset,
-  resolveFrameworkFlag,
   type FrontendPreset,
 } from "./frontend-presets.js";
 import { flagValue } from "./theme-resolve.js";
 import { questionOrCancel } from "./prompt.js";
+
+/** The `--framework` value, and the prompt answer, that scaffolds no frontend. */
+export const NO_FRONTEND = "none";
+
+/** Every value `--framework` accepts, in prompt/help order. */
+export const FRAMEWORK_CHOICES: readonly string[] = [...FRAMEWORKS, NO_FRONTEND];
 
 /** The preset a scaffold gets when nothing selects one. */
 export function defaultFrontendPreset(): FrontendPreset {
@@ -30,11 +41,17 @@ export function defaultFrontendPreset(): FrontendPreset {
   return preset;
 }
 
+/** Whether a prompt answer or flag value spells "no frontend". */
+function isNoFrontend(token: string): boolean {
+  const t = token.trim().toLowerCase();
+  return t === NO_FRONTEND || t === "no frontend";
+}
+
 /**
  * Prompt (in a TTY) for the frontend framework. An empty answer takes the
  * default. Never called in non-interactive mode.
  */
-async function promptFramework(): Promise<FrontendPreset> {
+async function promptFramework(): Promise<FrontendPreset | null> {
   const presets = allFrontendPresets();
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
@@ -43,7 +60,7 @@ async function promptFramework(): Promise<FrontendPreset> {
         presets
           .map((p, i) => `  ${i + 1}) ${p.label}${p.id === DEFAULT_FRAMEWORK ? " (default)" : ""}`)
           .join("\n") +
-        `\n`,
+        `\n  ${presets.length + 1}) No frontend (the backend only)\n`,
     );
     // Ctrl-C is a cancel (exit 130), as at every other prompt — not a crash.
     const answer = await questionOrCancel(rl, `Enter a number or name, or leave blank for the default: `);
@@ -53,6 +70,7 @@ async function promptFramework(): Promise<FrontendPreset> {
     if (Number.isInteger(byIndex) && byIndex >= 1 && byIndex <= presets.length) {
       return presets[byIndex - 1]!;
     }
+    if (byIndex === presets.length + 1 || isNoFrontend(token)) return null;
     // An unrecognised answer takes the default rather than throwing: the user
     // is mid-prompt, not mid-scripted-run, and a hard error would discard the
     // AI-preset answers they are about to give. `--framework` is where a typo
@@ -63,9 +81,27 @@ async function promptFramework(): Promise<FrontendPreset> {
   }
 }
 
-/** `--framework` wins (and a bad value throws); otherwise prompt in a TTY; otherwise the default. */
-export async function resolveFrontendPreset(flag: string | undefined): Promise<FrontendPreset> {
-  if (flag !== undefined && flag !== "") return flagValue(flag, FRAMEWORKS, () => resolveFrameworkFlag(flag));
+/**
+ * The `--framework` value alone, validated: a preset, `null` for
+ * {@link NO_FRONTEND}, and a bad value throws naming every valid one.
+ */
+export function resolveFrameworkValue(flag: string): FrontendPreset | null {
+  if (isNoFrontend(flag)) return null;
+  return flagValue(flag, FRAMEWORK_CHOICES, () => {
+    const preset = findFrontendPreset(flag);
+    if (preset === undefined) {
+      throw new Error(`Unknown --framework "${flag}". Valid values: ${FRAMEWORK_CHOICES.join(", ")}.`);
+    }
+    return preset;
+  });
+}
+
+/**
+ * `--framework` wins (and a bad value throws); otherwise prompt in a TTY;
+ * otherwise the default. `null` is "no frontend".
+ */
+export async function resolveFrontendPreset(flag: string | undefined): Promise<FrontendPreset | null> {
+  if (flag !== undefined && flag !== "") return resolveFrameworkValue(flag);
   if (process.stdin.isTTY && process.stderr.isTTY) return promptFramework();
   return defaultFrontendPreset();
 }

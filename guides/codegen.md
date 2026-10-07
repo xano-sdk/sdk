@@ -18,10 +18,27 @@ xanosdk init my-app --from ./ws.json          # a bundle already on disk — off
 `workspace`, `ephemeral[:<name>]`, `local[:<name>]`, `tenant:<name>`, `release:<name>` —
 or a bundle path. Unlike most commands it has no default: a pull names its source.
 
-Everything else about the project is unchanged: `--framework`, the theme flags, `--no-agents-md` and
-`--web` mean the same thing here as they do without `--from`. The three flags that describe
-the pull itself — `--report`, `--skip-roundtrip` and `--branch` — are refused without it rather
-than silently ignored.
+Everything else about the project is unchanged: `--framework` (`react`, `svelte` or `none`), the
+theme flags, `--no-agents-md` and `--web` mean the same thing here as they do without `--from`.
+The three flags that describe the pull itself — `--report`, `--skip-roundtrip` and `--branch` —
+are refused without it rather than silently ignored.
+
+The target directory decides what is written around `xano/`, as it does for a plain
+[`init`](scaffold.md#no-frontend-and-existing-apps):
+
+- **Empty or missing:** a new project, with the frontend `--framework` names (`none` for the
+  backend alone).
+- **A previous pull** (`xano/.xanosdk-codegen.json` is there): `xano/` is refreshed in place —
+  see [Verification, and the decode report](#verification-and-the-decode-report) below.
+- **Anything else:** an existing app, which gets the backend only. The decoded `xano/` is
+  written, and the `xano:*` scripts and the backend's dependencies are merged into its
+  `package.json`. An existing `xano/`, a file the pull would write, or a `xano:*` script with
+  another command is a clash: all of them are listed and nothing is read or written unless
+  `--force`. `--framework react|svelte` and the frontend-only flags are refused.
+
+```bash
+cd my-existing-app && npx @xano/sdk init --from workspace   # add the pulled backend to this app
+```
 
 ### Just the tree: `generate`
 
@@ -168,7 +185,8 @@ are listed), then updated from the new tree, so `export --check` passes after it
 over a `xano/` no decode wrote follows the same rules.
 
 > ⚠️ **`xano/` is your source once pulled — commit it.** A refresh overwrites the files it
-> decodes, so commit before one (a directory that isn't a previous pull still needs `--force`).
+> decodes, so commit before one (an existing `xano/` that isn't a previous pull is a clash, and
+> needs `--force`).
 > It carries schema only — no table rows or stored files.
 > `xanosdk deploy` sends it to the Xano Engine on this machine (`--ephemeral`: a disposable
 > ephemeral environment) as a *full replace*;

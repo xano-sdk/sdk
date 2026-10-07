@@ -212,6 +212,82 @@ export function projectFileCli(dir: string, manager: PackageManager): ProjectCli
   return listingWorkspaceRoot(resolve(dir)) === undefined ? "npx xanosdk" : "npx --workspaces=false xanosdk";
 }
 
+/** The server an agent's MCP config declares for the bridge. Not the engine's own name. */
+export const MCP_SERVER_NAME = "xano-local";
+
+/** A project file a coding agent reads its MCP servers from. */
+export interface McpConfig {
+  readonly path: string;
+  /** The agent that reads it, as `local mcp` names it. */
+  readonly agent: string;
+  /** Set for an agent that does not promise to launch the server inside the project. */
+  readonly workspaceFolder?: string;
+}
+
+/**
+ * Where each coding agent reads a project's MCP servers: what `init` writes and
+ * `local mcp` prints. Claude Code launches a project's server inside the
+ * project; Cursor does not promise to, so its config names the project by
+ * Cursor's own workspace-folder variable.
+ */
+export const MCP_CONFIGS: readonly McpConfig[] = [
+  { path: ".mcp.json", agent: "Claude Code" },
+  { path: ".cursor/mcp.json", agent: "Cursor", workspaceFolder: "${workspaceFolder}" },
+];
+
+/** How an agent's MCP config launches the bridge: a program and its arguments. */
+export interface McpServerCommand {
+  command: string;
+  args: string[];
+}
+
+/**
+ * The command an agent's MCP config runs to reach this project's Xano Engine —
+ * `xanosdk local mcp --stdio`, with no url or token in it (the bridge looks
+ * both up when it runs).
+ *
+ * The agent launches it, often before anyone has run `npm install` (a fresh
+ * clone opened in an editor), so it must not depend on `node_modules`.
+ * `--package @xano/sdk` gives that: npx runs the project's own install when
+ * there is one, and otherwise fetches the SDK into its cache — never an
+ * unrelated package that happens to be named `xanosdk`. `--yes` answers npx's
+ * install prompt, which an agent has no terminal to answer. The spec carries
+ * no version range: `cmd /c` would read the `>` of one as a redirect.
+ *
+ * An argv rather than a string, so nothing re-splits it. `--workspaces=false`
+ * is its own argument where {@link projectFileCli} needs it; native Windows
+ * launches npx through `cmd /c`, since `npx` there is a script, not an
+ * executable.
+ *
+ * `workspaceFolder` is for an agent that does not promise to launch the server
+ * inside the project (Cursor), spelled as that agent's own variable: the
+ * bridge is pointed at the project with `--project`. npx resolves the package
+ * from where it was launched, so outside the project it runs the published SDK,
+ * which serves the same bridge.
+ */
+export function mcpServerCommand(
+  dir: string,
+  manager: PackageManager,
+  opts: { platform?: NodeJS.Platform; workspaceFolder?: string } = {},
+): McpServerCommand {
+  const folder = opts.workspaceFolder;
+  const npx = [
+    "npx",
+    "--yes",
+    "--package",
+    "@xano/sdk",
+    ...(projectFileCli(dir, manager) === "npx xanosdk" ? [] : ["--workspaces=false"]),
+    "xanosdk",
+    "local",
+    "mcp",
+    "--stdio",
+    ...(folder === undefined ? [] : ["--project", folder]),
+  ];
+  return (opts.platform ?? process.platform) === "win32"
+    ? { command: "cmd", args: ["/c", ...npx] }
+    : { command: npx[0]!, args: npx.slice(1) };
+}
+
 /** `text` — written with `npx xanosdk` — with each such command spelled `cli`. */
 export function spellProjectCli(text: string, cli: ProjectCli | undefined): string {
   return cli === undefined || cli === "npx xanosdk" ? text : text.replace(/\bnpx xanosdk(?=[\s`'")\]]|$)/g, cli);

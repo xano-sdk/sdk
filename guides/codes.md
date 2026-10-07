@@ -133,6 +133,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `logout.revoke-failed` | Did not revoke …: … The token was not sent. |
 | `logout.shared-file` | Clearing … in the shared credential file … — this affects every project that reuses it. |
 | `logout.unreadable` | Could not read … (…). |
+| `merge.symlink` | … is a symlink — left it and its target untouched. |
 | `microservice.failed` | Some microservices failed to start: |
 | `microservice.starting` | Microservices are still starting (…/… ready) — they should come up shortly: |
 | `microservice.status-unreadable` | Could not read microservice status (the backend deployed fine): |

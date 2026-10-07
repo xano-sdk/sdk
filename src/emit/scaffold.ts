@@ -36,10 +36,12 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { condenseNpmError, runNpmQuiet, sameNpmFailure } from "./npm.js";
 import { detectInstallRoot } from "./package-manager.js";
-import { projectFileCli, projectSdkDir } from "./invocation.js";
+import { MCP_CONFIGS, MCP_SERVER_NAME, mcpServerCommand, projectFileCli, projectSdkDir } from "./invocation.js";
 import { classifyNpmFailure } from "./init-modules.js";
 import { removeEmptiedDirs, removeFiles } from "./backend-tree.js";
-import { detail, success, warn, withSpinner } from "./ui.js";
+import { detail, info, success, warn, withSpinner } from "./ui.js";
+import { UsageError } from "./errors.js";
+import { isSorted, sortedKeys } from "./init-templates.js";
 import {
   AGENTS_MD_PATH,
   renderAgentsMd,
@@ -95,9 +97,11 @@ export const PRESERVED_ON_REFRESH: readonly string[] = ["xano.lock", ".env", ".s
 
 /**
  * Files under `xano/` the project shell writes rather than a decode: neither
- * removed by a refresh nor reported as the author's own.
+ * removed by a refresh nor reported as the author's own. The last two are a
+ * project with no frontend's: the config `xano/` type-checks under, and, in an
+ * existing project, the line-ending rule kept out of that project's own root.
  */
-export const SHELL_FILES_IN_BACKEND: readonly string[] = ["lambdas/tsconfig.json"];
+export const SHELL_FILES_IN_BACKEND: readonly string[] = ["lambdas/tsconfig.json", "tsconfig.json", ".gitattributes"];
 
 /** One file to write, at a path relative to the project root. */
 export interface ScaffoldFile {
@@ -146,9 +150,9 @@ export interface ScaffoldOptions {
   /**
    * The frontend the scaffold actually wrote. Its guidance goes into `AGENTS.md`,
    * so an agent is told about the framework on disk rather
-   * than whichever one happens to be the default.
+   * than whichever one happens to be the default. `null`: no frontend was written.
    */
-  readonly frontend: FrontendPreset;
+  readonly frontend: FrontendPreset | null;
   /**
    * The theme the scaffold actually wrote. Its guidance is appended to the
    * frontend's in `AGENTS.md` — an agent that is not told which
@@ -167,15 +171,23 @@ export interface ScaffoldOptions {
    */
   readonly overwrite?: Exclude<OverwriteMode, "refuse">;
   /**
-   * Merge `package.json` with what is already on disk instead of replacing it.
+   * Merge `package.json` with what is already on disk instead of replacing it,
+   * and which side wins.
    *
-   * Only the two-pass `init` path wants this, and it must be asked for rather
-   * than inferred from the filename: `init --force` into an existing project
-   * is a REPLACE, and silently inheriting that project's old dependencies into
-   * the rendered manifest would be a different command than the one that was
-   * typed.
+   * `rendered`: the two-pass `init` path, where the file on disk is this run's
+   * own minimal manifest plus what `npm install` added — see
+   * {@link mergePackageJson}. `project`: an existing project, whose manifest is
+   * the user's — see {@link mergeIntoProjectManifest}.
+   *
+   * It must be asked for rather than inferred from the filename: a new
+   * project's manifest is written whole.
    */
-  readonly mergePackageJson?: boolean;
+  readonly mergePackageJson?: "rendered" | "project";
+  /**
+   * Under `mergePackageJson: "project"`: the scripts whose clash `--force`
+   * confirmed, which take the rendered command over the project's.
+   */
+  readonly overrideScripts?: readonly string[];
   /**
    * npm's condensed reasons an earlier install in this run already warned
    * with. The project's own install failing with one of them says so in one
@@ -283,12 +295,177 @@ function replaceXanoDir(targetDir: string, removals: readonly string[] | undefin
 }
 
 /** Write one file, creating the directories it sits in. */
-function writeFile(targetDir: string, file: ScaffoldFile, merge: boolean): void {
+function writeFile(
+  targetDir: string,
+  file: ScaffoldFile,
+  merge: ScaffoldOptions["mergePackageJson"],
+  overrideScripts: readonly string[] = [],
+): void {
   const full = join(targetDir, file.path);
   mkdirSync(dirname(full), { recursive: true });
-  const content =
-    merge && file.path === "package.json" ? mergePackageJson(full, file.content) : file.content;
-  writeFileSync(full, content, "utf8");
+  writeFileSync(full, fileContent(full, file, merge, overrideScripts), "utf8");
+}
+
+/** What {@link writeFile} writes at `full`: the file's own content, or a `package.json` merged with the one there. */
+function fileContent(
+  full: string,
+  file: ScaffoldFile,
+  merge: ScaffoldOptions["mergePackageJson"],
+  overrideScripts: readonly string[],
+): string {
+  if (file.path !== "package.json" || merge === undefined) return file.content;
+  if (merge === "rendered") return mergePackageJson(full, file.content);
+  if (!existsSync(full)) return file.content;
+  return mergeIntoProjectManifest(readFileSync(full, "utf8"), file.content, overrideScripts);
+}
+
+/** The `package.json` keys the backend merges into an existing project's manifest. */
+const PROJECT_MERGED_MAPS = ["dependencies", "devDependencies"] as const;
+
+/**
+ * The backend's rendered `package.json` merged into an existing project's,
+ * the project's own entries winning.
+ *
+ * Only what the backend needs takes part: the `xano:*` scripts, the
+ * dependency maps, and the toolchain modules' `xanosdk` block. Everything else
+ * the rendered manifest carries (`name`, `type`, `engines`) is the project's
+ * to decide and is never added. An entry the project lacks is added; one it
+ * has keeps its value — a dependency keeps the project's range. A script the
+ * project defines with another command is a clash, refused before anything is
+ * written; one in `overrideScripts` was confirmed under `--force` and takes
+ * the rendered command.
+ *
+ * The `xanosdk` block merges per package with the rendered side winning, as it
+ * does everywhere it is written: it holds this run's answers to the modules'
+ * questions, which are the newer statement of intent.
+ */
+export function mergeIntoProjectManifest(
+  existing: string,
+  rendered: string,
+  overrideScripts: readonly string[] = [],
+): string {
+  const project = JSON.parse(existing) as Record<string, unknown>;
+  const ours = JSON.parse(rendered) as Record<string, unknown>;
+  const scripts = asMap(project["scripts"]);
+  for (const [name, command] of Object.entries(asMap(ours["scripts"]))) {
+    if (!name.startsWith("xano:")) continue;
+    if (!(name in scripts) || overrideScripts.includes(name)) scripts[name] = command;
+  }
+  if (Object.keys(scripts).length > 0) project["scripts"] = scripts;
+  for (const key of PROJECT_MERGED_MAPS) {
+    const theirs = asMap(project[key]);
+    const added = { ...theirs };
+    for (const [name, range] of Object.entries(asMap(ours[key]))) if (!(name in added)) added[name] = range;
+    if (Object.keys(added).length === Object.keys(theirs).length) continue;
+    // A map the project keeps in npm's order stays in it (npm's next install
+    // would sort it anyway); one it keeps in its own order is appended to.
+    project[key] = isSorted(Object.keys(theirs)) ? sortedKeys(added) : added;
+  }
+  const block = asMap(ours["xanosdk"]);
+  if (Object.keys(block).length > 0) project["xanosdk"] = { ...asMap(project["xanosdk"]), ...block };
+  return jsonLike(existing, project);
+}
+
+/**
+ * `doc` written the way `existing` is written — its indentation, its line
+ * endings, its final newline — so a diff of a merged project file shows the
+ * merged lines and nothing else.
+ */
+function jsonLike(existing: string, doc: unknown): string {
+  const eol = existing.includes("\r\n") ? "\r\n" : "\n";
+  const text = JSON.stringify(doc, null, jsonIndent(existing)).replace(/\n/g, eol);
+  return /\r?\n$/.test(existing) ? text + eol : text;
+}
+
+/** The indentation a JSON document uses: a tab, or its first indented line's spaces (2 when it has none). */
+function jsonIndent(text: string): string | number {
+  const indent = /^([ \t]+)\S/m.exec(text)?.[1];
+  if (indent === undefined) return 2;
+  return indent.startsWith("\t") ? "\t" : indent.length;
+}
+
+/**
+ * What adding the backend to an existing project would write over: each one
+ * is refused unless `--force`, and all of them are found before anything is
+ * written, so a refusal leaves the project as it was.
+ *
+ * - an existing `xano/` (`dir`);
+ * - any other file the scaffold would write that is already there (`file`) —
+ *   except the ones it merges into rather than writes ({@link MERGED_IN_EXISTING});
+ * - a script the project defines under one of the backend's `xano:*` names
+ *   with another command (`script`). The same command is no clash.
+ */
+export type Clash =
+  | { readonly kind: "dir"; readonly path: string }
+  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "script"; readonly name: string; readonly theirs: string; readonly ours: string };
+
+/** The files an existing project's are merged into, never written over. */
+export const MERGED_IN_EXISTING: ReadonlySet<string> = new Set([
+  "package.json",
+  ".gitignore",
+  ".gitattributes",
+  AGENTS_MD_PATH,
+  ...MCP_CONFIGS.map((c) => c.path),
+]);
+
+/**
+ * Every {@link Clash} between the backend's `files` and the project at
+ * `targetDir`. Throws when the project's `package.json` cannot be read as JSON:
+ * there is nothing to merge into, and replacing it is not this command's call.
+ */
+export function existingProjectClashes(targetDir: string, files: readonly ScaffoldFile[]): Clash[] {
+  const clashes: Clash[] = [];
+  const hasXano = existsSync(join(targetDir, XANO_DIR));
+  if (hasXano) clashes.push({ kind: "dir", path: `${XANO_DIR}/` });
+  for (const file of files) {
+    if (MERGED_IN_EXISTING.has(file.path)) continue;
+    if (hasXano && file.path.startsWith(`${XANO_DIR}/`)) continue;
+    if (existsSync(join(targetDir, file.path))) clashes.push({ kind: "file", path: file.path });
+  }
+  const rendered = files.find((f) => f.path === "package.json");
+  const manifestPath = join(targetDir, "package.json");
+  // The merge rewrites the manifest in place, and a symlinked one usually belongs
+  // to something else (a monorepo template, a shared config repo). `--force`
+  // does not change that, so this is a refusal, not a clash.
+  if (rendered !== undefined && linked(manifestPath)) {
+    throw new UsageError(
+      `${manifestPath} is a symlink, so init cannot merge the backend's scripts and dependencies into it ` +
+        `without changing the file it points at. Replace the link with a regular file, then re-run; nothing was written.`,
+    );
+  }
+  if (rendered === undefined || !existsSync(manifestPath)) return clashes;
+  let theirs: Record<string, unknown>;
+  try {
+    theirs = asMap(JSON.parse(readFileSync(manifestPath, "utf8")));
+  } catch (err) {
+    throw new UsageError(
+      `${manifestPath} is not valid JSON (${err instanceof Error ? err.message : String(err)}), so init cannot ` +
+        `merge the backend's scripts and dependencies into it. Fix it, then re-run; nothing was written.`,
+    );
+  }
+  const scripts = asMap(theirs["scripts"]);
+  for (const [name, ours] of Object.entries(asMap((JSON.parse(rendered.content) as Record<string, unknown>)["scripts"]))) {
+    if (!name.startsWith("xano:") || !(name in scripts) || scripts[name] === ours) continue;
+    clashes.push({ kind: "script", name, theirs: String(scripts[name]), ours: String(ours) });
+  }
+  return clashes;
+}
+
+/** One {@link Clash}, as a refusal or a `--force` listing names it. */
+export function describeClash(clash: Clash): string {
+  switch (clash.kind) {
+    case "dir":
+    case "file":
+      return `${clash.path} already exists`;
+    case "script":
+      return `package.json script "${clash.name}" is \`${clash.theirs}\`; init's is \`${clash.ours}\``;
+  }
+}
+
+/** `value` as a string-keyed map, or an empty one when it is not an object. */
+function asMap(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {};
 }
 
 /**
@@ -384,14 +561,24 @@ async function install(targetDir: string, reported: readonly string[]): Promise<
   return "failed";
 }
 
+/** Whether `path` is a symlink. `lstat`, not `existsSync`: a dangling link reads as absent and would be written through. */
+function linked(path: string): boolean {
+  return lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() === true;
+}
+
 /**
  * A symlinked AGENTS.md usually points at instructions shared across repos;
  * writing through it would put this project's brief into all of them.
- * `lstat`, not `existsSync`: a dangling link reads as absent and would be written through.
  */
 function agentsMdLinked(targetDir: string): boolean {
-  return lstatSync(join(targetDir, AGENTS_MD_PATH), { throwIfNoEntry: false })?.isSymbolicLink() === true;
+  return linked(join(targetDir, AGENTS_MD_PATH));
 }
+
+/**
+ * The project files init merges a block into rather than owns. Like AGENTS.md,
+ * a symlinked one points at a file other projects share, so it is left alone.
+ */
+const LINK_SKIPPED_MERGES: ReadonlySet<string> = new Set([".gitignore", ".gitattributes"]);
 
 /**
  * The `AGENTS.md` a full write puts in `targetDir` — the managed brief upserted
@@ -410,17 +597,94 @@ export function plannedAgentsMd(
     version: opts.sdkVersion,
     cli: projectFileCli(targetDir, manager),
     sdkDir: projectSdkDir(targetDir, manager),
-    frontend: {
-      label: opts.frontend.label,
-      section: opts.frontend.agentGuidanceSection(opts.theme?.icons),
-      theme: opts.theme,
-    },
+    // `null` renders the brief with no frontend slots.
+    frontend:
+      opts.frontend === null
+        ? null
+        : {
+            label: opts.frontend.label,
+            section: opts.frontend.agentGuidanceSection(opts.theme?.icons),
+            theme: opts.theme,
+          },
   });
   // Upsert rather than overwrite: `--force` can point this at a directory
   // that already holds a hand-written AGENTS.md, and the user's own notes
   // are not ours to discard just because we have guidance to add.
   const existing = existsSync(agentsMdPath) ? readFileSync(agentsMdPath, "utf8") : null;
   return { path: AGENTS_MD_PATH, content: upsertManagedBlock(existing, rendered) };
+}
+
+
+/**
+ * The agent MCP configs a full write puts in `targetDir`: each declares the
+ * {@link MCP_SERVER_NAME} server, which launches `xanosdk local mcp --stdio`
+ * — no url and no token, since a restarted engine changes both.
+ *
+ * Merged by key, never rewritten: a config that declares other servers keeps
+ * them, in the project's own indentation and line endings. One that already
+ * declares this server is left alone (its args are the developer's choice),
+ * and so is one that is not JSON, with the block to add by hand on stderr —
+ * neither is a clash for `--force` to settle. Written alongside `AGENTS.md`
+ * and skipped with it, under `--no-agents-md` / `--ai none`.
+ */
+export function plannedMcpConfigs(
+  targetDir: string,
+  opts: Pick<ScaffoldOptions, "agentsMd">,
+  platform: NodeJS.Platform = process.platform,
+): ScaffoldFile[] {
+  if (!opts.agentsMd) return [];
+  const manager = detectInstallRoot(targetDir).manager;
+  const planned: ScaffoldFile[] = [];
+  for (const config of MCP_CONFIGS) {
+    const server = mcpServerCommand(targetDir, manager, {
+      platform,
+      ...(config.workspaceFolder === undefined ? {} : { workspaceFolder: config.workspaceFolder }),
+    });
+    const full = join(targetDir, config.path);
+    // The leaf or the directory it sits in (`.cursor/`): either may point at a
+    // config other projects share. Not the project itself, which a symlink may
+    // well reach and which is this project's own.
+    const parent = dirname(config.path);
+    if (linked(full) || (parent !== "." && linked(join(targetDir, parent)))) {
+      warn(`${config.path} is a symlink — left it and its target untouched.`, "merge.symlink");
+      continue;
+    }
+    if (!existsSync(full)) {
+      planned.push({ path: config.path, content: `${JSON.stringify({ mcpServers: { [MCP_SERVER_NAME]: server } }, null, 2)}\n` });
+      continue;
+    }
+    const existing = readFileSync(full, "utf8");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(existing);
+    } catch {
+      parsed = undefined;
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      info(
+        `${config.path} is not valid JSON — left it alone. To connect agents to the Xano Engine, add this to its "mcpServers":\n` +
+          `  "${MCP_SERVER_NAME}": ${JSON.stringify(server)}`,
+      );
+      continue;
+    }
+    const project = parsed as Record<string, unknown>;
+    const declared = project["mcpServers"];
+    if (declared !== undefined && (typeof declared !== "object" || declared === null || Array.isArray(declared))) {
+      info(
+        `${config.path} has an "mcpServers" that is not an object — left it alone. To connect agents to the Xano Engine, add this to it:\n` +
+          `  "${MCP_SERVER_NAME}": ${JSON.stringify(server)}`,
+      );
+      continue;
+    }
+    const servers = asMap(declared);
+    if (MCP_SERVER_NAME in servers) {
+      detail(`${config.path} already declares ${MCP_SERVER_NAME} — left it as it is.`);
+      continue;
+    }
+    project["mcpServers"] = { ...servers, [MCP_SERVER_NAME]: server };
+    planned.push({ path: config.path, content: jsonLike(existing, project) });
+  }
+  return planned;
 }
 
 /**
@@ -466,6 +730,7 @@ export async function scaffoldProject(opts: ScaffoldOptions): Promise<ScaffoldRe
   if (mode === "full") {
     const agents = plannedAgentsMd(targetDir, opts);
     if (agents !== undefined) files.push(agents);
+    files.push(...plannedMcpConfigs(targetDir, opts));
     // A previous tree's files would survive an in-place overwrite and stay inside
     // the root tsconfig's `include`, so `npm run build` would typecheck orphans
     // importing symbols the new barrel no longer exports.
@@ -480,14 +745,20 @@ export async function scaffoldProject(opts: ScaffoldOptions): Promise<ScaffoldRe
       : files;
 
   mkdirSync(targetDir, { recursive: true });
+  const written: string[] = [];
   for (const file of writing) {
-    writeFile(targetDir, file, opts.mergePackageJson === true);
+    if (LINK_SKIPPED_MERGES.has(file.path) && linked(join(targetDir, file.path))) {
+      warn(`${file.path} is a symlink — left it and its target untouched.`, "merge.symlink");
+      continue;
+    }
+    writeFile(targetDir, file, opts.mergePackageJson, opts.overrideScripts);
     detail(file.path);
+    written.push(file.path);
   }
   success(
     mode === "refresh-xano"
       ? `Refreshed ${XANO_DIR}/ — ${writing.length} files (the rest of the project was left alone)`
-      : `Wrote ${writing.length} files`,
+      : `Wrote ${written.length} files`,
   );
 
   // A refresh into a project whose dependencies are already installed has
@@ -500,7 +771,7 @@ export async function scaffoldProject(opts: ScaffoldOptions): Promise<ScaffoldRe
       ? "already-installed"
       : await install(targetDir, opts.reportedNpmFailures ?? []);
 
-  return { mode, written: writing.map((f) => f.path), install: outcome };
+  return { mode, written, install: outcome };
 }
 
 /** Resolve a target-directory argument to an absolute path. */

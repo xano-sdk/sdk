@@ -138,6 +138,7 @@ import { LocalFileNotFoundError } from "./bundle-input.js";
 import { inCredentialScope, lastResolvedAuth, pinnedWorkspaceMissed } from "../util/last-credential.js";
 import { readEnvVar } from "../util/env.js";
 import { expandHome } from "../util/home-path.js";
+import { holdsProjectManifest } from "../util/project-root.js";
 import { allLandings, getEnvironment, readEphemeralState, type EnvScope } from "../deploy/ephemeral-state.js";
 import { isExpired } from "../deploy/ephemeral.js";
 import { readTrackedBackend } from "./tracked-backend.js";
@@ -433,6 +434,13 @@ export interface ParsedArgs {
   allWorkspaces: boolean;
   /** `impersonate --guest`/`-g`: mint a read-only guest session (browse only). */
   guest: boolean;
+  /** `local mcp --stdio`: run as an MCP stdio server bridging to the engine, instead of printing details. */
+  stdio: boolean;
+  /**
+   * `local mcp --project <dir>`: the project whose engine to reach, for an agent
+   * that launches the bridge somewhere else (Cursor passes its workspace folder).
+   */
+  project: string | undefined;
   /** `impersonate --url-only`/`-u`: print the dashboard URL instead of opening a browser. */
   urlOnly: boolean;
   /** `marketplace details --prompt`: print the add-on's agent prompt alone, for piping. */
@@ -490,8 +498,8 @@ export interface ParsedArgs {
   from: string | undefined;
   /**
    * `init` `--framework <id>`: which frontend to scaffold
-   * (`react`/`svelte`). Undefined = prompt in a TTY, else the default.
-   * Validated in `frontend-presets.ts`, not at parse time.
+   * (`react`/`svelte`, or `none` for the backend only). Undefined = prompt in
+   * a TTY, else the default. Validated in `frontend-resolve.ts`, not at parse time.
    */
   framework: string | undefined;
   /**
@@ -573,6 +581,11 @@ export interface ParsedArgs {
    * one that isn't, or preview without being prompted.
    */
   dryRun: boolean;
+  /**
+   * `agent-skill` `--agent <id>` (repeatable): the agents to act for instead of
+   * the detected ones. Validated in `agent-skill-command.ts`.
+   */
+  agent: string[];
   /**
    * `deploy --to … --prune`: also delete objects this project landed on the target and
    * no longer defines. Without it a merge only adds and updates, so
@@ -788,6 +801,7 @@ const NOUN_COMMANDS = new Set([
   "test",
   "release",
   "tenant",
+  "agent-skill",
 ]);
 
 /**
@@ -1039,6 +1053,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let paste = false;
   let allWorkspaces = false;
   let guest = false;
+  let stdio = false;
+  let project: string | undefined;
   let urlOnly = false;
   let prompt = false;
   let port: number | undefined;
@@ -1074,6 +1090,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let report: string | undefined;
   let noDevEnv = false;
   let dryRun = false;
+  const agent: string[] = [];
   let prune = false;
   let resetData = false;
   let seed = false;
@@ -1487,6 +1504,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
       engineVersion = value;
     } else if (arg === "--all") {
       all = true;
+    } else if (arg === "--stdio") {
+      stdio = true;
+    } else if (arg === "--project") {
+      project = requireValue(arg);
+    } else if (arg.startsWith("--project=")) {
+      project = attachedValue(arg, "--project=");
     } else if (arg === "--all-workspaces") {
       allWorkspaces = true;
     } else if (arg === "--guest" || arg === "-g") {
@@ -1621,6 +1644,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       requireMicroservices = true;
     } else if (arg === "--dry-run") {
       dryRun = true;
+    } else if (arg === "--agent" || arg.startsWith("--agent=")) {
+      agent.push(arg === "--agent" ? requireValue(arg) : attachedValue(arg, "--agent="));
     } else if (arg === "--prune") {
       // A real flag on `deploy` now, where it scopes the merge `--to` performs.
       // It was scoped to the retired `release` verb precisely so that a bare
@@ -1955,6 +1980,27 @@ export function parseArgs(argv: string[]): ParsedArgs {
       "it takes no engine version. `xanosdk --version` (as the first argument) prints the CLI's own.",
     );
   }
+  if (stdio) {
+    refuseUnlessDeclared(
+      "stdio",
+      "--stdio",
+      "only `xanosdk local mcp --stdio` runs as an MCP server, the one a coding agent launches.",
+    );
+    if (json) {
+      throw new UsageError(
+        "`--stdio` and `--json` ask for different things on stdout: `--stdio` speaks MCP to a coding agent, " +
+          "`--json` prints the connection details once. Drop one.",
+        { helpFor: helpTargetFor(command, subcommand) },
+      );
+    }
+  }
+  if (project !== undefined) {
+    refuseUnlessDeclared(
+      "project",
+      "--project",
+      "only `xanosdk local mcp` takes it, for an agent that launches the bridge outside the project.",
+    );
+  }
   if (all) {
     refuseUnlessDeclared(
       "all",
@@ -2218,6 +2264,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     paste,
     allWorkspaces,
     guest,
+    stdio,
+    project,
     urlOnly,
     prompt,
     port,
@@ -2250,6 +2298,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     report,
     noDevEnv,
     dryRun,
+    agent,
     prune,
     resetData,
     seed,
@@ -2426,12 +2475,33 @@ function parseExpiresHours(raw: string | undefined): number {
  */
 async function importTsxApi(file: string): Promise<{ register: () => () => void }> {
   try {
-    const requireFromEntry = createRequire(pathToFileURL(resolve(file)));
-    const apiPath = requireFromEntry.resolve("tsx/esm/api");
+    const apiPath = tsxEsmApiPath(pathToFileURL(resolve(file)).href);
     return (await import(pathToFileURL(apiPath).href)) as { register: () => () => void };
   } catch {
     return (await import("tsx/esm/api")) as { register: () => () => void };
   }
+}
+
+/**
+ * The file `import("tsx/esm/api")` would load from `from`: the `import` branch
+ * of tsx's `./esm/api` export, not the `require` one `createRequire().resolve`
+ * picks. tsx 4.23's CommonJS build registers its loader at a path it doesn't
+ * ship, so on Node 20/22 every `.ts` entry failed with "Cannot find module
+ * …/dist/esm/api/esm/index.mjs". Falls back to the `require` resolution when the
+ * manifest doesn't name an `import` entry.
+ */
+export function tsxEsmApiPath(from: string): string {
+  const req = createRequire(from);
+  const manifest = req.resolve("tsx/package.json");
+  try {
+    const pkg = JSON.parse(readFileSync(manifest, "utf8")) as { exports?: Record<string, unknown> };
+    const api = pkg.exports?.["./esm/api"] as { import?: string | { default?: unknown } } | undefined;
+    const entry = typeof api?.import === "string" ? api.import : api?.import?.default;
+    if (typeof entry === "string") return join(dirname(manifest), entry);
+  } catch {
+    // An unreadable manifest: let `require` resolution decide below.
+  }
+  return req.resolve("tsx/esm/api");
 }
 
 /** {@link importTsxApi}, returning `undefined` instead of throwing when tsx isn't installed. */
@@ -2461,6 +2531,9 @@ async function tryImportTsxApi(file: string): Promise<{ register: () => () => vo
  * with an active loader (vitest, a bundler's dev server) happily treats it as
  * ESM, and a false "add type: module" on a file that loads fine is worse than
  * the raw loader error on a genuinely broken one.
+ *
+ * The `xano/package.json` marker `init` writes in a CommonJS host is read here
+ * like any manifest — it is the nearest one, and saying `"module"` is its job.
  */
 function entryIsCommonJs(file: string): boolean {
   const path = resolve(file);
@@ -2578,7 +2651,7 @@ export async function tsxRemedy(file: string): Promise<string> {
   const fallback = `Install it in your project (\`npm i -D tsx\`) or precompile the file to .js first.`;
   for (let dir = dirname(resolve(file)); ; dir = dirname(dir)) {
     const manifest = join(dir, "package.json");
-    if (existsSync(manifest)) {
+    if (holdsProjectManifest(dir)) {
       let pkg: Record<string, unknown>;
       try {
         pkg = JSON.parse(readFileSync(manifest, "utf8")) as Record<string, unknown>;
@@ -2601,7 +2674,7 @@ export async function tsxRemedy(file: string): Promise<string> {
 function hasPackageJsonAbove(file: string): boolean {
   let dir = dirname(resolve(file));
   for (;;) {
-    if (existsSync(join(dir, "package.json"))) return true;
+    if (holdsProjectManifest(dir)) return true;
     const parent = dirname(dir);
     if (parent === dir) return false;
     dir = parent;
@@ -3988,7 +4061,7 @@ const PATHLESS_VERBS: Readonly<Record<string, ReadonlySet<string>>> = {
   ephemeral: new Set(["list", "get", "delete"]),
   tenant: new Set(["list", "get", "delete", "details"]),
   release: new Set(["list", "show", "delete"]),
-  "local": new Set(["token", "stop"]),
+  "local": new Set(["token", "stop", "mcp"]),
   test: new Set(["list", "run", "run-all"]),
 };
 
@@ -4298,6 +4371,13 @@ async function dispatch(rawArgv: string[]): Promise<void> {
     }
     return runCompletionCommand(shell);
   }
+  if (command === "agent-skill") {
+    // Node-only (it writes into the agents' own directories); lazily imported
+    // like the other Node-only command modules. Runs where it is typed: it
+    // acts on the user's home, not on a project.
+    const { runAgentSkillCommand } = await import("./agent-skill-command.js");
+    return runAgentSkillCommand(args);
+  }
   if (command === "upgrade") {
     // Node-only (the npm spawn plus the project reconciliation reach for
     // node:fs/child_process); lazily imported like the other Node-only commands
@@ -4357,8 +4437,8 @@ async function dispatch(rawArgv: string[]): Promise<void> {
     const { runLocalEngineCommand } = await import("./local-engine-command.js");
     // The verbs that read this project's engine record or pin; `list` and
     // `cache` are the machine's, and run where they are typed.
-    const project = ["token", "stop", "update"].includes(args.subcommand ?? "");
-    return project ? atProjectRoot(args, runLocalEngineCommand) : runLocalEngineCommand(args);
+    const readsProject = ["token", "stop", "update", "mcp"].includes(args.subcommand ?? "");
+    return readsProject ? atProjectRoot(args, runLocalEngineCommand) : runLocalEngineCommand(args);
   }
   if (command === "env") {
     if (args.subcommand === "set" || args.subcommand === "unset") {
@@ -4795,7 +4875,7 @@ export function nearestLockPath(file: string): string {
     if (existsSync(candidate)) return candidate;
     // The project's root is as far as a def's own workspace can be; walking past
     // a package.json would adopt some other project's identities.
-    if (existsSync(join(dir, "package.json"))) return join(start, "xano.lock");
+    if (holdsProjectManifest(dir)) return join(start, "xano.lock");
     const parent = dirname(dir);
     if (parent === dir) return join(start, "xano.lock");
     dir = parent;
@@ -5162,7 +5242,7 @@ function withPinnedGuid(artifact: string, def: { guid?: unknown }): string {
 function emitProjectDir(emit: string, entry: string): string {
   if (emit !== "-") {
     const root = projectRootFrom(dirname(resolve(emit)));
-    if (existsSync(join(root, "package.json"))) return root;
+    if (holdsProjectManifest(root)) return root;
   }
   return projectRootFrom(dirname(resolve(entry)));
 }

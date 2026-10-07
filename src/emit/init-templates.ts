@@ -21,7 +21,15 @@
 import type { FrontendPreset, LandingContent } from "./frontend-presets.js";
 import type { PackageManager } from "./package-manager.js";
 import type { ProjectCli } from "./invocation.js";
-import { blockVersion, composeBlock, gitattributesSpec, htmlDialect, upsertBlock, type BlockSpec } from "./managed-blocks.js";
+import {
+  blockVersion,
+  composeBlock,
+  gitattributesSpec,
+  gitignoreSpec,
+  htmlDialect,
+  upsertBlock,
+  type BlockSpec,
+} from "./managed-blocks.js";
 import { decodeMarkerWith } from "./decode-record.js";
 import {
   colorTokens,
@@ -89,9 +97,149 @@ export function sdkDep(sdkVersion: string): string {
   return `>=${sdkVersion} <${ceiling}`;
 }
 
-/** A copy of a string map with its keys in npm's own order (`localeCompare`, "en"). */
-function sortedKeys(map: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(Object.entries(map).sort(([a], [b]) => a.localeCompare(b, "en")));
+/** npm's own key order: `localeCompare`, "en". */
+const npmKeyOrder = (a: string, b: string): number => a.localeCompare(b, "en");
+
+/** A copy of a map with its keys in npm's own order. */
+export function sortedKeys<V>(map: Record<string, V>): Record<string, V> {
+  return Object.fromEntries(Object.entries(map).sort(([a], [b]) => npmKeyOrder(a, b)));
+}
+
+/** Whether keys are in npm's own order. */
+export function isSorted(keys: readonly string[]): boolean {
+  return keys.every((key, i) => i === 0 || npmKeyOrder(keys[i - 1]!, key) <= 0);
+}
+
+/** The command that type-checks a project with no frontend: `xano/` under its own config, then the lambdas. */
+const BACKEND_CHECK = "tsc -p xano && tsc -p xano/lambdas";
+
+/**
+ * The shared `xano:*` script contract, given the command that type-checks the
+ * project. `frontend` is whether there is a built frontend to ship beside the
+ * backend: without one, nothing builds `frontend/dist`, so the cloud deploy
+ * sends the backend alone and there is no frontend-only loop.
+ */
+function xanoScripts(check: string, frontend: boolean): Record<string, string> {
+  // The frontend takes endpoint paths from `xano/routes.gen.ts`, generated from
+  // the defs. Every script that type-checks or builds regenerates it first, so a
+  // renamed endpoint is a compile error rather than a 404. It writes nothing
+  // until the workspace has an endpoint.
+  const routes = "xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts";
+  return {
+    "xano:routes": routes,
+    // Both are prefixed with a typecheck: the export pass validates what it
+    // can see in the encoded bundle, and TypeScript validates the rest. With
+    // `tsc` on `build` alone, anyone following the documented workflow would
+    // ship with the compiler's half of the checks never run.
+    // No `--lock` on either of these: every build maintains `xano/xano.lock`
+    // by default, so the flag would be redundant here and would read as
+    // though the lock were something a project opts into. It is not — object
+    // identity derives from `(type, name)`, and without a lock a rename
+    // re-derives the guid and the engine does delete-and-recreate instead of
+    // rename-in-place, so the file has to exist before the identities matter.
+    // Scaffolds written before the default flipped still pass `--lock`, and
+    // it stays accepted for exactly that reason.
+    "xano:export": `npm run xano:routes && ${check} && xanosdk export ./xano/index.ts --out workspace.json`,
+    // The default deploy, and the tight loop: redeploy the backend to the
+    // Xano Engine on this machine. It needs no Xano account, so a fresh
+    // scaffold runs it before anyone signs in.
+    //
+    // No `--static` and no `npm run build`, and both omissions are the point
+    // rather than an economy: there is no frontend to ship here. The dev
+    // server is still serving it, and the deploy points that server at the
+    // engine on its way past, so the loop is backend-only by design.
+    // (`--static` does work on a Xano Engine, for a built frontend the
+    // engine itself should serve; this loop has none.)
+    //
+    // No `--local`: the Xano Engine is where a bare deploy goes, and the
+    // project's pinned version is what it runs. Baking an engine version or
+    // URL into a scaffolded project would ship a coordinate that is not this
+    // project's to carry.
+    //
+    // `--keep-data`, because the engine is the developer's own backend and
+    // this loop runs once per code change: each run merges into what the last
+    // one left, so rows entered through the app survive the edit. The first
+    // run, and the first after the engine restarts, replaces and seeds.
+    // `--reset` on the command line still gives a clean slate.
+    "xano:deploy": `npm run xano:routes && ${check} && xanosdk deploy ./xano/index.ts --keep-data`,
+    // The cloud deploy: backend and built frontend to an ephemeral.
+    // Runs `build` rather than `check` directly: `--static ./frontend/dist`
+    // needs that directory to EXIST, and only `vite build` writes it. Pointing
+    // the flag at a directory the script never produced meant a fresh clone
+    // running the documented command had no `dist` to ship.
+    // `build` already prefixes the same typecheck, so this is one check, not
+    // two. With no frontend, the backend goes alone.
+    "xano:deploy:ephemeral": frontend
+      ? `npm run build && xanosdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist`
+      : `npm run xano:routes && ${check} && xanosdk deploy ./xano/index.ts --ephemeral`,
+    // The frontend-only loop: rebuild and republish to the environment this
+    // project last deployed to, without recompiling or re-importing the
+    // backend. `build` runs first because publish ships only what is on disk.
+    ...(frontend ? { "xano:deploy:frontend": "npm run build && xanosdk publish ./frontend/dist" } : {}),
+    // The CI guard: fails instead of changing xano.lock, so an uncommitted
+    // identity change is caught in review rather than on a deploy. An
+    // installed toolchain module's own check rides on the same run: a module
+    // that owns a generated tree verifies it under this same flag.
+    // `--strict` fails on a stale or missing committed manifest rather than
+    // rewriting it, the same way `--frozen-lock` treats xano.lock.
+    //
+    // `export --check`, not an export to a file: a CI checkout has no
+    // `xano/.env` and no `xano/.secrets.json`, and a real export refuses a
+    // declared documentation gate it cannot supply. The check writes nothing
+    // — no bundle, no lock — so there is nothing a missing secret could clear,
+    // and it needs none. It implies `--frozen-lock`. `--strict` as the grounding
+    // tells every CI and unattended build to: a build warning is a hard
+    // failure. Env values never reach it — a declared name with no value is
+    // `""`, which only `deploy` refuses — so a checkout with no `xano/.env`
+    // passes it (a fresh scaffold and an `init --from` tree both do).
+    "xano:check": `${routes} --strict && ${check} && xanosdk export ./xano/index.ts --check --strict`,
+    // No compile step and no entry file: this runs what is DEPLOYED, so it
+    // pairs with `xano:deploy` rather than repeating its work. Exits 5 on a
+    // failing suite, which is what makes it usable as a CI gate.
+    "xano:test": "xanosdk test run-all",
+  };
+}
+
+/**
+ * The scripts a project with no frontend runs: the shared `xano:*` contract
+ * with no `vite`, no `build` and no `--static`, plus `xano:typecheck`, since
+ * there is no project-wide `typecheck` to stand in for it. Every one is a
+ * `xano:*` name, so the set merges into an existing project's `package.json`
+ * without touching a script the project already has.
+ */
+export function backendScripts(): Record<string, string> {
+  const scripts = xanoScripts(BACKEND_CHECK, false);
+  // Spread after: `xano:routes` keeps its first place, `xano:typecheck` follows it.
+  return { "xano:routes": scripts["xano:routes"]!, "xano:typecheck": `npm run xano:routes && ${BACKEND_CHECK}`, ...scripts };
+}
+
+/**
+ * The development dependencies the backend needs on its own: the compiler,
+ * Node's types for `xano/tsconfig.json`, and `tsx`, which loads `xano/index.ts`.
+ * The same ranges the frontend presets pin (a test holds them to it).
+ */
+export const BACKEND_DEV_DEPENDENCIES: Readonly<Record<string, string>> = {
+  "@types/node": "^20.19.43",
+  tsx: "^4.19.2",
+  typescript: "^6.0.3",
+};
+
+/**
+ * `package.json` for a project with no frontend: the backend's scripts and
+ * dependencies, and nothing a frontend would need.
+ */
+export function renderBackendPackageJson({ appName, sdkVersion }: TemplateVars): string {
+  const pkg = {
+    name: appName,
+    version: "0.1.0",
+    private: true,
+    type: "module",
+    scripts: backendScripts(),
+    dependencies: { "@xano/sdk": sdkDep(sdkVersion) },
+    devDependencies: sortedKeys({ ...BACKEND_DEV_DEPENDENCIES }),
+    engines: { node: `>=${NODE_MIN}` },
+  };
+  return JSON.stringify(pkg, null, 2) + "\n";
 }
 
 export function renderPackageJson(
@@ -104,11 +252,6 @@ export function renderPackageJson(
   // preset contribution rather than a literal — see FrontendPreset.checkCmd.
   // Then the lambda modules, under their own config (see renderLambdaTsconfig).
   const check = `${preset.checkCmd} && tsc -p xano/lambdas`;
-  // The frontend takes endpoint paths from `xano/routes.gen.ts`, generated from
-  // the defs. Every script that type-checks or builds regenerates it first, so a
-  // renamed endpoint is a compile error rather than a 404. It writes nothing
-  // until the workspace has an endpoint.
-  const routes = "xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts";
   const pkg = {
     name: appName,
     version: "0.1.0",
@@ -119,75 +262,7 @@ export function renderPackageJson(
       build: `npm run xano:routes && ${check} && vite build`,
       preview: "vite preview",
       typecheck: `npm run xano:routes && ${check}`,
-      "xano:routes": routes,
-      // Both are prefixed with a typecheck: the export pass validates what it
-      // can see in the encoded bundle, and TypeScript validates the rest. With
-      // `tsc` on `build` alone, anyone following the documented workflow would
-      // ship with the compiler's half of the checks never run.
-      // No `--lock` on either of these: every build maintains `xano/xano.lock`
-      // by default, so the flag would be redundant here and would read as
-      // though the lock were something a project opts into. It is not — object
-      // identity derives from `(type, name)`, and without a lock a rename
-      // re-derives the guid and the engine does delete-and-recreate instead of
-      // rename-in-place, so the file has to exist before the identities matter.
-      // Scaffolds written before the default flipped still pass `--lock`, and
-      // it stays accepted for exactly that reason.
-      "xano:export": `npm run xano:routes && ${check} && xanosdk export ./xano/index.ts --out workspace.json`,
-      // The default deploy, and the tight loop: redeploy the backend to the
-      // Xano Engine on this machine. It needs no Xano account, so a fresh
-      // scaffold runs it before anyone signs in.
-      //
-      // No `--static` and no `npm run build`, and both omissions are the point
-      // rather than an economy: there is no frontend to ship here. The dev
-      // server is still serving it, and the deploy points that server at the
-      // engine on its way past, so the loop is backend-only by design.
-      // (`--static` does work on a Xano Engine, for a built frontend the
-      // engine itself should serve; this loop has none.)
-      //
-      // No `--local`: the Xano Engine is where a bare deploy goes, and the
-      // project's pinned version is what it runs. Baking an engine version or
-      // URL into a scaffolded project would ship a coordinate that is not this
-      // project's to carry.
-      //
-      // `--keep-data`, because the engine is the developer's own backend and
-      // this loop runs once per code change: each run merges into what the last
-      // one left, so rows entered through the app survive the edit. The first
-      // run, and the first after the engine restarts, replaces and seeds.
-      // `--reset` on the command line still gives a clean slate.
-      "xano:deploy": `npm run xano:routes && ${check} && xanosdk deploy ./xano/index.ts --keep-data`,
-      // The cloud deploy: backend and built frontend to an ephemeral.
-      // Runs `build` rather than `check` directly: `--static ./frontend/dist`
-      // needs that directory to EXIST, and only `vite build` writes it. Pointing
-      // the flag at a directory the script never produced meant a fresh clone
-      // running the documented command had no `dist` to ship.
-      // `build` already prefixes the same typecheck, so this is one check, not
-      // two.
-      "xano:deploy:ephemeral": `npm run build && xanosdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist`,
-      // The frontend-only loop: rebuild and republish to the environment this
-      // project last deployed to, without recompiling or re-importing the
-      // backend. `build` runs first because publish ships only what is on disk.
-      "xano:deploy:frontend": "npm run build && xanosdk publish ./frontend/dist",
-      // The CI guard: fails instead of changing xano.lock, so an uncommitted
-      // identity change is caught in review rather than on a deploy. An
-      // installed toolchain module's own check rides on the same run: a module
-      // that owns a generated tree verifies it under this same flag.
-      // `--strict` fails on a stale or missing committed manifest rather than
-      // rewriting it, the same way `--frozen-lock` treats xano.lock.
-      //
-      // `export --check`, not an export to a file: a CI checkout has no
-      // `xano/.env` and no `xano/.secrets.json`, and a real export refuses a
-      // declared documentation gate it cannot supply. The check writes nothing
-      // — no bundle, no lock — so there is nothing a missing secret could clear,
-      // and it needs none. It implies `--frozen-lock`. `--strict` as the grounding
-      // tells every CI and unattended build to: a build warning is a hard
-      // failure. Env values never reach it — a declared name with no value is
-      // `""`, which only `deploy` refuses — so a checkout with no `xano/.env`
-      // passes it (a fresh scaffold and an `init --from` tree both do).
-      "xano:check": `${routes} --strict && ${check} && xanosdk export ./xano/index.ts --check --strict`,
-      // No compile step and no entry file: this runs what is DEPLOYED, so it
-      // pairs with `xano:deploy` rather than repeating its work. Exits 5 on a
-      // failing suite, which is what makes it usable as a CI gate.
-      "xano:test": "xanosdk test run-all",
+      ...xanoScripts(check, true),
       // Framework-owned scripts, last so a preset can add to the set but the
       // shared xano:* contract above stays the same in every scaffold.
       ...preset.extraScripts,
@@ -267,6 +342,40 @@ export function renderTsconfig(preset: FrontendPreset): string {
   return JSON.stringify(tsconfig, null, 2) + "\n";
 }
 
+/** Where a project with no frontend keeps the config `xano/` type-checks under. */
+export const BACKEND_TSCONFIG_PATH = "xano/tsconfig.json";
+
+/**
+ * `xano/tsconfig.json` — the config `xano/` type-checks under in a project with
+ * no frontend (`tsc -p xano`).
+ *
+ * It lives inside `xano/` rather than at the root so that adding a backend to
+ * an existing project never touches that project's own `tsconfig.json`, and a
+ * new backend-only project has one shape with it. The compiler options are the
+ * root config's minus the frontend's (`vite/client`). The lambda modules are
+ * excluded: they check under `xano/lambdas/tsconfig.json`, which extends this.
+ */
+export function renderBackendTsconfig(): string {
+  const tsconfig = {
+    compilerOptions: {
+      target: "ES2022",
+      lib: ["ES2022", "DOM", "DOM.Iterable"],
+      module: "ESNext",
+      moduleResolution: "bundler",
+      strict: true,
+      noEmit: true,
+      esModuleInterop: true,
+      skipLibCheck: true,
+      resolveJsonModule: true,
+      isolatedModules: true,
+      types: ["node"],
+    },
+    include: ["**/*.ts"],
+    exclude: ["lambdas"],
+  };
+  return JSON.stringify(tsconfig, null, 2) + "\n";
+}
+
 /** The package entry `xano/lambdas/tsconfig.json` loads the lambda globals through. */
 export const LAMBDA_GLOBALS_TYPES = "@xano/sdk/lambda-globals";
 
@@ -283,9 +392,11 @@ export const LAMBDA_GLOBALS_TYPES = "@xano/sdk/lambda-globals";
  * the config build with no lambda written yet: tsc refuses a config whose
  * `include` matches nothing unless `files` is present.
  */
-export function renderLambdaTsconfig(): string {
+export function renderLambdaTsconfig(base: "project" | "backend" = "project"): string {
   const tsconfig = {
-    extends: "../../tsconfig.json",
+    // A project with no frontend has no root tsconfig: `xano/tsconfig.json` is
+    // the config the backend checks under, and the lambdas build on that.
+    extends: base === "backend" ? "../tsconfig.json" : "../../tsconfig.json",
     // No DOM and no node types: a lambda body runs in neither.
     compilerOptions: { lib: ["ES2022"], types: [LAMBDA_GLOBALS_TYPES] },
     files: [],
@@ -420,6 +531,35 @@ ${framework}
 # across renames and environments. Every build writes it. Commit it — ignoring
 # it means each build mints identities that are thrown away and re-invented.
 `;
+}
+
+/**
+ * The ignore rules an existing project gains, as a managed block for
+ * {@link gitignoreSpec}: what the backend writes and must never be committed,
+ * anchored to `xano/` and the root so none of the project's own paths change
+ * status. `node_modules/` because a project that had no `package.json` gets
+ * one, and its install, from this run.
+ */
+export function renderGitignoreBlock(version: string): string {
+  return composeBlock(
+    gitignoreSpec(),
+    [
+      "# What the Xano backend writes. xano/ itself, and xano/xano.lock, are committed.",
+      "node_modules/",
+      "/workspace.json",
+      "/.xano/",
+      "xano/.env",
+      "xano/.env.tmp-*",
+      "xano/.secrets.json",
+      "xano/.secrets.json.tmp-*",
+    ],
+    version,
+  );
+}
+
+/** An existing `.gitignore` (or none) with {@link renderGitignoreBlock} spliced in. */
+export function mergeGitignore(existing: string | null, version: string): string {
+  return upsertBlock(existing, gitignoreSpec(), renderGitignoreBlock(version)).text;
 }
 
 /**
@@ -738,6 +878,73 @@ function renderReadmeDescriptionSlot(appName: string): string {
   return `_Describe ${appName} here: what it does and who it is for._`;
 }
 
+/** How the Xano Engine behaves, shared by every scaffolded README. */
+const README_ENGINE_BULLETS = `- **It works on a fresh machine with nothing set.** The first run downloads the latest
+  engine once per machine and pins its version in \`package.json\`. Commit that change, so
+  everyone on the project runs the same engine.
+- **It keeps your table rows across redeploys** (\`--keep-data\`). The first run seeds and
+  later runs merge your changes in without re-seeding. Rows survive only in tables and columns that keep
+  their names (a rename drops the old one with its rows), and only while the engine runs. An
+  engine update or restart starts it empty and the next run seeds again.
+  \`npm run xano:deploy -- --reset\` gives a clean, re-seeded slate.
+- **Updates are yours to take.** When a newer engine ships, a deploy offers it and never
+  applies it without a yes. \`npx xanosdk local update\` moves the pin on purpose,
+  and \`npx xanosdk local cache clear\` reclaims the disk space. To try another engine
+  without moving the pin, export \`XANOSDK_ENGINE_OVERRIDE\` with a version (\`v0.1.5\`)
+  or an engine archive path.
+- **The rest of the CLI follows.** After a local deploy, \`npm run xano:test\`,
+  \`npx xanosdk tables\` and \`npx xanosdk status\` reach the engine with no flag.
+  \`npx xanosdk local stop <name>\` shuts it down.`;
+
+/** The README's lock section, shared by the scaffold READMEs that author a backend. */
+const README_LOCK_SECTION = `## \`xano.lock\` — commit it
+
+Object identity derives from \`(type, name)\`, so a rename would otherwise change
+an object's guid and the engine would **delete and recreate** it rather than
+renaming it in place — losing its rows on a record-preserving import.
+[\`xano/xano.lock\`](xano/xano.lock) freezes each guid and each API group's
+canonical slug, so renames and re-deploys keep the same identities (and the same
+public URLs).
+
+Every build writes it — no flag — and it **must be committed**. Ignoring it means
+each build mints identities and public URLs that are thrown away and re-invented
+next time. If you release to a workspace that already exists, adopt what it
+already serves first with \`npx xanosdk lock import <live-bundle.json> --lock=xano/xano.lock\`;
+that is also the recovery path once identities have drifted.
+
+\`\`\`bash
+npm run xano:check      # CI: fail on ANY build warning (it runs --strict), if the export
+                        # would change xano.lock, or if the lock carries an entry no
+                        # object matches — writes nothing and needs no secrets, so a
+                        # fresh clone runs it as-is
+\`\`\`
+
+To rename an object: rename it in code and run \`npm run xano:export\`. Only if it
+warns of an orphaned entry, run the \`npx xanosdk lock rename <kind> <old> <new>\` it prints, then
+export again. Every \`lock\` subcommand finds \`xano/xano.lock\` from the project entry, as
+\`export\` does — \`--entry=<file>\` names another entry, \`--lock=<path>\` the lock itself.`;
+
+/** The README's add-ons section, shared by the scaffold READMEs that author a backend. */
+const README_ADD_ONS_SECTION = `## Add-ons
+
+Xano SDK is composable with other \`@xano-sdk/*\` packages:
+
+- **[\`@xano-sdk/auth\`](https://www.npmjs.com/package/@xano-sdk/auth)** — turnkey
+  authentication (user/login/signup tables and endpoints). Install it with
+  \`npx xanosdk marketplace install @xano-sdk/auth\`, then register it in
+  \`xano/index.ts\`. Authentication only — **not** authorization: it has no
+  roles, permissions, or route guards, and its tokens carry no role claim.
+  Enforce roles off the caller's row with \`@xano/sdk\`: spread
+  \`...guard.role(userTable, "admin")\` into the endpoint's stack.
+- More \`@xano-sdk/*\` packages register onto the same workspace. This list
+  does not update itself — run \`npx xanosdk marketplace list\` for the live
+  catalogue, \`npx xanosdk marketplace search <words>\` to narrow it, and
+  \`npx xanosdk marketplace details <package>\` to see what an add-on installs and
+  how to register it. All three work before you log in.
+
+None of these ship with the scaffold. Install one only when you need it — an
+add-on you never register is weight in \`package.json\` for nothing.`;
+
 export function renderReadme(
   { appName, install, sdkVersion }: TemplateVars,
   preset: FrontendPreset,
@@ -775,22 +982,7 @@ It prints the backend URL, a link that opens Xano's visual builder on the engine
 points \`npm run dev\` at it through \`.env.local\` (restart the dev server if it was already
 running).
 
-- **It works on a fresh machine with nothing set.** The first run downloads the latest
-  engine once per machine and pins its version in \`package.json\`. Commit that change, so
-  everyone on the project runs the same engine.
-- **It keeps your table rows across redeploys** (\`--keep-data\`). The first run seeds and
-  later runs merge your changes in without re-seeding. Rows survive only in tables and columns that keep
-  their names (a rename drops the old one with its rows), and only while the engine runs. An
-  engine update or restart starts it empty and the next run seeds again.
-  \`npm run xano:deploy -- --reset\` gives a clean, re-seeded slate.
-- **Updates are yours to take.** When a newer engine ships, a deploy offers it and never
-  applies it without a yes. \`npx xanosdk local update\` moves the pin on purpose,
-  and \`npx xanosdk local cache clear\` reclaims the disk space. To try another engine
-  without moving the pin, export \`XANOSDK_ENGINE_OVERRIDE\` with a version (\`v0.1.5\`)
-  or an engine archive path.
-- **The rest of the CLI follows.** After a local deploy, \`npm run xano:test\`,
-  \`npx xanosdk tables\` and \`npx xanosdk status\` reach the engine with no flag.
-  \`npx xanosdk local stop <name>\` shuts it down.
+${README_ENGINE_BULLETS}
 
 ## Deploy to Xano's cloud
 
@@ -822,32 +1014,7 @@ The other scripts:
   ./xano/index.ts --test\` does both in one step.
 - \`npm run xano:export\` compiles the backend to \`workspace.json\` (don't commit it).
 
-## \`xano.lock\` — commit it
-
-Object identity derives from \`(type, name)\`, so a rename would otherwise change
-an object's guid and the engine would **delete and recreate** it rather than
-renaming it in place — losing its rows on a record-preserving import.
-[\`xano/xano.lock\`](xano/xano.lock) freezes each guid and each API group's
-canonical slug, so renames and re-deploys keep the same identities (and the same
-public URLs).
-
-Every build writes it — no flag — and it **must be committed**. Ignoring it means
-each build mints identities and public URLs that are thrown away and re-invented
-next time. If you release to a workspace that already exists, adopt what it
-already serves first with \`npx xanosdk lock import <live-bundle.json> --lock=xano/xano.lock\`;
-that is also the recovery path once identities have drifted.
-
-\`\`\`bash
-npm run xano:check      # CI: fail on ANY build warning (it runs --strict), if the export
-                        # would change xano.lock, or if the lock carries an entry no
-                        # object matches — writes nothing and needs no secrets, so a
-                        # fresh clone runs it as-is
-\`\`\`
-
-To rename an object: rename it in code and run \`npm run xano:export\`. Only if it
-warns of an orphaned entry, run the \`npx xanosdk lock rename <kind> <old> <new>\` it prints, then
-export again. Every \`lock\` subcommand finds \`xano/xano.lock\` from the project entry, as
-\`export\` does — \`--entry=<file>\` names another entry, \`--lock=<path>\` the lock itself.
+${README_LOCK_SECTION}
 
 ## The one contract
 
@@ -876,25 +1043,82 @@ ${preset.readmeFrontendSection(choice.icons)}
 
 ${renderReadmeThemingSection(choice)}
 
-## Add-ons
+${README_ADD_ONS_SECTION}
 
-Xano SDK is composable with other \`@xano-sdk/*\` packages:
+${renderReadmeBuiltWith(sdkVersion)}
+`;
+}
 
-- **[\`@xano-sdk/auth\`](https://www.npmjs.com/package/@xano-sdk/auth)** — turnkey
-  authentication (user/login/signup tables and endpoints). Install it with
-  \`npx xanosdk marketplace install @xano-sdk/auth\`, then register it in
-  \`xano/index.ts\`. Authentication only — **not** authorization: it has no
-  roles, permissions, or route guards, and its tokens carry no role claim.
-  Enforce roles off the caller's row with \`@xano/sdk\`: spread
-  \`...guard.role(userTable, "admin")\` into the endpoint's stack.
-- More \`@xano-sdk/*\` packages register onto the same workspace. This list
-  does not update itself — run \`npx xanosdk marketplace list\` for the live
-  catalogue, \`npx xanosdk marketplace search <words>\` to narrow it, and
-  \`npx xanosdk marketplace details <package>\` to see what an add-on installs and
-  how to register it. All three work before you log in.
+/**
+ * The README for a project with no frontend: the same backend sections as
+ * {@link renderReadme}, with no frontend, no dev server and no theming. The
+ * `## Built with` footer is the same managed block.
+ */
+export function renderBackendReadme({ appName, install, sdkVersion }: TemplateVars): string {
+  return `# ${appName}
 
-None of these ship with the scaffold. Install one only when you need it — an
-add-on you never register is weight in \`package.json\` for nothing.
+${XANO_BADGE}
+
+${renderReadmeDescriptionSlot(appName)}
+
+The backend under [\`xano/\`](xano/) is TypeScript, authored with the
+[Xano SDK](https://github.com/xano-sdk/sdk) and running on [Xano](https://xano.com). It runs
+on your machine as the **Xano Engine** and ships to Xano's cloud with the same command.
+
+## Quick start
+
+\`\`\`bash
+${install?.manager ?? "npm"} install${install?.ignoreWorkspace === true ? " --ignore-workspace" : ""}
+npm run xano:deploy   # run the backend on the Xano Engine, on this machine
+\`\`\`
+
+No Xano account needed. Then author your backend in [\`xano/index.ts\`](xano/index.ts),
+starting with the walkthrough in [\`xano/EXAMPLE.md\`](xano/EXAMPLE.md), and rerun
+\`npm run xano:deploy\` after each change.
+
+## Run it on your machine
+
+The Xano Engine is Xano running on your machine. \`npm run xano:deploy\` typechecks the
+backend and deploys it to the engine: no sign-in, and no network round-trip.
+It prints the backend URL and a link that opens Xano's visual builder on the engine.
+
+${README_ENGINE_BULLETS}
+
+## Deploy to Xano's cloud
+
+\`\`\`bash
+npx xanosdk login               # once, to authenticate against your Xano account
+npm run xano:deploy:ephemeral   # typecheck, then ship the backend to an ephemeral
+\`\`\`
+
+That deploys the backend to a live **ephemeral** environment on Xano and prints its URL.
+Run it again to refresh the same environment; if it expired, a fresh one is created and
+the new URL is called out. \`npx xanosdk status\` says who you are signed in as, which
+workspace you are bound to, and which environment this project last deployed to. Your
+**workspace** is reached through a release (\`deploy --ephemeral --test\`, \`release create\`,
+\`promote\`); see the
+[deploying guide](https://github.com/xano-sdk/sdk/blob/main/guides/deploying.md).
+
+The other scripts:
+
+- \`npm run xano:test\` runs the tests the DEPLOYED environment carries — the \`tests\`
+  on a query/function/middleware and any \`workflowTest()\`. It compiles nothing, so
+  deploy first. A failing suite exits 5, distinct from a crash. \`npx xanosdk deploy
+  ./xano/index.ts --test\` does both in one step.
+- \`npm run xano:typecheck\` type-checks \`xano/\` and its lambdas.
+- \`npm run xano:export\` compiles the backend to \`workspace.json\` (don't commit it).
+
+${README_LOCK_SECTION}
+
+## Calling the backend
+
+\`npm run xano:routes\` writes \`xano/routes.gen.ts\` from the defs: every endpoint's verb,
+path (\`routePath("GET notes/{id}", { id })\`) and request type (\`RouteInputs["POST create_note"]\`).
+A client takes them from there, and response types from the query defs (\`import type\` +
+\`InferResponse\`), rather than hand-typing a URL. \`xano:check\` fails on a missing or stale
+copy — commit it. \`npx xanosdk routes xano/index.ts\` lists every endpoint's verb + path.
+
+${README_ADD_ONS_SECTION}
 
 ${renderReadmeBuiltWith(sdkVersion)}
 `;
@@ -1168,7 +1392,8 @@ export function renderCodegenReadme(
   { appName, sdkVersion }: TemplateVars,
   origin: CodegenOrigin,
   envNames: readonly string[],
-  preset: FrontendPreset,
+  // `null`: a pulled backend with no frontend around it.
+  preset: FrontendPreset | null,
 ): string {
   const secrets =
     envNames.length === 0
@@ -1205,18 +1430,30 @@ ${XANO_BADGE}
 ${renderReadmeDescriptionSlot(appName)}
 
 The backend under [\`xano/\`](xano/) is TypeScript pulled from ${describeCommittedOrigin(origin)}
-with the [Xano SDK](https://github.com/xano-sdk/sdk), and runs on [Xano](https://xano.com). The
+with the [Xano SDK](https://github.com/xano-sdk/sdk), and runs on [Xano](https://xano.com).${
+    preset === null
+      ? ""
+      : ` The
 ${preset.label} frontend under [\`frontend/\`](frontend/) is a starter — the pull carries a
-backend, not a UI.
+backend, not a UI.`
+  }
 
 ## Run it
 
 \`\`\`bash
 npm run xano:deploy                # on the Xano Engine, on this machine (no account needed)
-npm run dev                        # the starter frontend, pointed at it
-
+${
+    preset === null
+      ? ""
+      : `npm run dev                        # the starter frontend, pointed at it
+`
+  }
 npx xanosdk login                  # once, to authenticate against your Xano account
-npm run xano:deploy:ephemeral      # typecheck, build the frontend, ship both to an ephemeral
+${
+    preset === null
+      ? "npm run xano:deploy:ephemeral      # typecheck, ship the backend to an ephemeral"
+      : "npm run xano:deploy:ephemeral      # typecheck, build the frontend, ship both to an ephemeral"
+  }
 \`\`\`
 
 ## Read this before deploying
@@ -1237,7 +1474,14 @@ translate cleanly on this pull. Read it before trusting the tree.
 ${secrets}
 ## Working on it
 
-\`\`\`bash
+${
+    preset === null
+      ? `\`\`\`bash
+npm run xano:typecheck # xano/ and its lambdas
+npm run xano:export    # compile the backend to workspace.json (don't commit it)
+npm run xano:routes    # regenerate xano/routes.gen.ts: every endpoint's path and request type
+\`\`\``
+      : `\`\`\`bash
 npm run dev            # run the starter frontend
 npm run typecheck      # the whole project, both halves
 npm run xano:export    # compile the backend to workspace.json (don't commit it)
@@ -1245,7 +1489,8 @@ npm run xano:routes    # regenerate xano/routes.gen.ts: the frontend's paths and
 \`\`\`
 
 [\`frontend/src/lib/api.ts\`](frontend/src/lib/api.ts) shows the one contract: paths
-and request types from \`xano/routes.gen.ts\`, response types from the query defs in \`xano/\`.
+and request types from \`xano/routes.gen.ts\`, response types from the query defs in \`xano/\`.`
+  }
 
 ${renderReadmeBuiltWith(sdkVersion)}
 `;

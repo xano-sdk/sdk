@@ -1,27 +1,29 @@
 # The scaffolded project
 
-What `xanosdk init` writes, the two frontend presets, theming, add-ons, and the SvelteKit prerendering rules.
+What `xanosdk init` writes, the two frontend presets, a project with no frontend, adding the backend to an existing app, theming, add-ons, and the SvelteKit prerendering rules.
 
 ## init flags and add-ons
 
-`init` flags: `--framework <react|svelte>` (default: `react`), `--name <name>`
+`init` flags: `--framework <react|svelte|none>` (default: `react`; `none` writes the
+backend alone — see [No frontend, and existing apps](#no-frontend-and-existing-apps)), `--name <name>`
 (default: the folder name), `--theme <id>` / `--radius <len>` / `--dark <mode>` /
 `--font <id>` / `--font-mono <id>` / `--font-heading <id>` / `--icons <id>`
 (the look — see [Theming](#theming)), `--no-agents-md` (skip the `AGENTS.md`
 agent brief, which every coding agent reads and `init` writes by default),
 `--marketplace <pkg>` (repeatable, comma-separated; installs add-ons and
-registers them — below), `--force` (scaffold into a non-empty folder; over an
-existing project it lists the files it would overwrite and asks, `--yes` answering
-without a terminal — files it does not write are kept),
+registers them — below), `--force` (write over what clashes when adding the backend to
+a non-empty folder; it lists the files and scripts it would overwrite and asks, `--yes`
+answering without a terminal — files it does not write are kept),
 `--no-install` (skip `npm install`), `--web` (choose all of the above in a
 browser instead — see [Choosing in a browser](#choosing-in-a-browser)),
 `--from <source>` (fill `xano/` from an existing backend — any
 [backend spelling](cli.md#naming-a-backend) or a bundle path — rather than the
 starter — see [Pulling an existing workspace](codegen.md); over an existing `xano/` it lists
 what it replaces and asks, and `--yes` answers without a terminal).
-In a terminal, `init` prompts for the framework; the prompt has a default, so
-pressing enter is a valid answer. The look is never
-prompted for — it comes from the flags above, or from `--web`.
+In a terminal, `init` prompts for the framework in an empty or missing folder
+(React, Svelte, or "No frontend"); the prompt has a default, so pressing enter is a
+valid answer. A folder that already has files gets no prompt and no frontend. The look
+is never prompted for — it comes from the flags above, or from `--web`.
 The starter backend is empty but already compiles and deploys — grow it from the
 walkthrough in `xano/EXAMPLE.md`.
 
@@ -113,10 +115,59 @@ project — the mistake npm answers by silently writing to the wrong `package.js
 The package name is passed through exactly as typed, so version specifiers, tags,
 and third-party packages all work.
 
+## No frontend, and existing apps
+
+`init` reads its target directory before it writes anything. An empty or missing directory
+is a **new** project, and `--framework` decides its frontend. Any other directory is an
+**existing** project, which has its own app and gets the backend only.
+
+**A new project with `--framework none`** (or "No frontend" at the prompt) gets everything
+above except the frontend: `xano/`, a `package.json` with only the backend's scripts and
+dependencies, `.gitignore`, `.gitattributes`, the CI check, a README and `AGENTS.md`. There is
+no `frontend/` and no root `tsconfig.json`; `xano/` type-checks under its own
+`xano/tsconfig.json`, and `npm run xano:typecheck` checks it and its lambdas.
+`xano:deploy:ephemeral` deploys the backend alone, and there is no `dev`, `build` or
+`xano:deploy:frontend`.
+
+**An existing project** (any non-empty directory) gets:
+
+- `xano/`, the same starter a new project gets. When the project's `package.json` is not
+  `"type": "module"` (Next.js and `npm init -y` write one that is not), `init` also writes
+  `xano/package.json` holding only `{"type": "module"}`, so `xano/` loads as ES modules
+  without changing the project's own type.
+- The `xano:*` scripts and the backend's dependencies merged into `package.json`. The
+  project's entries win: a dependency it already has keeps its range, a script it already
+  has keeps its command, and no other key changes (an add-on's settings under `"xanosdk"`
+  aside). The file keeps its indentation and line endings. A project with no
+  `package.json` gets one holding only what the backend needs.
+- A marked block in `.gitignore` (created when missing) and in `AGENTS.md`, added or
+  refreshed in place; the rest of each file is left as it was. A symlinked `AGENTS.md` is left
+  alone, and `--no-agents-md` skips it.
+- No frontend, README, CI workflow or root `tsconfig.json`. The line-ending rule goes in
+  `xano/.gitattributes`, scoped to `xano/`, so the project's own files are not renormalized.
+
+What would be written over is a **clash**: an existing `xano/`, any other file `init` writes
+that is already there, and a `xano:*` script the project defines with a different command (the
+same command is no clash). `init` lists every clash and writes nothing; `--force` lists what it
+overwrites and asks first. A `package.json` that is not valid JSON is refused, since there is
+nothing to merge into.
+
+`--framework react` or `--framework svelte` in a non-empty directory is refused, as are the
+frontend-only flags (`--theme`, `--radius`, `--dark`, `--font`, `--font-mono`,
+`--font-heading`, `--icons`) wherever no frontend is written. After the merge, `npm run
+xano:deploy` runs the backend on the Xano Engine as it does in a new project.
+
+If the project's own root `tsconfig.json` includes every `.ts` file (Next.js's does), add
+`"xano/lambdas"` to its `exclude` before adding the first lambda: the lambda globals
+type-check only under `xano/lambdas/tsconfig.json`. `init` leaves that file alone, and the
+`AGENTS.md` it writes says the same.
+
 ## Git and CI
 
-`init` writes a `.gitattributes` and a `.github/workflows/check.yml` (`xanosdk-<dir>.yml`
-below the repository root, so moving it up never replaces another workflow).
+A new project gets a `.gitattributes` and a `.github/workflows/check.yml` (`xanosdk-<dir>.yml`
+below the repository root, so moving it up never replaces another workflow). An existing
+project gets no workflow, and its line-ending rule is scoped to `xano/`; run
+`npm run xano:check` from its own CI.
 
 The attributes file normalizes line endings, so any generated artifact the project
 commits is byte-identical on every checkout and a `--frozen-lock` check cannot fail

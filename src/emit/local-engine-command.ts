@@ -1,5 +1,5 @@
 /**
- * `xanosdk local <list|token|stop|update|cache>` — the handles
+ * `xanosdk local <list|token|mcp|stop|update|cache>` — the handles
  * that ship with `deploy --local`.
  *
  * A Xano Engine has no TTL and nothing on the server side ever reclaims it,
@@ -26,7 +26,8 @@
  * The engine's meta API accepts only its own bearer, so a suite or script that
  * calls it has no other way in. Printing it on request is the same contract as
  * a hosted `XANO_META_TOKEN` a developer copies out of their account — what
- * stays forbidden is printing it as a side effect of another verb.
+ * stays forbidden is printing it as a side effect of another verb. `mcp` reads
+ * it too, and only ever SENDS it (`local-engine-mcp-command.ts`).
  *
  * Opening one in the builder is not a verb here: `xanosdk impersonate
  * local[:name]` does it, the same verb and output as every other kind.
@@ -191,6 +192,8 @@ export async function runLocalEngineCommand(
       return runList(args, opts);
     case "token":
       return runToken(args, opts);
+    case "mcp":
+      return (await import("./local-engine-mcp-command.js")).runMcp(args, opts);
     case "stop":
       return runStop(args, opts);
     case "update":

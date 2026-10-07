@@ -57,6 +57,14 @@ export interface LocalEngine {
   loginLinkEndpoint: string;
   /** The log file the ENGINE writes (distinct from the one this SDK writes). */
   logPath: string;
+  /**
+   * Where the engine serves its MCP server for coding agents — a url, not a
+   * credential; the bearer it wants is {@link token}. Absent when the engine
+   * does not serve one (an older release, or MCP turned off), which is told
+   * apart by presence alone, never by version. Not loopback-checked here: like
+   * {@link loginLinkEndpoint}, it is checked right before the bearer follows it.
+   */
+  mcpUrl?: string;
 }
 
 /** The three spellings of "this machine, and nowhere else". */
@@ -117,6 +125,7 @@ interface RawEngine {
   sign_in_url: string;
   login_link_endpoint: string;
   log: string;
+  mcp_url: string;
 }
 
 function requireString(raw: Record<string, unknown>, key: keyof RawEngine, source: string): string {
@@ -130,6 +139,15 @@ function requireString(raw: Record<string, unknown>, key: keyof RawEngine, sourc
     );
   }
   return value;
+}
+
+/**
+ * A field an engine may leave out. Absent reads as undefined; present but not
+ * non-empty text is the same version skew a missing required field is, and
+ * refuses the same way.
+ */
+function optionalString(raw: Record<string, unknown>, key: keyof RawEngine, source: string): string | undefined {
+  return raw[key] === undefined ? undefined : requireString(raw, key, source);
 }
 
 function requireNumber(raw: Record<string, unknown>, key: keyof RawEngine, source: string): number {
@@ -161,6 +179,7 @@ function readEngine(value: unknown, source: string): LocalEngine {
     );
   }
   const raw = value as Record<string, unknown>;
+  const mcpUrl = optionalString(raw, "mcp_url", source);
   return {
     name: requireString(raw, "name", source),
     url: requireString(raw, "url", source),
@@ -170,6 +189,7 @@ function readEngine(value: unknown, source: string): LocalEngine {
     signInUrl: requireString(raw, "sign_in_url", source),
     loginLinkEndpoint: requireString(raw, "login_link_endpoint", source),
     logPath: requireString(raw, "log", source),
+    ...(mcpUrl === undefined ? {} : { mcpUrl }),
   };
 }
 
@@ -183,6 +203,8 @@ const LISTING_SOURCE = "The engine's list of running engines";
  * The loopback assertion runs here rather than at the caller because this is
  * the function every start arm goes through, and a check the caller has to
  * remember is a check that gets skipped on the arm nobody was thinking about.
+ * It covers `url` only: `mcpUrl`, like the sign-in route, is asserted where the
+ * bearer is about to follow it.
  */
 export function parseEngineHandshake(stdout: string): LocalEngine {
   let value: unknown;
