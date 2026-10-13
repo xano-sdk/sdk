@@ -978,7 +978,7 @@ starting with the walkthrough in [\`xano/EXAMPLE.md\`](xano/EXAMPLE.md), and rer
 
 The Xano Engine is Xano running on your machine. \`npm run xano:deploy\` typechecks the
 backend and deploys it to the engine: no sign-in, and no network round-trip.
-It prints the backend URL, a link that opens Xano's visual builder on the engine, and
+It prints the backend URL, a link that opens the Xano editor on the engine, and
 points \`npm run dev\` at it through \`.env.local\` (restart the dev server if it was already
 running).
 
@@ -1080,7 +1080,7 @@ starting with the walkthrough in [\`xano/EXAMPLE.md\`](xano/EXAMPLE.md), and rer
 
 The Xano Engine is Xano running on your machine. \`npm run xano:deploy\` typechecks the
 backend and deploys it to the engine: no sign-in, and no network round-trip.
-It prints the backend URL and a link that opens Xano's visual builder on the engine.
+It prints the backend URL and a link that opens the Xano editor on the engine.
 
 ${README_ENGINE_BULLETS}
 

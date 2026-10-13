@@ -8,6 +8,18 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.9 — Agents pick the right kind
+
+_2026-10-13_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.9)
+
+The docs your coding agent reads now say which kind to author for a task, not just what each kind is. An MCP server gets prompts and resources where they fit, instead of only tools. The guides also describe deploys to the Xano Engine correctly. Nothing changes at runtime.
+
+- Agents are told which kind fits each task
+- MCP servers get prompts and resources, not just tools
+- The deploy guides match the Xano Engine default
+
+---
+
 ## 1.0.8 — Deploys stop overwriting Xano edits
 
 _2026-10-13_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.8)

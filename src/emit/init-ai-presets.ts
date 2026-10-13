@@ -179,7 +179,7 @@ npm run dev            # the frontend, pointed at the engine through .env.local
 - \`npm run xano:deploy\` is the backend loop: no Xano account and no network. The first run
   downloads the engine and pins its version in \`package.json\` — commit that. It passes
   \`--keep-data\`, so rows survive redeploys (\`npm run xano:deploy -- --reset\` re-seeds). It
-  prints the backend URL and a link to Xano's visual builder on the engine, and writes
+  prints the backend URL and a link to the Xano editor on the engine, and writes
   \`VITE_XANO_HOST\` to \`.env.local\` (restart \`npm run dev\` if it was already running). Run
   it after every backend change.
 - \`npm run typecheck\` / \`npm run build\` — both halves of the project; must stay green.
@@ -254,7 +254,7 @@ npm run xano:deploy    # typecheck, then deploy the backend to the Xano Engine o
 - \`npm run xano:deploy\` is the backend loop: no Xano account and no network. The first run
   downloads the engine and pins its version in \`package.json\` — commit that. It passes
   \`--keep-data\`, so rows survive redeploys (\`npm run xano:deploy -- --reset\` re-seeds). It
-  prints the backend URL and a link to Xano's visual builder on the engine. Run it after
+  prints the backend URL and a link to the Xano editor on the engine. Run it after
   every backend change.
 - \`npm run xano:typecheck\` — \`xano/\` and its lambdas; must stay green.
 - Adding the first lambda where the root \`tsconfig.json\` includes \`xano/\`: add

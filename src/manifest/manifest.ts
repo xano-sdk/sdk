@@ -1420,11 +1420,12 @@ function renderSections(m: Manifest): RenderedSections {
   lines.push(`# ${m.name} v${m.version}`, "");
   lines.push(`> ${m.description}`, "");
   lines.push(
-    "Xano is a hosted backend platform: one WORKSPACE serves a managed PostgreSQL",
-    "database, HTTP API endpoints, background tasks, realtime websocket channels, AI",
-    "agents and MCP servers, file storage, and redis. This SDK authors that workspace in",
-    "TypeScript — typed def objects registered on a `workspace(name)` — compiled to one",
-    "importable bundle by `xanosdk export ./xano/index.ts`, shipped live by `xanosdk deploy`.",
+    "Xano is one platform to build, run and govern AI-built software: one WORKSPACE",
+    "serves a managed PostgreSQL database, HTTP APIs, background tasks, realtime",
+    "websocket channels, AI agents, MCP servers, file storage and redis. This SDK",
+    "authors it in TypeScript — typed def objects registered on a",
+    "`workspace(name)` — compiled to one importable bundle by `xanosdk export",
+    "./xano/index.ts`, shipped live by `xanosdk deploy`.",
     "",
     "Def modules execute at BUILD time only: `s.*` factories return data, and the engine",
     "runs the compiled stack per request — statements in order, a statement's `as:`",
