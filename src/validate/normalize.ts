@@ -832,10 +832,19 @@ const DEFAULT_MIDDLEWARE = { pre: [], post: [], pre_customize: false, post_custo
 /**
  * A raw-SQL statement's `context`, identified by the SQL it carries.
  *
- * Scopes the empty-`arg` drop below to the one place both spellings are known to
- * occur. `arg` is also the name of a FILTER's argument list, where an empty one
- * is written by every generation and dropping it would erase a real difference
- * between a zero-arg filter and one whose arguments went missing.
+ * Scopes the empty-`arg` drop below it to a raw-SQL statement's positional
+ * binds, where it fires before the generic key handling.
+ *
+ * A FILTER's/method's `arg` is a different key in a different place, and its
+ * empty form is now dropped on its own (the `arg` case in the recursion below).
+ * It was once left out there on the belief that an empty filter `arg` "is
+ * written by every generation", so dropping it would erase a real difference
+ * between a zero-arg filter and one whose arguments went missing. Measurement
+ * (CGO-873) disproves the first half — the SDK omits `arg` on a zero-argument
+ * filter (`to_lower`, `qf.lower()`) while the engine materializes `[]`, the
+ * exact gap that drop closes — and the second does not follow: the filter drop
+ * is empty-only and symmetric, so a filter whose arguments went missing still
+ * reads `[x]` vs `[]`/absent and stays unequal.
  */
 function isRawSqlContext(container: unknown): boolean {
   return (
@@ -2151,10 +2160,27 @@ export function normalize<T>(value: T): T {
         out[k] = {};
         continue;
       }
-      // `arg` (filter/method arguments) is numeric/string-inconsistent in the
-      // corpus (`[8]` vs `["10"]`) — the same artifact as `value`; coerce the
-      // numbers to the SDK's string form so the comparison ignores it.
+      // `arg` (filter/method arguments). Two serialization artifacts under one
+      // key:
+      //
+      //  - An EMPTY `arg: []` is the engine's materialized "no arguments". The
+      //    SDK omits the key entirely on a zero-argument filter (`to_lower`,
+      //    `qf.lower()`), so the engine's `[]` and the authored absence are the
+      //    same "no args" state — the same absent-vs-empty artifact the `filters`
+      //    / `test` / `input` envelope cases above close for their own keys. Drop
+      //    the empty form on BOTH sides so a parameterless filter round-trips
+      //    instead of failing as a byte diff (CGO-873:
+      //    `…filters[0].arg: expected (absent), got []`). The drop is empty-only
+      //    and symmetric: a filter whose arguments genuinely WENT MISSING still
+      //    reads `[x]` on the authored side and `[]`/absent on the read-back and
+      //    stays unequal, so it cannot hide a real argument difference. (A
+      //    raw-SQL statement's own positional `arg` is dropped earlier, scoped to
+      //    its context; see {@link isRawSqlContext}.)
+      //  - A populated `arg[]` is numeric/string-inconsistent in the corpus
+      //    (`[8]` vs `["10"]`) — the same artifact as `value`; coerce the numbers
+      //    to the SDK's string form so the comparison ignores it.
       if (k === "arg" && Array.isArray(v)) {
+        if (isEmptyArray(v)) continue;
         out[k] = v.map((e) => (typeof e === "number" ? String(e) : normalize(e)));
         continue;
       }

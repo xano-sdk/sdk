@@ -284,7 +284,7 @@ async function runDiff(args: ParsedArgs): Promise<void> {
     throw unansweredRead(err, "read the workspace to compare", "workspace");
   }
 
-  const { compareToLive, SETTINGS_LABEL } = await import("../deploy/live-diff.js");
+  const { SETTINGS_LABEL } = await import("../deploy/live-diff.js");
   const { codePinnedCanonicals, releaseCanonicalLock } = await import("./release-command.js");
   // The pins the release path would send. Without them every api group, toolset
   // and realtime server sits permanently in the differing set: a slug the code
@@ -293,17 +293,6 @@ async function runDiff(args: ParsedArgs): Promise<void> {
   // promised. Derived exactly as the release derives it, so the diff cannot
   // report a difference the release would not.
   const pinned = codePinnedCanonicals(local.bundle, releaseCanonicalLock(args), args.file !== undefined);
-  const result = compareToLive(
-    JSON.parse(local.bundle) as unknown,
-    live,
-    new Set(pinned.map((p) => `${p.payloadKey}:${p.name}`)),
-    // Everything, not the report's sample: a caller who ran a diff asked for the
-    // list, and a truncated one would hide the object they are looking for.
-    // The documentation token is compared as a value: this asks what the target
-    // SAYS, and the live token is the outcome of the one this project sends.
-    { sample: "all", documentation: "compare" },
-  );
-  if (!result.converged) process.exitCode = EXIT_DIFF_MISMATCH;
 
   // Which branch was read, by label, and whether it is the live one. Without
   // `--branch` the read is of whichever branch is live, and a bare "live" left
@@ -323,10 +312,10 @@ async function runDiff(args: ParsedArgs): Promise<void> {
   // Which side moved since this project and the branch last agreed. Read from
   // the baseline the last deploy, promote, pull or `init --from` recorded for
   // this branch. With none (or an unknown branch label) the lists stay empty
-  // and `baseline` is null: the comparison above is still the whole answer.
+  // and `baseline` is null: the comparison is still the whole answer.
   const { landingLockPath } = await import("./landing-record.js");
   const { readSyncBaseline, storedBranchLabel } = await import("./sync-record.js");
-  const { syncDirection } = await import("../deploy/sync-baseline.js");
+  const { directedComparison } = await import("../deploy/sync-baseline.js");
   const syncLabel = storedBranchLabel(listed, args.branch);
   const baseline =
     syncLabel === undefined
@@ -336,7 +325,16 @@ async function runDiff(args: ParsedArgs): Promise<void> {
           workspaceId: auth.workspaceId,
           branch: syncLabel,
         });
-  const direction = syncDirection(JSON.parse(local.bundle) as unknown, live, result, baseline);
+  // Everything, not the report's sample: a caller who ran a diff asked for the
+  // list, and a truncated one would hide the object they are looking for. The
+  // same reading `deploy --to workspace` refuses over (see `directedComparison`).
+  const { result, direction } = directedComparison(
+    JSON.parse(local.bundle) as unknown,
+    live,
+    new Set(pinned.map((p) => `${p.payloadKey}:${p.name}`)),
+    baseline,
+  );
+  if (!result.converged) process.exitCode = EXIT_DIFF_MISMATCH;
 
   // An agent is the primary reader of a diff, and every other verb in this
   // family answers on stdout. Emitted BEFORE the human rendering rather than

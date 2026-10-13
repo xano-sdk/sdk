@@ -8,6 +8,21 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.7 — Your coding agent gets a backend
+
+_2026-10-07_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.7)
+
+This release is about coding agents working on a Xano backend. An agent in a Xano project now reaches the Xano Engine on your machine over MCP: it can read tables and rows, seed data, and run functions and tests with nothing to configure by hand. `xanosdk init` adds a backend to an app you already have instead of refusing it, and the new `xano-backend` agent skill points agents there. The `AGENTS.md` that `init` writes now briefs an agent on a project with a backend. It also fixes `.ts` entries failing on Node 20 and 22 with tsx 4.23.
+
+- Coding agents reach the Xano Engine over MCP
+- `init` adds a backend to an app you already have
+- The `xano-backend` agent skill
+- `AGENTS.md` is a backend brief, not a command list
+- The brief's authoring example is compile-checked
+- `.ts` entries load again with tsx 4.23 on Node 20 and 22
+
+---
+
 ## 1.0.6 — Request types reach the frontend
 
 _2026-10-05_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.6)
@@ -40,7 +55,7 @@ This release makes the **Xano Engine**, the engine that runs on your machine, th
 
 ## 1.0.4 — Marketplace moves to its new catalogue
 
-_2026-10-04_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.4)
+_2026-10-03_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.4)
 
 This patch release moves `xanosdk marketplace` to the catalogue's new home. The CLI now reads modules from a new default host, `XANOSDK_MARKETPLACE_URL` works with a tenant or ephemeral base, and a module withdrawn from the marketplace is refused by `install` again. No call-site changes are needed.
 
@@ -52,7 +67,7 @@ This patch release moves `xanosdk marketplace` to the catalogue's new home. The 
 
 ## 1.0.3 — Agents and MCP servers pass preflight
 
-_2026-10-04_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.3)
+_2026-10-03_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.3)
 
 This patch release fixes `xanosdk preflight` on workspaces that have agents or MCP servers, and makes pulling an existing workspace into code more reliable. Agents and MCP servers without sign-in no longer fail the round trip. Workspaces pulled with `export`/codegen now re-export as they were stored and the generated tree typechecks, including shapes older workspaces carry.
 
@@ -66,7 +81,7 @@ This patch release fixes `xanosdk preflight` on workspaces that have agents or M
 
 ## 1.0.2 — Fixtures can pin accepted hazards
 
-_2026-10-04_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.2)
+_2026-10-03_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.2)
 
 This patch release lets a def deliberately author three shapes the engine accepts but 1.0 refused outright: an active cache with `ttl: 0`, a call passing an input its target does not declare, and a lambda body that does not parse. Each is still flagged by default, and `export --strict` still fails on it, but a fixture that pins the engine's behavior for that input can now say so.
 
@@ -78,7 +93,7 @@ This patch release lets a def deliberately author three shapes the engine accept
 
 ## 1.0.1 — Safer local-engine records
 
-_2026-10-04_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.1)
+_2026-10-03_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.1)
 
 This patch release makes the local engine's record file safe under concurrent use and removes the SDK's handling of its retired package names. If you run several local-engine deploys or stops at once, they no longer undo each other's bookkeeping.
 
@@ -90,7 +105,7 @@ This patch release makes the local engine's record file safe under concurrent us
 
 ## 1.0.0 — Xano SDK, the new name
 
-_2026-10-04_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.0)
+_2026-10-02_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.0)
 
 The SDK is now **Xano SDK**, published as `@xano/sdk` and restarting at 1.0.0. The CLI is `xanosdk`, and add-on modules ship as `@xano-sdk/*`. The earlier `@xanots/sdk` 0.0.x and `@xanots/core` 2.0.x lines are retired.
 

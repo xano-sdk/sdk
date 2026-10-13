@@ -29,7 +29,8 @@ export type ErrorCode =
   | "SDK_RELEASE_NAME_TAKEN"
   | "SDK_SEED_IN_STATIC"
   | "SDK_SHARED_SCHEMA_CHANGE"
-  | "SDK_USAGE";
+  | "SDK_USAGE"
+  | "SDK_WORKSPACE_CHANGED";
 
 /** A CLI warning: `! …` on stderr, `{ code, message }` in a `--json` document's `warnings[]`. */
 export type WarningCode =
@@ -60,6 +61,7 @@ export type WarningCode =
   | "deploy.ephemeral-write"
   | "deploy.import-failed-backup"
   | "deploy.open-no-url"
+  | "deploy.overwrite-changed"
   | "deploy.replace-wipe"
   | "deploy.rows-written"
   | "deploy.tenant-write"
@@ -361,6 +363,7 @@ export type DiagnosticCode =
   | "search.request-only-filter"
   | "seed.invalid"
   | "seed.public-seed"
+  | "stack.agent-tools-off"
   | "stack.auth-no-caller"
   | "stack.auth-null-host"
   | "stack.blank-table"

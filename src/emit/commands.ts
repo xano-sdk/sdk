@@ -589,6 +589,10 @@ export const FLAGS = {
     spec: "--allow-shared-schema-changes",
     summary: "Proceed even though table/microservice changes reach every branch",
   },
+  overwrite: {
+    spec: "--overwrite",
+    summary: "Deploy over objects changed in Xano since the last deploy or pull (see `workspace diff`)",
+  },
   "allow-branch-deletion": {
     spec: "--allow-branch-deletion",
     summary: "Acknowledge that --replace permanently deletes the workspace's other branches",
@@ -1139,6 +1143,7 @@ export const COMMANDS = {
       withToOnly("seed"),
       withToOnly("replace"),
       withToOnly("allow-shared-schema-changes"),
+      withToOnly("overwrite"),
       withToOnly("allow-branch-deletion"),
       withToOnly("branch"),
       withToOnly("set-live"),

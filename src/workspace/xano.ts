@@ -147,6 +147,7 @@ import {
   checkGuardRoleColumns,
   checkToolOutputSchema,
   checkAgentArgPlaceholders,
+  checkAgentToolsOff,
   checkAssertionsOutsideTests,
   checkAgentApiKeys,
   checkKnowledge,
@@ -1244,6 +1245,7 @@ export class Xano {
     checkGuardRoleColumns(sections, this.tableDefs, bag);
     checkToolOutputSchema(sections, bag);
     checkAgentArgPlaceholders(sections, bag);
+    checkAgentToolsOff(sections, bag);
     checkAssertionsOutsideTests(sections, bag);
     checkAgentApiKeys(sections, bag);
     // `resolved` gates the empty-body check: a browser-safe `export()` carries

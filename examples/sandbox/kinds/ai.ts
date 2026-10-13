@@ -11,7 +11,7 @@
  * model reports as success. Neither tool here reads `auth()`; one that did
  * would be spelled `{ tool: searchTool, auth: users }`.
  */
-import { mcpServer, agent, query, s, inp, obj, ref, input } from "@xano/sdk";
+import { mcpServer, agent, query, s, c, inp, obj, ref, input } from "@xano/sdk";
 import { api } from "../_shared.js";
 import { searchTool } from "./tool.js";
 
@@ -79,6 +79,10 @@ export const classifier = agent({
  * value — landing in the agent's `$args` namespace, so `{{ $args.question }}` in
  * the prompt above resolves to it at run time.
  *
+ * `allowToolExecution: c.bool(true)` lets the agent call its tools. Left unset,
+ * the agent runs with its tools off: it sees them, never calls one, and answers
+ * as if it had no data (export warns `stack.agent-tools-off`).
+ *
  * The `as` var is the rich result ENVELOPE, not the completion — the model's text
  * is at **`.result`** (alongside `finishReason`, `providerMetadata`, `steps`, …).
  * So return `ref("answer.result")` to ship the text; returning `ref("answer")`
@@ -91,7 +95,9 @@ export const askAssistant = query({
   verb: "POST",
   apiGroup: api,
   input: { question: input.text({ required: true }) },
-  stack: [s.ai.agent.run({ agent: assistant, args: obj({ question: inp("question") }), as: "answer" })],
+  stack: [
+    s.ai.agent.run({ agent: assistant, args: obj({ question: inp("question") }), allowToolExecution: c.bool(true), as: "answer" }),
+  ],
   response: { text: ref("answer.result") },
 });
 

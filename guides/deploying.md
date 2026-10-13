@@ -1295,7 +1295,7 @@ xanosdk workspace diff ./xano/index.ts --json
 }
 ```
 
-- `changedThere`: pull before you deploy, or the deploy overwrites that edit.
+- `changedThere`: pull before you deploy. `deploy --to workspace` refuses to overwrite it (see below).
 - `changedHere`: deploy it.
 - `changedBoth`: reconcile by hand.
 - `unclassified`: the baseline cannot tell. The object has no baseline entry, both sides
@@ -1322,6 +1322,22 @@ A few things to know about the baseline:
 - An SDK older than this feature drops `synced` when it rewrites `xano.lock`. Nothing breaks: the
   next sync records a new baseline.
 - On a merge conflict in `xano.lock`, keep either side's baseline for a branch, or delete it.
+
+#### The deploy guard
+
+`deploy --to workspace` reads the same baseline before it writes. When an object it would
+overwrite is in `changedThere` or `changedBoth`, it refuses with exit 2 and
+`SDK_WORKSPACE_CHANGED`. The refusal's `details.objects` lists those objects, and
+`details.changedThere`, `details.changedBoth` and `details.baseline` say how each was classified.
+Pull the change into the project and commit it, then deploy again. To deploy over it anyway, pass
+`--overwrite`; the run warns (`deploy.overwrite-changed`) and names what it overwrote. A
+`--dry-run` refuses nothing: it warns and lists the objects under `changedInXano`.
+
+The guard counts only what the deploy writes. A merge leaves an object that only the branch holds
+alone, so an object added in Xano is refused over only under `--prune` or `--replace`, which
+delete it. Nothing is refused when the branch has no baseline, over an `unclassified`
+difference, or on a `--branch` deploy to a branch that does not exist yet. It reads the branch
+once, before the confirmation, so an edit made in Xano after that read is not caught.
 
 ### Deploying to a branch
 

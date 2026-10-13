@@ -146,8 +146,8 @@ export function localEngineBinDir(env: NodeJS.ProcessEnv = process.env): string 
 /**
  * Where this run's engine comes from — decided once, as a value.
  *
- * `override` is an operator-named URL or archive path, run through the
- * prototype's pipeline and cached under its own namespace. `release` is a
+ * `override` is an operator-named URL or archive path, fetched or read as
+ * given and cached under its own namespace. `release` is a
  * published engine from the release manager: the `version` given, or the latest
  * release built for this platform when there is none.
  */
@@ -179,7 +179,7 @@ const OVERRIDE_VERSION = /^v?\d+\.\d+\.\d+$/;
 
 /**
  * An override value read by its shape: a version is that release, anything
- * else is a URL or archive path for the prototype's pipeline. One reading for
+ * else is a URL or archive path, fetched or read as given. One reading for
  * the flag and {@link LOCAL_ENGINE_OVERRIDE_ENV}, so the same value means the
  * same engine wherever it is written.
  */

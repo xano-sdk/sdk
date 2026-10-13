@@ -403,6 +403,8 @@ defines and keeps every row. Tables are shared by every branch, so a release tha
 is refused without `--allow-shared-schema-changes`. `--branch <label>` lands on a non-live
 branch and `--set-live` promotes it, while `--backup-branch` snapshots live's logic, not its shared tables,
 for a one-`set-live` rollback. A release name is refused rather than resolved when it already exists.
+`deploy --to workspace` refuses to overwrite an object edited in Xano since your last deploy or
+pull (`workspace diff` lists them); pull first, or pass `--overwrite`.
 
 `xanosdk status` answers where you stand in one read — who you are signed in as, which
 instance and workspace, and the backend this project last deployed to. Every flag, the

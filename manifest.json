@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -9117,6 +9117,10 @@
         {
           "flag": "--allow-shared-schema-changes",
           "description": "Proceed even though table/microservice changes reach every branch — only with --to"
+        },
+        {
+          "flag": "--overwrite",
+          "description": "Deploy over objects changed in Xano since the last deploy or pull (see `workspace diff`) — only with --to"
         },
         {
           "flag": "--allow-branch-deletion",

@@ -28,6 +28,7 @@ Match on the code, never on the message text: messages are reworded, codes are n
 | `SDK_SEED_IN_STATIC` | A static build carries seed values from non-public columns (`details.leaks[]`); nothing was published. |
 | `SDK_SHARED_SCHEMA_CHANGE` | A promote would alter tables live serves from (`details.reason: "shared-schema-changes"`, `details.changes[]`), or could not read them (`"tables-unreadable"`); `--allow-shared-schema-changes` lands it. Exit 2. |
 | `SDK_USAGE` | The input is wrong — a command line, a def or a value the build or the command refuses as written — a confirmation was needed off a terminal (`details.reason: "needs-confirmation"`), or the named backend is in another workspace (`details.reason: "wrong-workspace"`, `details.heldIn`). Exit 1. |
+| `SDK_WORKSPACE_CHANGED` | A `deploy --to workspace` would overwrite objects changed in Xano since the last sync (`details.reason: "workspace-changed"`, `details.objects[]`, `details.changedThere[]`, `details.changedBoth[]`, `details.baseline`); pull first, or `--overwrite` deploys over them. Exit 2. |
 
 ## CLI warnings
 
@@ -62,6 +63,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `deploy.ephemeral-write` | Says which ephemeral this deploy writes to. |
 | `deploy.import-failed-backup` | The import failed. Your pre-deploy snapshot is on branch "…". |
 | `deploy.open-no-url` | --open had no URL to open — the deploy reported none. |
+| `deploy.overwrite-changed` | `--overwrite`: … object… changed in Xano since the last sync … overwritten: |
 | `deploy.replace-wipe` | `--replace` wipes … before importing — including table data and history. |
 | `deploy.rows-written` | Table rows from the bundle … written. |
 | `deploy.tenant-write` | This deploy writes to a target that is not an ephemeral, named in the message. |
@@ -279,7 +281,7 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 
 | Code | Meaning |
 |---|---|
-| `agent.args-placeholder-unpassed` | … "…": `s.ai.agent.run` of agent "…" passes args …, but the agent's prompt reads `{{ $args… }}`, which this run never passes, so it resolves to nothing. |
+| `agent.args-placeholder-unpassed` | …: `s.ai.agent.run` of agent "…" passes args …, but the agent's prompt reads `{{ $args… }}`, which this run never passes, so it resolves to nothing. |
 | `agent.literal-api-key` | agent "…" spells its `llm.apiKey` literally. |
 | `api-group.cors-no-methods` | apiGroup "…": `cors.mode: "custom"` enables no `allowMethods`, so no `access-control-allow-methods` is sent and a preflight has nothing to approve. |
 | `api-group.cors-no-origins` | apiGroup "…": `cors.mode: "custom"` with an empty `allowOrigins` matches no request, so responses carry NO `access-control-*` headers and every browser call… |
@@ -367,6 +369,7 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 | `search.request-only-filter` | … pipes a search operand through `…`, which evaluates only in the request. |
 | `seed.invalid` | A seed row does not match its table's columns. |
 | `seed.public-seed` | Table "…" declares publicSeed but has no `seed`: there are no seed values to declare public. |
+| `stack.agent-tools-off` | …: `s.ai.agent.run` of agent "…" leaves `allowToolExecution` unset, so the agent runs with its tools off: it sees them but never calls one, and answers as if… |
 | `stack.auth-no-caller` | … "…" reads `auth()`, but …: it deploys clean and never holds the caller's identity. |
 | `stack.auth-null-host` | … "…": an `s.redis.ratelimit` in its stack keys off auth(), where …. |
 | `stack.blank-table` | … has … (…) bound to no table (`table: null`) — … nothing when run. |

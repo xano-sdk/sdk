@@ -7348,6 +7348,43 @@ export function checkAgentArgPlaceholders(
     if (keys.size > 0) reads.set(t.guid, { name: String(t.name), keys });
   }
   if (reads.size === 0) return;
+  forEachAgentRun(sections, (st, toolsetId, owner, host) => {
+    const agent = reads.get(toolsetId);
+    const args = statementInput(st, "args");
+    if (agent === undefined || args === undefined || typeof args.value !== "string") return;
+    if (args.tag !== "const:expr2" && args.tag !== "const:obj") return;
+    if (Array.isArray((args as { filters?: unknown }).filters) && ((args as { filters: unknown[] }).filters.length > 0)) return;
+    const passed = args.tag === "const:obj" ? jsonObjectKeys(args.value) : objectLiteralKeys(args.value);
+    if (passed === undefined) return;
+    for (const key of agent.keys) {
+      if (passed.includes(key)) continue;
+      const near = nearestKey(key, passed) ?? passed.find((p) => p.replace(/_/g, "").toLowerCase() === key.toLowerCase());
+      const ident = /^[A-Za-z_]\w*$/.test(key);
+      const access = ident ? `.${key}` : `['${key}']`;
+      bag.warn(
+        "agent.args-placeholder-unpassed",
+        `${owner}: ` +
+          `\`s.ai.agent.run\` of agent "${agent.name}" passes args ${passed.length > 0 ? passed.map((p) => `\`${p}\``).join(", ") : "(none)"}, ` +
+          `but the agent's prompt reads \`{{ $args${access} }}\`, which this run never passes, so it resolves to nothing.` +
+          (near !== undefined
+            ? ` Did you mean \`${near}\`? Rename the arg or the placeholder so they match.`
+            : ident
+              ? ` Pass \`${key}\` in \`args\`.`
+              : ` \`args\` keys must be identifiers, except in a constant \`c.obj({ "${key}": … })\`; otherwise rename the placeholder to an identifier.`),
+        host,
+      );
+    }
+  });
+}
+
+/**
+ * Every `s.ai.agent.run` (`mvp:call_agent`) in a non-toolset def, with the
+ * agent guid it targets and the def's label (`function "f"`).
+ */
+function forEachAgentRun(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  visit: (st: EncodedStatement, toolsetId: string, owner: string, host: object) => void,
+): void {
   for (const [kind, objs] of Object.entries(sections)) {
     if (kind === "toolset") continue;
     for (const host of objs ?? []) {
@@ -7356,34 +7393,49 @@ export function checkAgentArgPlaceholders(
       for (const st of statements) {
         if (st.name !== "mvp:call_agent") continue;
         const id = (st.context as { toolset?: { id?: unknown } } | undefined)?.toolset?.id;
-        const agent = typeof id === "string" ? reads.get(id) : undefined;
-        const args = statementInput(st, "args");
-        if (agent === undefined || args === undefined || typeof args.value !== "string") continue;
-        if (args.tag !== "const:expr2" && args.tag !== "const:obj") continue;
-        if (Array.isArray((args as { filters?: unknown }).filters) && ((args as { filters: unknown[] }).filters.length > 0)) continue;
-        const passed = args.tag === "const:obj" ? jsonObjectKeys(args.value) : objectLiteralKeys(args.value);
-        if (passed === undefined) continue;
-        for (const key of agent.keys) {
-          if (passed.includes(key)) continue;
-          const near = nearestKey(key, passed) ?? passed.find((p) => p.replace(/_/g, "").toLowerCase() === key.toLowerCase());
-          const ident = /^[A-Za-z_]\w*$/.test(key);
-          const access = ident ? `.${key}` : `['${key}']`;
-          bag.warn(
-            "agent.args-placeholder-unpassed",
-            `${sdkKindName(kind, host as { type?: unknown })} "${String((host as { name?: unknown }).name)}": ` +
-              `\`s.ai.agent.run\` of agent "${agent.name}" passes args ${passed.length > 0 ? passed.map((p) => `\`${p}\``).join(", ") : "(none)"}, ` +
-              `but the agent's prompt reads \`{{ $args${access} }}\`, which this run never passes, so it resolves to nothing.` +
-              (near !== undefined
-                ? ` Did you mean \`${near}\`? Rename the arg or the placeholder so they match.`
-                : ident
-                  ? ` Pass \`${key}\` in \`args\`.`
-                  : ` \`args\` keys must be identifiers, except in a constant \`c.obj({ "${key}": … })\`; otherwise rename the placeholder to an identifier.`),
-            host as object,
-          );
-        }
+        if (typeof id !== "string") continue;
+        const owner = `${sdkKindName(kind, host as { type?: unknown })} "${String((host as { name?: unknown }).name)}"`;
+        visit(st, id, owner, host as object);
       }
     }
   }
+}
+
+/**
+ * An `s.ai.agent.run` of an agent with enabled tools that leaves
+ * `allowToolExecution` unset. The statement then stores no
+ * `allow_tool_execution` input, and the engine runs the agent with tools off:
+ * the agent sees its tools, never calls one, and answers as if it had no data —
+ * which reads as a prompt problem, not a missing flag.
+ */
+export function checkAgentToolsOff(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  const withTools = new Map<string, string>();
+  for (const ts of sections.toolset ?? []) {
+    const t = (ts ?? {}) as { guid?: unknown; name?: unknown; type?: unknown; tool?: unknown };
+    if (t.type !== "agent" || typeof t.guid !== "string" || !Array.isArray(t.tool)) continue;
+    // An `id: 0` entry references no tool (`toolset.tool-ref-zero` says so), so
+    // turning tool execution on would not give the agent anything to call.
+    const hasEnabledTool = t.tool.some((entry) => {
+      const e = (entry ?? {}) as { id?: unknown; enabled?: unknown };
+      return e.enabled !== false && e.id !== 0 && e.id !== "0" && e.id !== "";
+    });
+    if (hasEnabledTool) withTools.set(t.guid, String(t.name));
+  }
+  if (withTools.size === 0) return;
+  forEachAgentRun(sections, (st, toolsetId, owner, host) => {
+    const name = withTools.get(toolsetId);
+    if (name === undefined || statementInput(st, "allow_tool_execution") !== undefined) return;
+    bag.warn(
+      "stack.agent-tools-off",
+      `${owner}: \`s.ai.agent.run\` of agent "${name}" leaves \`allowToolExecution\` unset, so the agent runs with ` +
+        `its tools off: it sees them but never calls one, and answers as if it had no data. Pass ` +
+        `\`allowToolExecution: c.bool(true)\`, or \`c.bool(false)\` to keep tools off on purpose.`,
+      host,
+    );
+  });
 }
 
 /** The top-level keys of a JSON object string, or undefined. */

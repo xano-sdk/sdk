@@ -125,6 +125,7 @@ const STACK = /* @__PURE__ */ (() => [
   "realtime.publish-unknown-channel",
   "redis.ratelimit-no-error",
   "agent.args-placeholder-unpassed",
+  "stack.agent-tools-off",
   ...VALUES,
 ] as const)();
 

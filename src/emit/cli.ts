@@ -676,6 +676,13 @@ export interface ParsedArgs {
    */
   allowSharedSchemaChanges: boolean;
   /**
+   * `deploy --to workspace --overwrite`: proceed even though objects this deploy
+   * replaces were changed in Xano since the last sync (`changedThere` /
+   * `changedBoth` in `workspace diff`). A flag rather than a prompt, for the
+   * reason {@link allowSharedSchemaChanges} is one.
+   */
+  overwrite: boolean;
+  /**
    * `deploy --to … --replace --allow-branch-deletion`: proceed even though the clear
    * will permanently delete the workspace's non-live branches.
    *
@@ -1105,6 +1112,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let expectLive: string | undefined;
   let toProfile: string | undefined;
   let allowSharedSchemaChanges = false;
+  let overwrite = false;
   let allowBranchDeletion = false;
   let backupBranch: string | boolean | undefined;
   let emit: string | undefined;
@@ -1705,6 +1713,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       toProfile = value;
     } else if (arg === "--allow-shared-schema-changes") {
       allowSharedSchemaChanges = true;
+    } else if (arg === "--overwrite") {
+      overwrite = true;
     } else if (arg === "--allow-branch-deletion") {
       allowBranchDeletion = true;
     } else if (arg === "--backup-branch") {
@@ -2310,6 +2320,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     expectLive,
     toProfile,
     allowSharedSchemaChanges,
+    overwrite,
     allowBranchDeletion,
     backupBranch,
     emit,

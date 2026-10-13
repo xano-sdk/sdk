@@ -119,6 +119,7 @@ import { destinationKey } from "../lock/landed.js";
 import { landedRecordFor, landingLockPath, recordForeignLanding, recordLanding, type LandingReport } from "./landing-record.js";
 import { recordSync, type SyncReport } from "./sync-record.js";
 import { objectDigests, syncDigests } from "../deploy/sync-baseline.js";
+import type { SyncTarget } from "./sync-record.js";
 import { REFERENCEABLE_KIND_PAYLOAD_KEYS, rawDeriveGuid } from "../refs/guid.js";
 import { envValuesOf, payloadOf, planTypeSection, rowLabeler, sectionKind, uniqueIndexLabels } from "../deploy/live-diff.js";
 import { assertStorageModesKept, discloseCanonicalMoves, storageChangesPayload, movesClause, type CanonicalMove, type PairedColumns } from "./plan-disclosure.js";
@@ -2056,10 +2057,16 @@ export function gatedSchemaChanges(
  * as the plan's finding under `--dry-run`, which is the preview the guide
  * sends a reader to (E2E pass 24: the dry run refused too).
  */
-function refuseOrReport<T>(args: ParsedArgs, message: string, result: T, details?: Record<string, unknown>): T {
+function refuseOrReport<T>(
+  args: ParsedArgs,
+  message: string,
+  result: T,
+  details?: Record<string, unknown>,
+  code: "SDK_SHARED_SCHEMA_CHANGE" | "SDK_WORKSPACE_CHANGED" = "SDK_SHARED_SCHEMA_CHANGE",
+): T {
   // The refusal `promote` gives for the same change set: a conflict, exit 2.
   if (!args.dryRun) {
-    throw new CliError("SDK_SHARED_SCHEMA_CHANGE", message, {
+    throw new CliError(code, message, {
       exitCode: 2,
       details: { landed: false, declined: false, ...details },
     });
@@ -2072,6 +2079,94 @@ function refuseOrReport<T>(args: ParsedArgs, message: string, result: T, details
   }
   blank();
   return result;
+}
+
+/**
+ * Refuse a workspace deploy that would write over objects changed in Xano
+ * since this project and the branch last matched: `changedThere` and
+ * `changedBoth` as `workspace diff` reports them (see `deploy/sync-baseline.ts`),
+ * read with the same {@link directedComparison}.
+ *
+ * Only the objects this deploy writes count. A merge leaves an object only the
+ * branch holds alone, so one added or edited there is refused over only when
+ * the deploy deletes it (`--prune`, `--replace`). Nothing is refused without a
+ * baseline for the branch, or over an `unclassified` difference: the guard
+ * refuses over what it knows was changed there, never over what it cannot tell.
+ *
+ * `--overwrite` waives it. Returns the objects it found, for the dry run's
+ * document; on a dry run a refusal is reported rather than thrown.
+ *
+ * Checked once, before the confirmation. An edit made in Xano between this
+ * read and the import is not caught: the import takes no precondition, so no
+ * check made from here can close that window.
+ */
+async function assertWorkspaceUnchanged(
+  args: ParsedArgs,
+  ctx: {
+    readonly live: ExportedBundle;
+    readonly bundle: string;
+    readonly pinned: readonly PinnedCanonical[];
+    readonly lockPath: string | undefined;
+    readonly target: SyncTarget;
+    /** Whether the deploy deletes what only the branch holds. */
+    readonly deletes: boolean;
+    /** The branch to name in a `pull`, when it is not the live one. */
+    readonly pullBranch: string | undefined;
+  },
+): Promise<readonly string[]> {
+  const { readSyncBaseline } = await import("./sync-record.js");
+  const baseline = readSyncBaseline(ctx.lockPath, ctx.target);
+  if (baseline === undefined) return [];
+  const { directedComparison } = await import("../deploy/sync-baseline.js");
+  let compared;
+  try {
+    compared = directedComparison(
+      JSON.parse(ctx.bundle) as unknown,
+      ctx.live,
+      new Set(ctx.pinned.map((p) => `${p.payloadKey}:${p.name}`)),
+      baseline,
+    );
+  } catch {
+    // A comparison that could not be made refuses nothing, as convergence
+    // treats one: the deploy proceeds as it did before the guard.
+    return [];
+  }
+  const { result, direction } = compared;
+  if (direction.baseline === null) return [];
+  const written = new Set([...result.differing, ...result.missing, ...(ctx.deletes ? result.liveOnly : [])]);
+  const both = new Set(direction.changedBoth);
+  const objects = [...direction.changedThere, ...direction.changedBoth].filter((l) => written.has(l)).sort();
+  if (objects.length === 0) return objects;
+  if (args.overwrite) {
+    warn(
+      `\`--overwrite\`: ${objects.length} object${objects.length === 1 ? "" : "s"} changed in Xano since the last sync ${args.dryRun ? "would be" : "will be"} overwritten:`,
+      "deploy.overwrite-changed",
+      objects,
+    );
+    return objects;
+  }
+
+  const lines = objects.map((l) => `  ${l}${both.has(l) ? " (changed here too)" : ""}`);
+  const pull = `xanosdk pull workspace${ctx.pullBranch !== undefined ? ` --branch ${ctx.pullBranch}` : ""}`;
+  const waive = retryCommand(args, { add: ["--overwrite"] });
+  refuseOrReport(
+    args,
+    `Refusing to deploy to branch "${ctx.target.branch}": ${objects.length} object${objects.length === 1 ? " was" : "s were"} ` +
+      `changed in Xano since the last sync (${baseline.by}, ${baseline.at}), and this deploy would overwrite ` +
+      `${objects.length === 1 ? "it" : "them"}:\n${lines.join("\n")}\n\n` +
+      `Bring the change into this project first (\`${pull}\`, then commit and deploy), ` +
+      `or deploy over it: \`${waive.command}\`${withheldNote(waive.withheld)}.`,
+    objects,
+    {
+      reason: "workspace-changed",
+      objects,
+      changedThere: direction.changedThere.filter((l) => written.has(l)),
+      changedBoth: direction.changedBoth.filter((l) => written.has(l)),
+      baseline: direction.baseline,
+    },
+    "SDK_WORKSPACE_CHANGED",
+  );
+  return objects;
 }
 
 /** The lock payload keys whose objects carry a public URL slug. */
@@ -4309,6 +4404,34 @@ export async function runReleaseCommand(
   // The same verdict the real run reaches below (see `upToDate` there).
   const dryRunUpToDate = req.branch === undefined && (plan.operations.length === 0 || converged);
 
+  // Objects changed in Xano since the last sync that this deploy would write
+  // over: refused without `--overwrite`, on a dry run reported. Only a branch
+  // that exists and was read can have a baseline to read against; a new one
+  // starts as a clone of live and overwrites nothing there.
+  const changedInXano =
+    landingDest?.kind === "workspace" && live !== undefined && !dryRunUpToDate && (req.branch === undefined || scopeBranch !== undefined)
+      ? await (async () => {
+          // The branch that was read: the one named, else live. A plain merge
+          // reads no listing, and the route's preview echoes the live label it
+          // planned against, as the baseline this deploy records is keyed.
+          const readLabel = scopeBranch ?? liveBranchLabel(branches) ?? preview.branch;
+          if (readLabel === undefined) return [] as readonly string[];
+          const guardLock =
+            args.file === undefined && args.lockPath === undefined
+              ? landingLockPath(args)
+              : landingLockPath(args, { entryFile: args.file, fromProject: false });
+          return assertWorkspaceUnchanged(args, {
+            live,
+            bundle,
+            pinned,
+            lockPath: guardLock,
+            target: { instance: auth.instance, workspaceId: landingDest.workspaceId, branch: readLabel },
+            deletes: req.mode === "replace" || req.prune === true,
+            pullBranch: scopeBranch,
+          });
+        })()
+      : ([] as readonly string[]);
+
   // A merge into a tenant-hosted target that holds a table trigger fails
   // part-way there (a workspace merges fine): refused before anything is sent,
   // and on a dry run too — a preview that passed would promise an apply. A
@@ -4418,6 +4541,9 @@ export async function runReleaseCommand(
         // `--allow-shared-schema-changes`, the real run refuses.
         ...(req.branch !== undefined ? { sharedSchemaChanges: sharedChanges?.length ?? null } : {}),
         ...(unnamedPublicUrls.length > 0 ? { unnamedPublicUrls: [...unnamedPublicUrls] } : {}),
+        // Objects changed in Xano since the last sync that the deploy writes
+        // over: without `--overwrite`, the real run refuses (`SDK_WORKSPACE_CHANGED`).
+        ...(changedInXano.length > 0 ? { changedInXano: [...changedInXano] } : {}),
         ...staticRemovedField(staticRead?.teardown, undefined),
       });
     }

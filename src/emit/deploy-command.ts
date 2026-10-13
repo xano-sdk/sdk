@@ -1226,6 +1226,7 @@ export const DESTINATION_ONLY: ReadonlyArray<{ readonly key: keyof ParsedArgs; r
   { key: "resetData", flag: "--reset-data", why: "a refresh already replaces the rows unless `--keep-data` keeps them (`--reset` overrides that)" },
   { key: "seed", flag: "--seed", why: "a refresh already seeds when it replaces and never when `--keep-data` keeps the rows" },
   { key: "allowSharedSchemaChanges", flag: "--allow-shared-schema-changes", why: "the environment is this project's own, with no shared schema to gate" },
+  { key: "overwrite", flag: "--overwrite", why: "an ephemeral or Xano Engine keeps no sync baseline, so nothing there is guarded" },
   { key: "allowBranchDeletion", flag: "--allow-branch-deletion", why: "an ephemeral or Xano Engine has no branches to delete" },
   { key: "branch", flag: "--branch", why: "an ephemeral or Xano Engine has no branch to name" },
   { key: "setLive", flag: "--set-live", why: "an ephemeral or Xano Engine has no branch to make live" },

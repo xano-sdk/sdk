@@ -50,15 +50,24 @@
  */
 import { canonicalJson } from "../bundle/hash.js";
 import { md5Hex } from "../util/hash.js";
-import { canonicalRow, payloadOf, rowLabeler, sectionKind, SETTINGS_LABEL, type Convergence } from "./live-diff.js";
+import { canonicalRow, compareToLive, payloadOf, rowLabeler, sectionKind, SETTINGS_LABEL, type Convergence } from "./live-diff.js";
+import type { ExportedBundle } from "./workspace-export.js";
 import { sectionOmission } from "../codegen/omissions.js";
 import type { SyncBaseline, SyncSource } from "../lock/lock.js";
 import type { SyncDigests } from "../lock/synced.js";
 
 export type { SyncBaseline, SyncSource };
 
-/** The digest scheme this build takes digests under. Bump it whenever the digest of an unchanged object changes. */
-export const DIGEST_SCHEME = 1;
+/**
+ * The digest scheme this build takes digests under. Bump it whenever the digest
+ * of an unchanged object changes.
+ *
+ * 2: `normalize()` now drops an empty filter `arg` (CGO-873), so any object
+ *    carrying a zero-argument filter digests to a new canonical form; a baseline
+ *    taken under scheme 1 is set aside rather than read as every such object
+ *    changed.
+ */
+export const DIGEST_SCHEME = 2;
 
 /**
  * Sections that are not objects of their own. Env is compared by name in the
@@ -233,4 +242,23 @@ export function syncDirection(
     } else if (baseline.complete) changedThere.push(label);
   }
   return { baseline: { at: baseline.at, by: baseline.by }, changedThere, changedHere, changedBoth, unclassified };
+}
+
+/**
+ * The comparison `workspace diff` reports, and which side moved for each
+ * difference it found. `workspace diff` prints it and `deploy --to workspace`
+ * refuses over it, so the two cannot read one branch two ways.
+ *
+ * `pinnedKeys` are the slugs the project pins, as `<payloadKey>:<name>` (see
+ * `compareToLive`). Uncapped, and the documentation token is compared as a
+ * value: the question is what the branch holds.
+ */
+export function directedComparison(
+  local: unknown,
+  live: ExportedBundle,
+  pinnedKeys: ReadonlySet<string>,
+  baseline: SyncBaseline | undefined,
+): { readonly result: Convergence; readonly direction: SyncDirection } {
+  const result = compareToLive(local, live, pinnedKeys, { sample: "all", documentation: "compare" });
+  return { result, direction: syncDirection(local, live, result, baseline) };
 }
