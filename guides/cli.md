@@ -83,7 +83,7 @@ xanosdk test run-all --kind unit            # only one family (unit|workflow; de
 xanosdk test run-all --concurrency 4        # run 4 at once (default: 1); tests share the backend's database, so only when yours don't share state
 xanosdk impersonate                         # open what this project last deployed to in the builder (--guest = read-only; --url-only prints the URL; the URL is a session — treat it as a credential)
 xanosdk impersonate ephemeral:<tenant>      # …or name one: local[:<name>] or tenant:<name> (open your workspace from the Xano dashboard)
-xanosdk deploy ./xano/index.ts --test        # THE RELEASE FLOW, step 1: stand it up and run its tests
+xanosdk deploy ./xano/index.ts --ephemeral --test   # THE RELEASE FLOW, step 1: stand it up on an ephemeral and run its tests (a bare deploy goes to the Xano Engine, which release create cannot cut from)
 xanosdk release create v1                   # …2: cut a release from the ephemeral this project last deployed to (after a local deploy: --from ephemeral)
 xanosdk release create v1 --from ephemeral:e4f2-9ab1 --description "what shipped"   # …from a named source
 xanosdk release create v1 --from workspace --branch staging   # …or from a branch of your workspace (default: what it serves)
@@ -180,14 +180,15 @@ workspace or a tenant, so a bare command cannot reach something real unasked. Wi
 it falls back to the ephemeral recorded under your current credential, then to the engine
 recorded for this directory, and otherwise refuses naming the flag, `xanosdk deploy` and
 `xanosdk deploy --local`.
-`deploy` is the exception: bare, it compiles the project and stands it up on an ephemeral
-unless `--to` or `--local` says otherwise, so it writes that record rather than
-reading it. `generate` and `init --from` need a backend named.
+`deploy` is the exception: bare, it compiles the project and stands it up on the Xano Engine
+on this machine unless `--ephemeral` or `--to` says otherwise, so it writes that record rather
+than reading it. `generate` and `init --from` need a backend named.
 
 A command that cannot serve a backend refuses it, whether you typed it or it came from the
-record, with the reason and the spellings it does take: `publish` refuses a Xano Engine (no
-static host — pass `--to ephemeral`), and so does `release create` (the cut runs on the
-instance — pass `--from ephemeral`). A write to your workspace or a tenant confirms first,
+record, with the reason and the spellings it does take: `release create` refuses a Xano Engine
+(the cut runs on the instance — pass `--from ephemeral`). `publish` is not one of them: it
+reaches a Xano Engine (`publish --to local`, or bare after a local deploy) and puts the build on
+the engine's own static host. A write to your workspace or a tenant confirms first,
 or needs `--yes` off a terminal; an ephemeral or Xano Engine never asks.
 
 ## Bundle key names vs. the names everything else uses

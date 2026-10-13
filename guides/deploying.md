@@ -175,7 +175,8 @@ what ran, then `xanosdk promote <release>` lands it there as a new branch, leavi
 untouched until you say otherwise.
 
 **Static host** — `deploy --static <dir>` archives a directory and deploys it to a
-static host after the backend import. The frontend lands **on the ephemeral itself**, so the
+static host after the backend import. The frontend lands **on the environment the backend just
+went to** — the ephemeral itself, or the Xano Engine (see *A frontend on the Xano Engine, and server rendering*) — so the
 backend and the frontend live in one environment. The CLI uploads the archive to
 `/api:meta/workspace/{id}/static_host/default/build` with your ordinary bearer. That route
 auto-creates the `default` host (and only that one: a `--static-host` naming a host the target
@@ -294,7 +295,7 @@ as three environment variables** — the `type: "token"` record above, with no f
 XANO_INSTANCE_URL=https://your-instance.xano.io \
 XANO_WORKSPACE_ID=3 \
 XANO_META_TOKEN=your-meta-api-token \
-  npx xanosdk deploy ./xano/index.ts
+  npx xanosdk deploy ./xano/index.ts --ephemeral
 ```
 
 Nothing is read from or written to disk, and nothing rotates, so the same three secrets keep
@@ -610,8 +611,10 @@ with `--to` (`--seed`, `--prune`, `--dry-run`, …) stay refused alongside it.
 
 ### Deploying locally
 
-`xanosdk deploy --local` deploys to an engine running on this machine instead of an
-ephemeral — no network round-trip per deploy. It needs nothing configured:
+A bare `xanosdk deploy` deploys to an engine running on this machine — no network round-trip
+per deploy. `--local` is that default spelled out, needed only to name an engine:
+`--local=<version|url|path>` runs that one instead of the pinned version. It needs nothing
+configured:
 
 - **The first run** resolves the latest published engine for this machine's platform,
   downloads it, checks it against the sha256 its release recorded, and **pins** that version in
@@ -1019,7 +1022,7 @@ instead, so stdout is never empty. Branch on `code`, not on the message:
 
 A piped stdout gets the document too, without `--json`, so a script reading the pipe never gets
 an empty stdout. The exception is a command whose stdout is the data itself (`export` to stdout,
-`llms`, `completion`, `--help`): a failure appended to it would corrupt it, so those write one
+`completion`, `--help`): a failure appended to it would corrupt it, so those write one
 only under `--json`. A piped `release` or `promote` write prints its operation result (above)
 either way.
 
@@ -1127,7 +1130,7 @@ or on a second destination, nothing for a tenant to be pointed at, and no record
 build *was* beyond the commit you built it from. Prefer the release flow for anything you may
 need to repeat.
 
-The flags that describe the ephemeral a plain deploy refreshes — `--name`, `--expires-hours`,
+The flags that describe the environment a plain deploy replaces — `--name`, `--expires-hours`,
 `--reset`, `--keep-data`, `--test` (with `--kind`/`--concurrency`), `--no-dev-env`,
 `--require-microservices`, `--open` — are refused beside `--to`, before sign-in. `--static`
 publishes beside the merge, but not under `--dry-run`; `--skip-liveness` needs `--static` there.
@@ -1617,10 +1620,10 @@ and `XANO_META_TOKEN`, [above](#signing-in--deploying-in-depth) — no browser, 
 nothing that rotates:
 
 ```bash
-XANO_INSTANCE_URL=… XANO_WORKSPACE_ID=… XANO_META_TOKEN=… npx xanosdk deploy ./xano/index.ts
+XANO_INSTANCE_URL=… XANO_WORKSPACE_ID=… XANO_META_TOKEN=… npx xanosdk deploy ./xano/index.ts --ephemeral
 ```
 
 > ⚠️ A deploy without `--keep-data` is a full replace of the target environment, including
-> its table records, before importing. The blast radius is your own disposable ephemeral — but anything
+> its table records, before importing. The blast radius is your own Xano Engine or disposable ephemeral — but anything
 > you only ever created by hand in it (or any data it accumulated) is gone. That's exactly
 > why a real workspace or tenant is reached only by naming it, with `deploy --to`.

@@ -45,13 +45,16 @@ export type McpServerDef = ToolsetBaseDef & {
   /** Optional structured output schema, paired with {@link llm}. */
   output?: AgentOutput;
   /**
-   * The prompts this server exposes: `prompt()` handles (or names), or a
+   * The prompts this server exposes — message templates with arguments that the
+   * USER picks by name: `prompt()` handles (or names), or a
    * `{ prompt, enabled?, auth? }` wrapper. An agent has no prompts — they are an
    * MCP server feature. See {@link McpPrimitiveEntry}.
    */
   prompts?: McpPrimitiveEntry<"prompt">[];
   /**
-   * The resources this server exposes: `resource()` handles (or names), or a
+   * The resources this server exposes — read-only context (docs, a schema, one
+   * record via a `{variable}` uri template) the client attaches by `uri`:
+   * `resource()` handles (or names), or a
    * `{ resource, enabled?, auth? }` wrapper. Two resources with the same `uri`
    * on one server are refused. See {@link McpPrimitiveEntry}.
    */
@@ -258,8 +261,11 @@ function liftTenantFromBase(
 }
 
 /**
- * Author an MCP server — a collection of tools exposed over the MCP protocol.
- * Returns an {@link McpServerHandle}: the def plus `getPath()`/`getUrl()`, so a
+ * Author an MCP server — the tools, prompts and resources it exposes over the
+ * MCP protocol. A `tool()` is an action the model calls; a `resource()` is
+ * read-only context the client attaches by `uri`; a `prompt()` is a message
+ * template the user picks by name. Data the model must fetch on its own mid-task
+ * stays a tool. Returns an {@link McpServerHandle}: the def plus `getPath()`/`getUrl()`, so a
  * frontend or external client derives the endpoint URL from the def instead of
  * hardcoding it (the same derive-don't-hardcode contract `query.getPath()` gives
  * API endpoints).

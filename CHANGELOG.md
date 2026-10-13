@@ -8,6 +8,18 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.8 — Deploys stop overwriting Xano edits
+
+_2026-10-13_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.8)
+
+A deploy to your workspace no longer overwrites edits a teammate made in Xano. This release also fixes a false `preflight` failure on zero-argument filters and warns when an agent run leaves its tools off.
+
+- `deploy --to workspace` refuses to overwrite edits made in Xano
+- `preflight` no longer fails on zero-argument filters
+- A warning when an agent run leaves its tools off
+
+---
+
 ## 1.0.7 — Your coding agent gets a backend
 
 _2026-10-07_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.7)
