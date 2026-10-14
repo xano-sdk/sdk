@@ -59,6 +59,10 @@
  * `/tenant/<name>/api:<canonical>`. So the manifest carries the servers'
  * canonicals and the channels' paths too, and emits `socketUrl`/`channelPath`
  * over the same inlined interpolator `routePath` uses.
+ *
+ * MCP servers ride along for the same reason: `mcpUrl` carries an MCP
+ * server's address (with the same tenant lift) for a frontend to show a user
+ * or hand a client, without importing the def.
  */
 import { parsePathParams } from "../kinds/path-params.js";
 import { pathSegment, type HttpVerb } from "../kinds/query.js";
@@ -413,10 +417,10 @@ export const MANIFEST_HEADER = `/**
  * Plain data plus one interpolator, and the request input types of every
  * endpoint, channel and message. The core sections import nothing; the only
  * imports are the packages an installed module's block declares, never the
- * SDK itself. So a frontend gets the typed path/verb (and socket) contract
+ * SDK itself. So a frontend gets the typed path/verb (socket and MCP) contract
  * without pulling the SDK runtime into its bundle. Regenerate after changing an
- * endpoint's name, verb, api group or inputs, or a realtime server's, channel's
- * or message's name or inputs.
+ * endpoint's name, verb, api group or inputs, a realtime server's, channel's
+ * or message's name or inputs, or an MCP server's name.
  */
 `;
 
@@ -994,4 +998,92 @@ export function renderPlannedManifest(plan: RoutePlan, entry = "<entry>"): strin
     plan.inputs,
     plan.mcpServers,
   );
+}
+
+/** How many of each address a manifest carries: `routes --emit`'s summary and its `--json` document. */
+export interface ManifestCounts {
+  routes: number;
+  realtimeServers: number;
+  channels: number;
+  mcpServers: number;
+}
+
+/** The counts of a manifest that was not written. */
+export const NO_MANIFEST_COUNTS: ManifestCounts = { routes: 0, realtimeServers: 0, channels: 0, mcpServers: 0 };
+
+/** What {@link renderPlannedManifest} writes for `plan`, counted. */
+export function manifestCounts(plan: RoutePlan): ManifestCounts {
+  return {
+    routes: plan.resolved.length,
+    realtimeServers: plan.servers.length,
+    channels: plan.channels.length,
+    mcpServers: plan.mcpServers.length,
+  };
+}
+
+/**
+ * `"1 route, 1 realtime server, 2 channels, 1 MCP server"`. Routes are always
+ * named, so an empty manifest still reads `"0 routes"`; the rest only when the
+ * workspace has any.
+ */
+export function describeManifestCounts(counts: ManifestCounts): string {
+  const of = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return [
+    of(counts.routes, "route", "routes"),
+    ...(counts.realtimeServers > 0
+      ? [of(counts.realtimeServers, "realtime server", "realtime servers"), of(counts.channels, "channel", "channels")]
+      : []),
+    ...(counts.mcpServers > 0 ? [of(counts.mcpServers, "MCP server", "MCP servers")] : []),
+  ].join(", ");
+}
+
+/**
+ * `xanosdk routes`'s listing: every address the manifest would carry, each
+ * with the key a call site passes for it. The paths are the tenant-less forms
+ * `getPath()` returns.
+ */
+export interface RoutesListing {
+  routes: Array<{ verb: HttpVerb; path: string; ref: string }>;
+  realtimeServers: Array<{ name: string; canonical: string; path: string }>;
+  /** `key` is what `channelPath()` takes: the path, or `"<server>:<path>"` when two servers own it. */
+  channels: Array<{ key: string; name: string; server: string }>;
+  mcpServers: Array<{ name: string; canonical: string; path: string }>;
+}
+
+/** The listing for `plan`, in manifest order. */
+export function routesListing(plan: RoutePlan): RoutesListing {
+  return {
+    routes: plan.resolved.map((r) => ({
+      verb: r.verb,
+      path: `/api:${r.canonical}/${r.name}`,
+      ref: `api:${r.canonical}/${r.name}`,
+    })),
+    realtimeServers: [...plan.servers]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((s) => ({ name: s.name, canonical: s.canonical, path: `/ws/${s.canonical}` })),
+    channels: keyChannels(plan.channels).map(({ channel, key }) => ({ key, name: channel.name, server: channel.server })),
+    mcpServers: plan.mcpServers.map((s) => ({ name: s.name, canonical: s.canonical, path: `/x2/mcp/${s.canonical}/mcp/stream` })),
+  };
+}
+
+/**
+ * The listing as text, one address per line: a label, the path (a channel's
+ * own path, which rides its server's socket), and how to reach it. A route ends in its `api:<canonical>/<name>` string form; every
+ * other row ends in the `routes.gen.ts` call that builds its address, since a
+ * socket or MCP address is not a string a caller types by hand.
+ */
+export function formatRoutesListing(listing: RoutesListing): string {
+  const rows: Array<[string, string, string]> = [
+    ...listing.routes.map((r): [string, string, string] => [r.verb, r.path, r.ref]),
+    ...listing.realtimeServers.map((s): [string, string, string] => ["WS", s.path, `socketUrl(${literal(s.name)}, baseUrl)`]),
+    ...listing.channels.map((c): [string, string, string] => [
+      "CHANNEL",
+      c.name,
+      `channelPath(${literal(c.key)}), on ${literal(c.server)}`,
+    ]),
+    ...listing.mcpServers.map((s): [string, string, string] => ["MCP", s.path, `mcpUrl(${literal(s.name)}, baseUrl)`]),
+  ];
+  const label = Math.max(0, ...rows.map((r) => r[0].length));
+  const path = Math.max(0, ...rows.map((r) => r[1].length));
+  return rows.map(([l, p, ref]) => `${l.padEnd(label)}  ${p.padEnd(path)}  ${ref}\n`).join("");
 }

@@ -27,8 +27,6 @@ ready, one command puts the same code live on Xano.**
 
 </div>
 
-<!-- A short terminal recording of the three commands below belongs here. -->
-
 ```bash
 npx @xano/sdk init my-app && cd my-app   # 1. scaffold your backend + frontend
 npm run xano:deploy                      # 2. run the backend on the Xano Engine, on your machine
@@ -327,7 +325,8 @@ async function createPost(body: NewPost): Promise<Post> {
   keyed alike (`ROUTE_SCHEMAS["POST posts"].parse(body)`) and typechecked against the types.
 
 Import defs with `import type` only: a def imported as a value carries the SDK runtime into
-your bundle. Bundle numbers, inference rules, and the realtime helpers are in
+your bundle. Bundle numbers, inference rules, and the realtime and MCP helpers
+(`socketUrl`, `channelPath`, `mcpUrl`) are in
 [The typed frontend surface](https://github.com/xano-sdk/sdk/blob/main/guides/typed-frontend.md).
 
 ---
@@ -471,6 +470,8 @@ AI builds software. Xano makes it trustworthy.
 [`llms.txt`](llms.txt): the agent-facing router, mapping the `llms/` topic files
 
 Xano SDK is the official TypeScript SDK for [Xano](https://xano.com):
-[docs](https://docs.xano.com) · [community](https://community.xano.com). MIT licensed.
+[docs](https://docs.xano.com) · [community](https://community.xano.com). The SDK is MIT
+licensed. The Xano Engine it downloads is free to run but not open source; it is covered by
+the Xano Engine License.
 
 </div>

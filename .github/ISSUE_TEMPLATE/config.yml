@@ -1,13 +1,13 @@
-# Blank issues stay on: a report that fits neither form is still worth having.
-blank_issues_enabled: true
+# Issues are for bugs. Questions and ideas go to the community.
+blank_issues_enabled: false
 contact_links:
+  - name: Question, idea or feature request
+    url: https://community.xano.com
+    about: >-
+      How-to questions, feature ideas and discussion about the SDK or Xano
+      itself belong in the Xano community.
   - name: Security vulnerability
     url: https://github.com/xano-sdk/sdk/security/advisories/new
     about: >-
       Do not open a public issue. Report it privately through a GitHub security
       advisory — see SECURITY.md.
-  - name: Question about Xano itself
-    url: https://docs.xano.com
-    about: >-
-      For the Xano platform rather than this SDK — the product docs and Xano
-      support are the right place.

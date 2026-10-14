@@ -25,9 +25,8 @@
  * harness asserting bundle bytes. Nothing here is documented in `llms.txt`, and
  * none of it is needed to define a workspace.
  *
- * These names are versioned like the rest of the package, but they describe an
- * internal contract — expect them to move with the compiler, not with the
- * authoring API.
+ * These names follow semantic versioning like the rest of the package: a
+ * breaking change to one is a major release.
  */
 
 export { toNestedFields } from "./fields/catalog.js";

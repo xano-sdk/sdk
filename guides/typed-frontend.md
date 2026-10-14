@@ -238,6 +238,20 @@ const ws = new WebSocket(socketUrl("chat", XANO_HOST), token);
 ws.send(JSON.stringify({ action: "join", channel: channelPath("rooms/{room_id}", { room_id }) }));
 ```
 
+MCP servers are there too: `mcpUrl(server, baseUrl)` is the equivalent of
+`mcpServer().getUrl()`, with the same `/tenant/<name>` lift and the same refusal of an
+already-resolved URL. It's an address to show a user or hand an MCP client. The endpoint
+refuses any request carrying a browser `Origin`, so page JS can't call it directly:
+
+```ts
+import { mcpUrl } from "../xano/routes.gen";
+
+const connectUrl = mcpUrl("notes_mcp", XANO_HOST); // https://host/x2/mcp/<canonical>/mcp/stream
+```
+
+Run `xanosdk routes ./xano/index.ts` without `--emit` to see every address the file carries:
+each route, socket, channel and MCP server, with the call that builds it.
+
 **Request types come from the same file.** It exports four types-only maps, keyed exactly
 like the runtime tables they sit beside, so a frontend types what it sends without importing a
 def at all:

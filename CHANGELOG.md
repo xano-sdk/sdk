@@ -8,6 +8,21 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.11 — MCP addresses and agent fallbacks
+
+_2026-10-14_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.11)
+
+This release mostly fixes what an agent is told. A field report on building against the Xano Engine turned up behavior the docs didn't mention, and one case where they were wrong. The route manifest now carries MCP server addresses, and a fresh project stops repeating a notice on every `dev` and `build`.
+
+- `routes.gen.ts` carries MCP server addresses
+- `caught()` docs now match what the engine binds, so agent fallbacks can branch
+- MCP endpoints refuse browser origins, now documented
+- `xano-free` agents need Xano's cloud, now documented
+- The filter list shows each filter's operand type
+- A fresh project no longer repeats "No API queries registered"
+
+---
+
 ## 1.0.10 — The v3 messaging
 
 _2026-10-13_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.10)

@@ -229,10 +229,10 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `release.seed-rows-not-decoded` | … carries seed rows for …, and a decoded tree carries no rows — they are not in …/. |
 | `release.transfer-cancelled` | Transfer cancelled — nothing was imported. |
 | `routes.cli-skew` | This CLI is another version than the project's installed SDK, so it left the route table for the installed CLI to render. |
-| `routes.mcp-unresolved` | …: leaving out … — … — whose canonical URL token resolves nowhere. |
+| `routes.mcp-unresolved` | An MCP server whose canonical URL token resolves nowhere is left out of the route table (or listing). |
 | `routes.module-failed` | A toolchain module could not generate its section of `routes.gen.ts`; the rest was refreshed and its previous block, if any, was kept. |
 | `routes.not-written` | The route table (`routes.gen.ts`) was not written this run; the line says why and what writes it. |
-| `routes.realtime-unresolved` | …: leaving out … — … — whose canonical URL token resolves nowhere, along with their channels. |
+| `routes.realtime-unresolved` | A realtime server whose canonical URL token resolves nowhere is left out of the route table (or listing), along with its channels. |
 | `secrets.cleartext-export` | … carries … in cleartext — written owner-only (0600); do not commit it. |
 | `secrets.cleartext-stdout` | The export carries … in cleartext — written to stdout, where no file permission protects it; do not commit or log it. |
 | `secrets.doc-token-written` | Documentation tokens: wrote … to `…` — …. |

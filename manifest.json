@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -10716,7 +10716,7 @@
           "description": "With --emit: write nothing, and fail when the file is missing or out of date (what xano:check runs)"
         }
       ],
-      "description": "List each query's verb + resolved api:<canonical>/<name>"
+      "description": "List every address a frontend references — api:<canonical>/<name> routes, realtime sockets and channels, MCP servers"
     },
     {
       "command": "secrets fill",

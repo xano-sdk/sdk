@@ -26,7 +26,7 @@ xanosdk marketplace remove <toolchain-package>     # uninstall it and drop what 
 xanosdk export ./xano/index.ts              # bundle to stdout
 xanosdk export ./xano/index.ts --out ws.json
 xanosdk compile ./xano/functions/get-user.ts  # a single function's JSON
-xanosdk routes ./xano/index.ts              # each query's verb + resolved api:<canonical>/<name> (`paths` is an alias)
+xanosdk routes ./xano/index.ts              # every route, realtime socket/channel and MCP server address (`paths` is an alias)
 
 xanosdk export ./xano/index.ts --strict     # CI: fail the build on any warning, don't just print it
 xanosdk export ./xano/index.ts --no-lock    # build with no xano.lock (one is written by default; refused once one exists)

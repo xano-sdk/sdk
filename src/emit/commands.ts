@@ -955,7 +955,7 @@ export const COMMANDS = {
   routes: {
     group: "Author",
     display: "routes <file>",
-    summary: "List each query's verb + resolved api:<canonical>/<name>",
+    summary: "List every address a frontend references — api:<canonical>/<name> routes, realtime sockets and channels, MCP servers",
     args: [{ name: "file", required: true, path: true }],
     flags: [
       "lock",

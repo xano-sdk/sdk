@@ -5341,72 +5341,75 @@ async function runPaths(args: ParsedArgs): Promise<void> {
     setDiagnosticSink(outerSink);
   }
   const payload = bundle.payload as Record<string, unknown>;
-  const { planRouteManifest } = await import("./routes-manifest.js");
+  const { planRouteManifest, manifestCounts, describeManifestCounts, routesListing, formatRoutesListing, NO_MANIFEST_COUNTS } =
+    await import("./routes-manifest.js");
   // The one reading of a payload the decode paths share, so a manifest a pull
   // wrote is byte-identical to the one this command would emit for it.
   const plan = planRouteManifest(payload, (kind, name) => lockModel?.objects[lockKey(kind, name)]?.canonical);
   const queryCount = plan.rows.length;
   // Realtime and MCP servers: addresses the manifest carries besides routes.
-  const realtimeCount =
+  const serverCount =
     plan.servers.length + plan.unresolvedServers.length + plan.mcpServers.length + plan.unresolvedMcpServers.length;
 
-  // A realtime- or MCP-only workspace has no routes to print but still has a
-  // manifest worth emitting (its addresses), so only the printing path is empty.
   // Under machine output the answer is a document, never a silence or a line of
-  // prose: `{ routes: [...] }` for the listing, `{ emit, written, ... }` for `--emit`.
+  // prose: `{ routes, realtimeServers, channels, mcpServers }` for the listing,
+  // `{ emit, written, ...counts }` for `--emit`.
   const machine = isMachineOutput(args);
+  const emitDoc = (written: boolean, counts = NO_MANIFEST_COUNTS) =>
+    ({ emit: resolve(args.emit!), written, ...counts });
   // A committed manifest that still lists routes the workspace no longer has is
   // stale even though there is nothing left to list: `--strict` fails on it and
   // `--emit` rewrites it to the empty manifest, so a call site reaching for a
   // removed endpoint stops compiling instead of addressing a 404.
   const emptiedManifest =
-    args.emit !== undefined && queryCount === 0 && realtimeCount === 0 && existsSync(args.emit);
-  if (queryCount === 0 && !(args.emit !== undefined && realtimeCount > 0) && !emptiedManifest) {
+    args.emit !== undefined && queryCount === 0 && serverCount === 0 && existsSync(args.emit);
+  if (queryCount === 0 && serverCount === 0 && !emptiedManifest) {
     // Only the listing says so. `--emit` runs before every `dev`, `build` and
     // `typecheck`, so on a fresh starter the line would repeat on each one.
-    if (args.emit === undefined) info("No API queries registered in this workspace.");
-    if (machine && args.emit !== "-") writeJson(args.emit !== undefined ? { emit: resolve(args.emit), written: false, routes: 0, channels: 0 } : { routes: [] });
+    if (args.emit === undefined) info("No endpoints, realtime servers or MCP servers registered in this workspace.");
+    if (machine && args.emit !== "-") writeJson(args.emit !== undefined ? emitDoc(false) : routesListing(plan));
     return;
   }
 
   const unresolved = plan.unresolved;
   const resolved = plan.resolved;
 
+  // An unresolved realtime or MCP server is a warning, not a failure —
+  // deliberately unlike an unresolved api group below. A manifest missing a
+  // route is worse than no manifest because routes are what the file is for; a
+  // workspace that merely CONTAINS realtime or MCP should still get its HTTP
+  // half, and an address nobody could resolve is better left out than guessed
+  // at. What is dropped is named, and reaching for a dropped server or channel
+  // is a compile error at the call site, never a wrong address at runtime. The
+  // listing drops the same servers, so it says so too.
+  const leavingOut = args.emit !== undefined ? `${args.emit}: leaving out` : "Not listing";
+  if (plan.unresolvedServers.length > 0) {
+    warn(
+      `${leavingOut} ${countOf(plan.unresolvedServers.length, "realtime server")} — ` +
+        `${plan.unresolvedServers.map((name) => `"${name}"`).join(", ")} — whose canonical URL token ` +
+        `resolves nowhere, along with their channels. Set an explicit ` +
+        `\`realtimeServer({ canonical })\`, or run \`xanosdk export ${shellWord(file)} --out ${NULL_DEVICE}\` once ` +
+        `(it mints a unique canonical and freezes it in xano.lock, and writes the bundle nowhere), then re-run to include them.`,
+      "routes.realtime-unresolved",
+    );
+  }
+  if (plan.unresolvedMcpServers.length > 0) {
+    warn(
+      `${leavingOut} ${countOf(plan.unresolvedMcpServers.length, "MCP server")} — ` +
+        `${plan.unresolvedMcpServers.map((name) => `"${name}"`).join(", ")} — whose canonical URL token ` +
+        `resolves nowhere. Set an explicit \`mcpServer({ canonical })\`, or run ` +
+        `\`xanosdk export ${shellWord(file)} --out ${NULL_DEVICE}\` once (it mints a unique canonical and freezes ` +
+        `it in xano.lock, and writes the bundle nowhere), then re-run to include them.`,
+      "routes.mcp-unresolved",
+    );
+  }
+
   // `--emit` writes the generated route module instead of printing. It needs
   // every canonical resolved, so the unresolved check below runs first — a
   // manifest missing routes is worse than no manifest, because the gap is
   // invisible until a call site reaches for a name that isn't there.
   if (args.emit !== undefined) {
-    // An unresolved REALTIME server is a warning, not a failure — deliberately
-    // unlike an unresolved api group above. A manifest missing a route is worse
-    // than no manifest because routes are what the file is for; a workspace that
-    // merely CONTAINS realtime should still get its HTTP half, and a socket
-    // address nobody could resolve is better left out than guessed at. What is
-    // dropped is named, and reaching for a dropped server or channel is a
-    // compile error at the call site, never a wrong address at runtime.
-    const unresolvedServers = plan.unresolvedServers.map((name) => ({ name }));
-    const describableServers = plan.servers;
-    const channelRows = plan.channels;
-    if (unresolvedServers.length > 0) {
-      warn(
-        `${args.emit}: leaving out ${countOf(unresolvedServers.length, "realtime server")} — ` +
-          `${unresolvedServers.map((s) => `"${s.name}"`).join(", ")} — whose canonical URL token ` +
-          `resolves nowhere, along with their channels. Set an explicit ` +
-          `\`realtimeServer({ canonical })\`, or run \`xanosdk export ${shellWord(file)} --out ${NULL_DEVICE}\` once ` +
-          `(it mints a unique canonical and freezes it in xano.lock, and writes the bundle nowhere), then re-run to include them.`,
-        "routes.realtime-unresolved",
-      );
-    }
-    if (plan.unresolvedMcpServers.length > 0) {
-      warn(
-        `${args.emit}: leaving out ${countOf(plan.unresolvedMcpServers.length, "MCP server")} — ` +
-          `${plan.unresolvedMcpServers.map((name) => `"${name}"`).join(", ")} — whose canonical URL token ` +
-          `resolves nowhere. Set an explicit \`mcpServer({ canonical })\`, or run ` +
-          `\`xanosdk export ${shellWord(file)} --out ${NULL_DEVICE}\` once (it mints a unique canonical and freezes ` +
-          `it in xano.lock, and writes the bundle nowhere), then re-run to include them.`,
-        "routes.mcp-unresolved",
-      );
-    }
+    const counts = manifestCounts(plan);
 
     // An unresolved api group writes nothing (a manifest missing a route is
     // worse than none) and is never silent: `--strict` (the scaffold's
@@ -5418,15 +5421,15 @@ async function runPaths(args: ParsedArgs): Promise<void> {
       const why = `${args.emit} was not written: ${unresolvedCanonicalMessage(unresolved, shellWord(file))}`;
       if (args.strict) throw new Error(`--strict: ${why}`);
       warn(why, "routes.not-written");
-      if (machine && args.emit !== "-") writeJson({ emit: resolve(args.emit), written: false, routes: 0, channels: 0 });
+      if (machine && args.emit !== "-") writeJson(emitDoc(false));
       return;
     }
 
-    if (resolved.length === 0 && describableServers.length === 0 && plan.mcpServers.length === 0 && !emptiedManifest) {
+    if (resolved.length === 0 && plan.servers.length === 0 && plan.mcpServers.length === 0 && !emptiedManifest) {
       // Everything was dropped by the warnings above; a file exporting nothing
       // is worse than none, and the warnings already say what to fix.
       info(`Nothing to write to ${args.emit} yet.`);
-      if (machine && args.emit !== "-") writeJson({ emit: resolve(args.emit), written: false, routes: 0, channels: 0 });
+      if (machine && args.emit !== "-") writeJson(emitDoc(false));
       return;
     }
 
@@ -5452,10 +5455,7 @@ async function runPaths(args: ParsedArgs): Promise<void> {
     )!;
     reportModuleFailures(rendered.failed, args.emit === "-" ? "the route manifest on stdout" : args.emit, args.strict === true);
     const source = rendered.source;
-    const routeCount = resolved.length === 1 ? "1 route" : `${resolved.length} routes`;
-    const channelCount =
-      channelRows.length === 1 ? "1 channel" : `${channelRows.length} channels`;
-    const count = describableServers.length > 0 ? `${routeCount}, ${channelCount}` : routeCount;
+    const count = describeManifestCounts(counts);
     // `--emit -` is stdout, as `export` and `workspace export --path -` spell
     // it: the module IS the output, so no summary document follows it.
     if (args.emit === "-") {
@@ -5489,7 +5489,7 @@ async function runPaths(args: ParsedArgs): Promise<void> {
         );
       }
       warn(skewNote(emit, readVersion(), projectSdk.version, installed), "routes.cli-skew");
-      if (machine) writeJson({ emit: resolve(emit), written: false, routes: resolved.length, channels: 0 });
+      if (machine) writeJson(emitDoc(false, counts));
       return;
     }
     // `--check` is the CI guard. A generated manifest that is never
@@ -5531,33 +5531,16 @@ async function runPaths(args: ParsedArgs): Promise<void> {
       }
     }
     if (machine) {
-      writeJson({
-        emit: resolve(args.emit),
-        written,
-        routes: resolved.length,
-        channels: describableServers.length > 0 ? channelRows.length : 0,
-      });
+      writeJson(emitDoc(written, counts));
     }
   } else if (machine) {
     // Nothing is written while a route is unresolved: the throw below becomes the
     // failure document, and a half listing beside it would be a second one.
-    if (unresolved.length === 0) {
-      writeJson({
-        routes: resolved.map((r) => ({
-          verb: r.verb,
-          path: `/api:${r.canonical}/${r.name}`,
-          ref: `api:${r.canonical}/${r.name}`,
-        })),
-      });
-    }
+    if (unresolved.length === 0) writeJson(routesListing(plan));
   } else {
-    const verbWidth = Math.max(0, ...resolved.map((r) => r.verb.length));
-    for (const r of resolved) {
-      const path = `/api:${r.canonical}/${r.name}`;
-      // Requested output → stdout (a caller may pipe it). Verb-padded for scanning;
-      // the trailing `api:<canonical>/<name>` is the canonical string form.
-      process.stdout.write(`${r.verb.padEnd(verbWidth)}  ${path}  api:${r.canonical}/${r.name}\n`);
-    }
+    // Requested output → stdout (a caller may pipe it): every address the
+    // manifest carries, routes first, then sockets, channels and MCP servers.
+    process.stdout.write(formatRoutesListing(routesListing(plan)));
   }
 
   if (unresolved.length > 0) {
