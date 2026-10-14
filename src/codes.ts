@@ -229,6 +229,7 @@ export type WarningCode =
   | "routes.not-written"
   | "routes.cli-skew"
   | "routes.module-failed"
+  | "routes.mcp-unresolved"
   | "routes.realtime-unresolved"
   | "secrets.cleartext-export"
   | "secrets.cleartext-stdout"

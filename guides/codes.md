@@ -229,6 +229,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `release.seed-rows-not-decoded` | … carries seed rows for …, and a decoded tree carries no rows — they are not in …/. |
 | `release.transfer-cancelled` | Transfer cancelled — nothing was imported. |
 | `routes.cli-skew` | This CLI is another version than the project's installed SDK, so it left the route table for the installed CLI to render. |
+| `routes.mcp-unresolved` | …: leaving out … — … — whose canonical URL token resolves nowhere. |
 | `routes.module-failed` | A toolchain module could not generate its section of `routes.gen.ts`; the rest was refreshed and its previous block, if any, was kept. |
 | `routes.not-written` | The route table (`routes.gen.ts`) was not written this run; the line says why and what writes it. |
 | `routes.realtime-unresolved` | …: leaving out … — … — whose canonical URL token resolves nowhere, along with their channels. |

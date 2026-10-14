@@ -14,7 +14,8 @@ Importing a def into a browser bundle or a Node script — for `getPath()`, `get
   Fix: `xanosdk routes <entry> --emit xano/routes.gen.ts` (`paths` is an accepted alias) — verbs, paths, and sockets as
   plain data importing NOTHING, still compile-checked: `routePath("GET blog/{slug}", { slug })`
   `channelPath("rooms/{room_id}", { room_id })`, `socketUrl("chat", baseUrl)` (tenant base
-  URLs lifted to `wss://h/ws/<tenant>:<canonical>`). A rename is a type error, not a 404.
+  URLs lifted to `wss://h/ws/<tenant>:<canonical>`), `mcpUrl("notes_mcp", baseUrl)` (an MCP
+  server's address to show a user or hand a client; browser JS cannot call it). A rename is a type error, not a 404.
 - **Request types without the def.** `routes.gen.ts` also exports types-only `RouteInputs`,
   `ChannelInputs`, `MessageInputs` (and `MessageName`), keyed like `ROUTES`, `CHANNELS`, and
   `"<channel key> <message name>"`: `type NewListing = RouteInputs["POST listings"]`. A

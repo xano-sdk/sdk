@@ -1292,10 +1292,16 @@ export type CaughtField = "code" | "message" | "name" | "result";
  *
  * Only valid inside the catch arm; the engine binds these for that scope alone
  * and they read empty anywhere else. The four fields are all the engine sets:
- * - `name` — the error name/type (for a thrown error statement, its message)
- * - `message` — the human-readable message (`"Throw Error Statement"` for a throw)
- * - `code` — the mapped HTTP-ish error code
- * - `result` — the error payload, when one was attached
+ * - `name` — `s.throw`'s `name` (empty without one), else a label
+ *   (`"Exception"`, `"Access Denied"`)
+ * - `message` — the error text: a precondition's `error`, the engine's, or an
+ *   LLM provider's (`"Throw Error Statement"` for a throw)
+ * - `code` — the error type (`ERROR_FATAL`, a precondition's `error_type`,
+ *   `ERROR_CODE_THROWN_ERROR`)
+ * - `result` — the attached payload: `s.throw`'s value, or for an
+ *   `s.ai.agent.run` provider failure `{ name: "AI_APICallError", statusCode,
+ *   isRetryable, data }`. The path takes only these four names; read deeper
+ *   with `withFilters(caught("result"), fl.get("statusCode"))`.
  *
  * e.g. `s.try_catch({ try: [...], catch: [s.debug_log(caught("message"))] })`.
  * Bare `caught()` is the whole error record.

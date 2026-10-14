@@ -93,7 +93,9 @@ export function renderManifestFile(
 ): ManifestFile | undefined {
   const core =
     renderPlannedManifest(plan, opts.entry) ??
-    (opts.orEmpty === true && plan.resolved.length === 0 && plan.servers.length === 0 ? renderRouteManifest([]) : undefined);
+    (opts.orEmpty === true && plan.resolved.length === 0 && plan.servers.length === 0 && plan.mcpServers.length === 0
+      ? renderRouteManifest([])
+      : undefined);
   if (core === undefined) return undefined;
   if (modules === undefined) return { source: core, failed: [] };
 

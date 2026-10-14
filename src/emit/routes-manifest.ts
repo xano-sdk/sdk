@@ -98,6 +98,14 @@ export interface RealtimeChannelEntry {
   server: string;
 }
 
+/** One MCP server, as the emitter needs it. */
+export interface McpServerEntry {
+  /** The server's `name` — the manifest's key, and what `mcpUrl` selects on. */
+  name: string;
+  /** The server's resolved canonical URL token. */
+  canonical: string;
+}
+
 /** The realtime half of a manifest. Omitted entirely when a workspace has none. */
 export interface RealtimeManifest {
   servers: readonly RealtimeServerEntry[];
@@ -302,8 +310,8 @@ ${realtimeImplementation(ambiguousKeys.length > 0)}`;
  * up) and are sorted here so the output is deterministic — the file is committed
  * and diffed, and a re-run that reorders it would show as spurious churn.
  *
- * The realtime section is emitted only for a workspace that has one, so a
- * query-only manifest carries no empty realtime block.
+ * The realtime and MCP sections are emitted only for a workspace that has
+ * one, so a query-only manifest carries no empty block.
  *
  * `inputs` is the planner's description (`RoutePlan.inputs`), already keyed
  * and ordered like the sections above; omitted, every input map is empty. Its
@@ -314,6 +322,7 @@ export function renderRouteManifest(
   routes: readonly RouteEntry[],
   realtime?: RealtimeManifest,
   inputs: RouteInputs = NO_ROUTE_INPUTS,
+  mcp: readonly McpServerEntry[] = [],
 ): string {
   // A short key held by more than one endpoint is ambiguous: each of those is
   // keyed by its group instead (`keyRoutes`), and the short key is left out.
@@ -379,7 +388,7 @@ export const ROUTES = ${objectLiteral(entries)} as const;
 export type RouteName = keyof typeof ROUTES;
 ${rows.length > 1 ? MANY_ROUTES : ""}
 ${rows.length > 1 ? UNION_OVERLOAD : ""}${ambiguousOverloads ? `${ambiguousOverloads}\n` : ""}${overloadsFor("routePath", rows.map((r) => ({ name: r.key, params: r.params })))}
-${implementation(ambiguousKeys.length > 0)}${realtimeSection}${renderRouteInputTypes(inputs)}`;
+${implementation(ambiguousKeys.length > 0)}${realtimeSection}${mcp.length > 0 ? renderMcp(mcp) : ""}${renderRouteInputTypes(inputs)}`;
 }
 
 /**
@@ -661,6 +670,114 @@ export function socketUrl(
 `;
 
 /**
+ * The emitted MCP accessors. \`mcpPath\`/\`mcpUrl\` mirror
+ * \`mcpServer().getPath()\`/\`getUrl()\` rule for rule: the same path, the same
+ * \`/tenant/<name>\` lift, the same refusal of an already-resolved base URL.
+ */
+const MCP_IMPLEMENTATION = `
+/** Reject a tenant name that would smuggle extra path segments into the MCP path. */
+function assertMcpTenant(tenant: string): string {
+  if (!/^[A-Za-z0-9-]+$/.test(tenant)) {
+    throw new Error(
+      \`mcpUrl: invalid \\\`tenant\\\` \${JSON.stringify(tenant)} — a tenant name is alphanumeric with dashes \` +
+        \`(e.g. "xxxx-xxxx-xxxx"). It rides as its own "/tenant/<name>" path pair, so "/" cannot appear in it.\`,
+    );
+  }
+  return tenant;
+}
+
+/**
+ * The Streamable-HTTP endpoint PATH — \`/x2/mcp/<canonical>/<token>/stream\`, or
+ * \`/x2/mcp/tenant/<tenant>/<canonical>/<token>/stream\`. \`token\` defaults to
+ * "mcp": no URL token, so the client authenticates with an \`Authorization\` header.
+ */
+export function mcpPath(
+  server: McpServerName,
+  opts?: { tenant?: string | undefined; token?: string | undefined },
+): string {
+  const entry = own(MCP_SERVERS as Record<string, { canonical: string }>, server);
+  if (!entry) throw new Error(\`mcpPath: unknown MCP server "\${String(server)}".\`);
+  const tenant = opts?.tenant ? \`tenant/\${assertMcpTenant(opts.tenant)}/\` : "";
+  return \`/x2/mcp/\${tenant}\${entry.canonical}/\${opts?.token || "mcp"}/stream\`;
+}
+
+/**
+ * The absolute endpoint URL — \`baseUrl\` + {@link mcpPath}. A \`/tenant/<name>\`
+ * on the base URL is lifted to after \`/x2/mcp\`, where the endpoint registers it,
+ * so \`mcpUrl(name, window.XANO_HOST)\` is right as-is.
+ *
+ * Give it to an MCP client or show it to a user. The endpoint refuses any
+ * request carrying a browser \`Origin\` (403 "Forbidden: Origin not allowed"), so
+ * page JS cannot call it directly.
+ */
+export function mcpUrl(
+  server: McpServerName,
+  baseUrl: string,
+  opts?: { tenant?: string | undefined; token?: string | undefined },
+): string {
+  if (!own(MCP_SERVERS as Record<string, unknown>, server)) {
+    throw new Error(\`mcpUrl: unknown MCP server "\${String(server)}".\`);
+  }
+  const base = (baseUrl ?? "").trim().replace(/\\/+$/, "");
+  if (!base) throw new Error('mcpUrl: needs a base URL (e.g. "https://x.dev.xano.io").');
+  // A base URL ending in an MCP endpoint path is this function's own output fed
+  // back in. The token segment can be a credential, so it is redacted.
+  const resolved = /(\\/x2\\/mcp\\/(?:tenant\\/[^/]+\\/)?[^/]+\\/)[^/]+(\\/stream)$/i;
+  if (resolved.test(base)) {
+    throw new Error(
+      \`mcpUrl: \\\`baseUrl\\\` already carries an MCP endpoint path (\${base.replace(resolved, "$1<token>$2")}). \` +
+        "Pass the INSTANCE base URL, not the result of a previous mcpUrl()/getUrl() — resolving twice " +
+        'appends a second "/x2/mcp/<canonical>/<token>/stream".',
+    );
+  }
+  // A tenant base URL names its tenant in a slot the MCP endpoint does not
+  // register; translate rather than concatenate, which 404s.
+  const lifted = /^((?:https?:\\/\\/)?[^/]+)\\/tenant\\/([^/]+)(\\/.*)?$/i.exec(base);
+  let origin = base;
+  let tenant = opts?.tenant;
+  if (lifted) {
+    const fromBase = lifted[2]!;
+    if (tenant !== undefined && tenant !== fromBase) {
+      throw new Error(
+        \`mcpUrl: given tenant \${JSON.stringify(tenant)} but the base URL names \` +
+          \`\${JSON.stringify(fromBase)} (".../tenant/\${fromBase}"). Refusing to guess which one you \` +
+          'meant — pass the matching tenant, or a base URL without the "/tenant/<name>" prefix.',
+      );
+    }
+    origin = \`\${lifted[1]!}\${lifted[3] ?? ""}\`;
+    tenant = assertMcpTenant(fromBase);
+  }
+  return \`\${origin}\${mcpPath(server, { tenant, token: opts?.token })}\`;
+}
+`;
+
+/**
+ * The MCP section's source text — each server's canonical and the
+ * \`mcpPath\`/\`mcpUrl\` accessors. A frontend gets an MCP server's address
+ * without importing its def, as it gets a socket's from \`socketUrl\`.
+ */
+function renderMcp(servers: readonly McpServerEntry[]): string {
+  const seen = new Set<string>();
+  for (const server of servers) {
+    if (seen.has(server.name)) {
+      throw new RouteManifestError(
+        `Two MCP servers are both named "${server.name}". The manifest keys on the server name, so the ` +
+          `names must be unique. Rename one.`,
+      );
+    }
+    seen.add(server.name);
+  }
+  const rows = servers.map((s) => `  ${literal(s.name)}: { canonical: ${literal(s.canonical)} },`);
+  return `
+/** Every MCP server in this workspace, by name, with its resolved canonical. */
+export const MCP_SERVERS = ${objectLiteral(rows)} as const;
+
+/** Every MCP server name in this workspace. */
+export type McpServerName = keyof typeof MCP_SERVERS;
+${MCP_IMPLEMENTATION}`;
+}
+
+/**
  * The manifest's file name, beside the backend's entry. The scaffold's
  * `xano:routes` script writes `xano/routes.gen.ts`, and a decode (`init --from`,
  * `pull`, `generate`) writes the same file into the tree it produces — so a
@@ -700,6 +817,10 @@ export interface RoutePlan {
   unresolvedServers: string[];
   /** Channels of the servers in {@link RoutePlan.servers}. */
   channels: RealtimeChannelEntry[];
+  /** MCP servers with a resolvable canonical. */
+  mcpServers: McpServerEntry[];
+  /** MCP servers whose canonical resolves nowhere — left out. */
+  unresolvedMcpServers: string[];
   /**
    * The request inputs of every route in {@link RoutePlan.resolved}, every
    * channel in {@link RoutePlan.channels}, and every message on one of those
@@ -717,7 +838,7 @@ export interface RoutePlan {
  */
 export function planRouteManifest(
   payload: Readonly<Record<string, unknown>>,
-  locked: (kind: "app" | "realtime_server", name: string) => string | undefined = () => undefined,
+  locked: (kind: "app" | "realtime_server" | "toolset", name: string) => string | undefined = () => undefined,
 ): RoutePlan {
   const list = (key: string): Array<Record<string, unknown>> =>
     Array.isArray(payload[key])
@@ -783,6 +904,17 @@ export function planRouteManifest(
     return [channel];
   });
 
+  // Agents share the `toolset` payload key and have no public endpoint: only
+  // `type: "mcp"` rows have an address to carry.
+  const mcpRows = list("toolset").flatMap((t) => {
+    const name = text(t.name);
+    if (name === undefined || t.type !== "mcp") return [];
+    return [{ name, canonical: text(t.canonical) ?? locked("toolset", name) }];
+  });
+  const mcpServers = mcpRows
+    .flatMap((t) => (t.canonical ? [{ name: t.name, canonical: t.canonical }] : []))
+    .sort((a, b) => byCodeUnit(a.name, b.name));
+
   const resolved: RouteEntry[] = rows.flatMap((r) => {
     if (!r.canonical) return [];
     const entry: RouteEntry = { name: r.name, verb: r.verb, canonical: r.canonical, ...(r.group !== undefined ? { group: r.group } : {}) };
@@ -824,6 +956,8 @@ export function planRouteManifest(
     servers,
     unresolvedServers: serverRows.filter((s) => !s.canonical).map((s) => s.name),
     channels,
+    mcpServers,
+    unresolvedMcpServers: mcpRows.filter((t) => !t.canonical).map((t) => t.name),
     inputs: { routes: routeInputs, channels: channelInputs, messages: messageInputs },
   };
 }
@@ -846,17 +980,18 @@ export function unresolvedCanonicalMessage(unresolved: readonly { name: string }
 
 /**
  * The manifest a plan renders to, or `undefined` when `routes --emit` would
- * write nothing for it: no endpoint and no resolvable realtime server. An
+ * write nothing for it: no endpoint and no resolvable realtime or MCP server. An
  * endpoint whose api group's canonical resolves nowhere is a
  * {@link RouteManifestError}: a manifest missing a route is worse than none,
  * and a silent skip leaves `--strict` failing with nothing saying why.
  */
 export function renderPlannedManifest(plan: RoutePlan, entry = "<entry>"): string | undefined {
   if (plan.unresolved.length > 0) throw new RouteManifestError(unresolvedCanonicalMessage(plan.unresolved, entry));
-  if (plan.resolved.length === 0 && plan.servers.length === 0) return undefined;
+  if (plan.resolved.length === 0 && plan.servers.length === 0 && plan.mcpServers.length === 0) return undefined;
   return renderRouteManifest(
     plan.resolved,
     plan.servers.length > 0 ? { servers: plan.servers, channels: plan.channels } : undefined,
     plan.inputs,
+    plan.mcpServers,
   );
 }

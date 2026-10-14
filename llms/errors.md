@@ -23,6 +23,8 @@
 - A lambda returns error TEXT with HTTP 200 (`Could not resolve "node:crypto"`, an undefined-binding message) — the body threw; use the preloaded globals, the surface's bindings, and `capture`. `llms/lambda.md`.
 - `Unable to locate request.` (404) on an endpoint that deployed — a lowercase verb, a `.` in the name, or a CORS `mode` typo that dropped the whole API group. `llms/kinds-core.md`.
 - A browser call fails on a missing `access-control-allow-origin` while deploy looks fine — CORS `mode: "custom"` with `"*"` or an unmatched origin. `llms/kinds-core.md`.
+- 403 `Forbidden: Origin not allowed` from an MCP server URL — the request came from a browser; MCP endpoints refuse every `Origin`, so call them server-side. `llms/kinds-agent-mcp.md`.
+- `ERROR_FATAL` `The free model is not available in this process.` — an `xano-free` agent run on the Xano Engine on this machine; it runs only on Xano's cloud. `llms/kinds-agent-mcp.md`.
 - A websocket is closed right after the handshake — a refused `connect` gate: an empty/falsy return, a crash, or a gating trigger with no `response`. `llms/triggers.md`.
 - `to_throw failed - response is ok` around an auth-refused call — `ERROR_CODE_ACCESS_DENIED` carries no message; the auth gate is not reachable from a workflow test. `llms/tests.md`.
 - Output reads `Hi [object Object]` — a tagged value inside a JS template literal; compose at runtime with `withFilters` + `fl.concat`. `llms.txt`.

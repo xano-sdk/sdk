@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -128,7 +128,7 @@
       {
         "name": "caught",
         "signature": "(path?: \"code\" | \"message\" | \"name\" | \"result\") => Value",
-        "description": "Read the caught error inside an s.try_catch CATCH arm → tag \"trycatch\". Valid ONLY there — it reads empty in the try/finally arms and outside the statement. Those four fields are all the engine binds (result is the attached payload); bare caught() is the whole error record. ⚠ For an ENGINE-raised exception only `code` and `name` are populated; for an `s.throw`, `message` is the fixed string \"Throw Error Statement\" and your text is in `result`. So `caught(\"name\")` is useful in both cases and `caught(\"message\")` in NEITHER."
+        "description": "Read the caught error inside an s.try_catch CATCH arm → tag \"trycatch\". Valid ONLY there — it reads empty in the try/finally arms and outside the statement. Those four fields are all the engine binds; bare caught() is the whole error record. `code` is the error type: `ERROR_FATAL` for an engine error, a precondition's `error_type` (`ERROR_CODE_ACCESS_DENIED`, …), `ERROR_CODE_THROWN_ERROR` for `s.throw`. `message` is the error text (a precondition's `error`, the engine's, an LLM provider's) EXCEPT for `s.throw`, where it is the fixed \"Throw Error Statement\" and your value is in `result`. `name` is `s.throw`'s `name` (empty without one), else a label (`Exception`, `Access Denied`). ⚠ An `s.ai.agent.run` provider failure binds `result: { name: \"AI_APICallError\", statusCode, isRetryable, data }`; branch a fallback on `withFilters(caught(\"result\"), fl.get(\"statusCode\"))` (401: the key was refused). The path takes only the four names; reach deeper with `fl.get`."
       },
       {
         "name": "toolset",

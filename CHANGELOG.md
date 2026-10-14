@@ -8,6 +8,19 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.10 — The v3 messaging
+
+_2026-10-13_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.10)
+
+The README, the project `init` writes, and the npm listing now tell the same story as xano.com: Xano is one platform to build, run and govern AI-built software. Your coding agent writes the backend in TypeScript, you run it on the Xano Engine, then deploy it to Xano. Nothing changes at runtime.
+
+- The README leads with Write with AI · Run locally · Deploy to Xano
+- The SDK docs site is linked from the README
+- The deploy link opens the Xano editor
+- The npm description matches the deploy default
+
+---
+
 ## 1.0.9 — Agents pick the right kind
 
 _2026-10-13_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.9)

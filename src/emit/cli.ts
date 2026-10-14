@@ -5346,10 +5346,12 @@ async function runPaths(args: ParsedArgs): Promise<void> {
   // wrote is byte-identical to the one this command would emit for it.
   const plan = planRouteManifest(payload, (kind, name) => lockModel?.objects[lockKey(kind, name)]?.canonical);
   const queryCount = plan.rows.length;
-  const realtimeCount = plan.servers.length + plan.unresolvedServers.length;
+  // Realtime and MCP servers: addresses the manifest carries besides routes.
+  const realtimeCount =
+    plan.servers.length + plan.unresolvedServers.length + plan.mcpServers.length + plan.unresolvedMcpServers.length;
 
-  // A realtime-only workspace has no routes to print but still has a manifest
-  // worth emitting (its socket addresses), so only the printing path is empty.
+  // A realtime- or MCP-only workspace has no routes to print but still has a
+  // manifest worth emitting (its addresses), so only the printing path is empty.
   // Under machine output the answer is a document, never a silence or a line of
   // prose: `{ routes: [...] }` for the listing, `{ emit, written, ... }` for `--emit`.
   const machine = isMachineOutput(args);
@@ -5360,7 +5362,9 @@ async function runPaths(args: ParsedArgs): Promise<void> {
   const emptiedManifest =
     args.emit !== undefined && queryCount === 0 && realtimeCount === 0 && existsSync(args.emit);
   if (queryCount === 0 && !(args.emit !== undefined && realtimeCount > 0) && !emptiedManifest) {
-    info("No API queries registered in this workspace.");
+    // Only the listing says so. `--emit` runs before every `dev`, `build` and
+    // `typecheck`, so on a fresh starter the line would repeat on each one.
+    if (args.emit === undefined) info("No API queries registered in this workspace.");
     if (machine && args.emit !== "-") writeJson(args.emit !== undefined ? { emit: resolve(args.emit), written: false, routes: 0, channels: 0 } : { routes: [] });
     return;
   }
@@ -5393,6 +5397,16 @@ async function runPaths(args: ParsedArgs): Promise<void> {
         "routes.realtime-unresolved",
       );
     }
+    if (plan.unresolvedMcpServers.length > 0) {
+      warn(
+        `${args.emit}: leaving out ${countOf(plan.unresolvedMcpServers.length, "MCP server")} — ` +
+          `${plan.unresolvedMcpServers.map((name) => `"${name}"`).join(", ")} — whose canonical URL token ` +
+          `resolves nowhere. Set an explicit \`mcpServer({ canonical })\`, or run ` +
+          `\`xanosdk export ${shellWord(file)} --out ${NULL_DEVICE}\` once (it mints a unique canonical and freezes ` +
+          `it in xano.lock, and writes the bundle nowhere), then re-run to include them.`,
+        "routes.mcp-unresolved",
+      );
+    }
 
     // An unresolved api group writes nothing (a manifest missing a route is
     // worse than none) and is never silent: `--strict` (the scaffold's
@@ -5408,7 +5422,7 @@ async function runPaths(args: ParsedArgs): Promise<void> {
       return;
     }
 
-    if (resolved.length === 0 && describableServers.length === 0 && !emptiedManifest) {
+    if (resolved.length === 0 && describableServers.length === 0 && plan.mcpServers.length === 0 && !emptiedManifest) {
       // Everything was dropped by the warnings above; a file exporting nothing
       // is worse than none, and the warnings already say what to fix.
       info(`Nothing to write to ${args.emit} yet.`);
