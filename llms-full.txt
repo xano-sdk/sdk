@@ -1,4 +1,4 @@
-# xanosdk v1.0.12
+# xanosdk v1.0.13
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 
@@ -45,7 +45,7 @@ plain file read resolves them at the version you have.
 - [Error index](llms/errors.md): Read when a request, test, build, or pull fails with a message you did not write — the string, its cause, and where the fix is.
 - [Saved unit tests, assertions, and mocks](llms/tests.md): Read when authoring a `workflowTest()` stack, when a query/function/middleware carries `tests`, when a statement needs a `mock`, or when running a deployed environment's tests.
 - [Agent and MCP def shapes](llms/kinds-agent-mcp.md): Read when building an MCP server (tools, prompts, resources) or an `agent()`.
-- [Knowledge def shape](llms/kinds-knowledge.md): Read when the workspace defines a `knowledge()` item for its AI agents.
+- [Knowledge def shape](llms/kinds-knowledge.md): Read when the workspace defines a `knowledge()` item.
 - [Realtime def shapes](llms/kinds-realtime.md): Read when the workspace defines a `realtimeServer()`, `realtimeChannel()`, or `realtimeMessage()` handler.
 - [Triggers](llms/triggers.md): Read when authoring any trigger. A trigger's `stack` is a callback rather than the plain array every other kind takes, so the shape does not carry over.
 - [Array and database statements](llms/statements-data.md): Read when the stack reads or writes rows (`s.db.*`), or transforms an array in place (`s.array.map`, `s.array.union`).
@@ -507,7 +507,7 @@ Choose by who or what starts the work. Each rule names the kind that fits and th
 - **Work on a timer** → `task` (cron or interval). **Work a request starts but does not wait for** → `s.function.run({ fn, runtime: { mode: "async-shared" } })`, which binds a job id, not the result (collect with `s.await`). **Work that follows a row change** → `tableTrigger`: it fires on every insert/update/delete of the table, whichever stack writes it, so the same side effect placed in one endpoint's stack misses every other write path.
 - **The same steps before or after many objects** (an auth check, a rate limit, logging) → `middleware`, attached per host (`middleware: { pre, post }` on a query, function, task, tool or API group) or to every host of a kind with `workspaceConfig({ middleware: { query, function, task, tool } })` — not a function call repeated at the top of each stack.
 - **Related rows on returned rows** → an `addon` attached to the read through its `addon: [{ addon, as, input }]` option (`db.query`/`get`/`add`/`edit`/`patch`), merged onto each row under `as` and typed in `InferResponse` — not a second read plus a loop that stitches rows together.
-- **AI.** An LLM running inside the backend → `agent()`, started from a stack with `s.ai.agent.run`; it has no public endpoint. An external AI client (Claude, Cursor, any MCP client) calling the backend → `mcpServer()`. Standing instructions for Xano's own builder AI → `knowledge()`; an `agent()` run never reads it. The actions either one calls → `tool()`. What an MCP server serves besides tools (`prompt()`, `resource()`) and when each fits: `llms/kinds-agent-mcp.md`.
+- **AI.** An LLM running inside the backend → `agent()`, started from a stack with `s.ai.agent.run`; it has no public endpoint. An external AI client (Claude, Cursor, any MCP client) calling the backend → `mcpServer()`. Standing instructions for Xano's own builder AI → `knowledge()` (a local coding agent reads the same files in the repo); an `agent()` run never reads it. The actions either one calls → `tool()`. What an MCP server serves besides tools (`prompt()`, `resource()`) and when each fits: `llms/kinds-agent-mcp.md`.
 - **Pushing to connected clients** → `realtimeServer` → `realtimeChannel` → `realtimeMessage` (the handler for a frame a client sends — the realtime analogue of a query). A server-side push from any stack is `s.realtime.publish`; a client polling a `query` is the substitute this replaces.
 - **Code the typed surface cannot express** → a lambda (`s.lambda`, `fl.lambda`) for a short JavaScript body, LAST, after native filters and expressions (`llms/lambda.md`); a `microservice` for a long-running container or another language; `s.api.request` for a service that already has an HTTP API.
 - **Tests** → `tests` on a `query`/`defineFunction`/`middleware` for that one object's input → output; a `workflowTest` for a flow across objects (`s.function.call`, `s.api.call`, `s.task.call`) asserted with `s.expect.*`.
@@ -539,7 +539,7 @@ Choose by who or what starts the work. Each rule names the kind that fits and th
 - channel: `realtimeChannel` → `Xano.registerRealtimeChannels` → payload `channel` — A realtime channel: a joinable path on a realtime server (`rooms/{room_id}`) with typed path params, join/publish policy, a client-visible conversation transcript, and delivery semantics. Owns message handlers. Returns a handle with `getChannel(params)` for the path a client joins.
 - message: `realtimeMessage` → `Xano.registerRealtimeMessages` → payload `message` — A realtime message handler: a named message type on a channel with its own typed payload and stack — the realtime analogue of a query. Pass the `realtimeChannel()` handle as `channel` and the owning server comes with it.
 - microservice: `microservice` → `Xano.registerMicroservices` → payload `microservice` — A container workload deployed alongside the workspace, called from a stack with `s.microservice.request`. Def shapes (`builtin` containers vs a `helm` chart) and the SECRET-handling rules its config carries: `llms/statements-calls.md`.
-- knowledge: `knowledge` → `Xano.registerKnowledge` → payload `knowledge` — Markdown Xano's own AI (the builder agent, and Meta API / MCP readers) reads before it acts — never an `agent()` run — an `agents.md` of standing instructions, a `skill`, or a `doc`. The body is a real markdown FILE via `knowledgeFile("./x.md", import.meta.url)`, and `mode` decides how much of it reaches the agent.
+- knowledge: `knowledge` → `Xano.registerKnowledge` → payload `knowledge` — Markdown shared by every AI that builds the backend — Xano's own AI (the builder agent, Meta API / MCP readers) and a local coding agent reading the same files — never an `agent()` run: an `agents.md` of standing instructions, a `skill`, or a `doc`. The body is a real markdown FILE via `knowledgeFile("./x.md", import.meta.url)`, and `mode` decides how much of it reaches the agent.
 - workspace: `workspaceConfig` → `Xano.registerWorkspace` → payload `workspace` — Workspace-level configuration such as default middleware chains and request-history defaults per host kind.
 
 # Core def shapes
@@ -901,9 +901,9 @@ The run is isolated in ways that make a correct test fail for reasons the failur
 
 # Knowledge def shape
 
-> Read when the workspace defines a `knowledge()` item for its AI agents.
+> Read when the workspace defines a `knowledge()` item.
 
-- `knowledge({ name, description?, type?, mode?, enabled?, body, refs?, guid?, tags? })` — markdown Xano's own AI reads before it acts — the workspace's builder agent, and outside agents reading the workspace through the Meta API or MCP. It does NOT reach an `agent()` run by `s.ai.agent.run`, whatever its `type` or `mode`: put what such an agent must know in its `llm.systemPrompt`. Takes `registerKnowledge`.
+- `knowledge({ name, description?, type?, mode?, enabled?, body, refs?, guid?, tags? })` — markdown shared by every AI that builds the backend: Xano's own AI reads it before it acts — the workspace's builder agent, and outside agents reading the workspace through the Meta API or MCP — and a local coding agent reads the same `.md` files in the repo; deploy and `pull` keep the copies in sync. It does NOT reach an `agent()` run by `s.ai.agent.run`, whatever its `type` or `mode`: put what such an agent must know in its `llm.systemPrompt`. Takes `registerKnowledge`.
   - `body` (REQUIRED): `knowledgeFile("./runbook.md", import.meta.url)` — a path to a real markdown FILE. There is no inline-string form. The path resolves relative to the MODULE THAT DECLARES the item, not the process working directory and not the workspace entry; `import.meta.url` is required and is what makes that true.
   - `refs?`: `knowledgeDir("./runbook", import.meta.url)` — a directory whose WHOLE tree ships, recursively, paths preserved: UTF-8 text only (else refused; binary `.DS_Store` skipped), symlinks not followed. Keep the body OUT of it, or it ships as a reference file.
   - `type?`: `"skill"` (default) | `"doc"` | `"agents.md"`. `skill` and `doc` differ in how they are filed, not in what an agent receives.

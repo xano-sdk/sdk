@@ -260,7 +260,8 @@ export interface BundleContext {
   /**
    * The entry file the bundle was compiled from — **absent** on the
    * `--bundle <path>` branch, where the input is already-serialized text with
-   * no entry and no registry behind it.
+   * no entry and no registry behind it, and when `deploy` fetches a remote
+   * source (`release:main`), where nothing local was compiled.
    *
    * Optional rather than a made-up path because a plugin may legitimately want
    * to decline that branch: a tree rendered from a bundle the project did not

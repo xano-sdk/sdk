@@ -36,6 +36,9 @@ Every type and helper a frontend gets from a deployed def — path resolution, i
   one group and verb that a single path can reach (`query.route-shadowed`). Make the paths
   disjoint (`"runs/by-id/{id}"`), or declare a numeric param `input.int({ required: true })`:
   only a REQUIRED int/decimal segment matches digits only, and an optional one matches any text.
+
+## Inferring the response type
+
 - **`InferRow<typeof post>`** → the table's row type. Rename or retype a column and every
   consumer breaks at compile time — exactly where you want it.
 - **`InferResponse<typeof someQuery>`** → the endpoint's **response** type, closing the round
@@ -46,9 +49,6 @@ Every type and helper a frontend gets from a deployed def — path resolution, i
   yielding null — `NotFound`/404 for `edit`/`patch`, a unique-constraint error for `add`, while
   `add_or_edit` upserts and never misses), `Row | null` for `db.get` (it binds
   `null` on a miss rather than throwing — handle the not-found path), a row list for
-
-## Inferring the response type
-
   `db.query`/`db.bulk.patch` (→ `Row[]`), a `boolean` for `db.has`, a `number` count for
   `db.bulk.delete`, and a `get`/`query` `output: [...]` selection narrows to a `Pick` (still
   `| null` for `get`). A dotted entry selects sub-keys of an object column
@@ -64,7 +64,7 @@ Every type and helper a frontend gets from a deployed def — path resolution, i
   `response: { user: obj({ id: ref("row.id") }) }` and the raw literal
   `response: { user: { id: ref("row.id") } }` both derive `{ user: { id: number | null } }`.
   A **call** carries the shape across: `s.function.call`/`s.function.run`, `s.tool.call` and
-  `s.api.call` (workflow-test only, above) given a def **handle** bind their `as` with the
+  `s.api.call` (workflow-test only — see [Object kinds](object-kinds.md)) given a def **handle** bind their `as` with the
   target's own `InferResponse`,
   so `ref("discount_result.discount_cents")` in the caller types to that field instead of
   `unknown`. What the target resolves to is what propagates, so declaring `responseShape` on
@@ -89,7 +89,7 @@ For a **computed or multi-key object response**, author it as a *record of value
 `response: { success: c.bool(true), id: inp("id") }` — **not** `c.obj({ ... })`. `c.obj` builds a
 *constant*, so a tagged value nested inside it would serialize as internal representation the
 engine can't decode (a runtime 500); nesting one is now a compile error that points you at the
-record form (issue #42). A **nested plain object** in a record
+record form. A **nested plain object** in a record
 response (`response: { user: { id: ref("u"), age: 3 } }`) is auto-wrapped for you — no manual
 `obj({ ... })` — and raw literals in a call/agent `input` map coerce too
 (`s.function.run({ fn, input: { max_age_days: 3 } })` — no `c.int(3)`).
@@ -250,7 +250,8 @@ const connectUrl = mcpUrl("notes_mcp", XANO_HOST); // https://host/x2/mcp/<canon
 ```
 
 Run `xanosdk routes ./xano/index.ts` without `--emit` to see every address the file carries:
-each route, socket, channel and MCP server, with the call that builds it.
+each route in its `api:<canonical>/<name>` form, and each socket, channel and MCP server with
+the call that builds it.
 
 **Request types come from the same file.** It exports four types-only maps, keyed exactly
 like the runtime tables they sit beside, so a frontend types what it sends without importing a

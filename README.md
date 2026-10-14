@@ -264,9 +264,8 @@ Give a table a `seed` array and those rows ship into the database on deploy, so 
 environment comes up with its lookup tables and fixtures already in place. A file column or an
 MCP icon takes `hostedFile("./logo.png", import.meta.url)`: the file ships with the deploy.
 
-Your workspace's own AI agents are configured the same way. `knowledge()` is the markdown
-they read before they act (standing instructions, a skill, or reference docs), and the body
-is a real `.md` file in your repo rather than a string in a def:
+`knowledge()` is markdown shared by every AI that builds this backend: Xano's AI builder,
+people authoring in XanoScript, and your coding agent, which reads the same `.md` files here:
 
 ```ts
 knowledge({
@@ -277,8 +276,8 @@ knowledge({
 });
 ```
 
-So the instructions your agents follow are reviewed in a diff, versioned with the code they
-describe, and redeployed with it, instead of living in a console where nothing tracks them.
+Deploy and `pull` keep the copies in sync, so the guidance is reviewed in a diff and versioned
+with the code it describes. An `agent()` run never reads it: that goes in its `llm.systemPrompt`.
 
 Tables, fields, statements, values, inputs, and middleware are all in the
 [Authoring reference](https://github.com/xano-sdk/sdk/blob/main/guides/authoring.md); every
@@ -363,7 +362,7 @@ values travel, the doc-site token, and how to read the decode report are in
 `xano-backend` is an agent skill (`SKILL.md`) for the coding agent you already use: Claude Code,
 Codex, Cursor, Copilot, Gemini CLI, Amp or OpenCode. When a project needs a backend and has none,
 it has the agent confirm Xano with you, run `init`, deploy, and follow the `AGENTS.md` that `init`
-wrote. (It is unrelated to `knowledge()`, the docs your workspace's own AI agents read.)
+wrote. (It is unrelated to `knowledge()`, the docs every AI building your backend reads.)
 
 ```bash
 npx @xano/sdk agent-skill install   # into each coding agent on this machine (also: status, uninstall)
@@ -395,8 +394,9 @@ Every `deploy` is a **full replace** of the disposable environment, table record
 unless `--keep-data` merges. Promoting is the opposite by design: it changes what your code
 defines and keeps every row. Tables are shared by every branch, so a release that alters one
 is refused without `--allow-shared-schema-changes`. `--branch <label>` lands on a non-live
-branch and `--set-live` promotes it, while `--backup-branch` snapshots live's logic, not its shared tables,
-for a one-`set-live` rollback. A release name is refused rather than resolved when it already exists.
+branch and `--set-live` promotes it. A release name is refused rather than resolved when it
+already exists. On `deploy --to workspace` (never `promote`), `--backup-branch` first
+snapshots live's logic, not its shared tables, for a one-`set-live` rollback.
 `deploy --to workspace` refuses to overwrite an object edited in Xano since your last deploy or
 pull (`workspace diff` lists them); pull first, or pass `--overwrite`.
 

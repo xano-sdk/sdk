@@ -553,9 +553,11 @@ query({
   happened by the time the override lands.
 - A `resultStrategy: "replace"` middleware attached `post` rewrites the response at runtime,
   which `InferResponse` can't see — declare `responseShape` on the endpoint.
-- `workspaceConfig` also carries `realtime`, `documentation`, and `swagger`, which are
-  server-shaped and carried verbatim rather than authored. `realtime` there is the **legacy**
-  workspace-level block, not the realtime primitives you author.
+- `workspaceConfig` also carries `realtime`, `documentation`, and `swagger`. `realtime` is
+  server-shaped and carried verbatim rather than authored — it is the **legacy**
+  workspace-level block, not the realtime primitives you author. `documentation` is the
+  authored gate on the hosted docs (omit it to leave the target's alone), and `swagger` is a
+  boolean (default `false`).
 
 **The canonical rate-limit middleware.** Build the per-user key with the filter chain
 (`"prefix" + auth("id")` doesn't exist):
@@ -651,7 +653,8 @@ workspaceConfig({ name: "my-app", env: { STRIPE_KEY: "" } });
 
 ```bash
 # xano/.env — gitignored, preserved across a pull, and read with no flag by every
-# command that compiles a bundle (deploy, export, preflight).
+# command that compiles a bundle (deploy, export, preflight, workspace diff,
+# workspace reset-tables, and release create's comparison).
 STRIPE_KEY=sk_live_...
 ```
 
@@ -886,9 +889,12 @@ with `allRows: true`, which wipes the table and returns the deleted count — th
 longer be reached by forgetting an argument. Reach for `s.db.truncate({ table, reset: true })`
 when the id sequence should restart too.
 
-Deploy is a full replace, so re-deploying re-seeds cleanly — no duplicate rows. Seed
-data travels only in the deploy package (resolved at deploy time); it never enters the
-compiled workspace bundle.
+A deploy without `--keep-data` is a full replace, so it re-seeds cleanly — no duplicate
+rows. The scaffolded `xano:deploy` passes `--keep-data`, which merges and leaves table rows
+alone (`--reset` forces the replace and re-seed). A `--to` merge writes seed rows only with
+`--seed`, and `workspace reset-tables` puts named tables back to their seeds. Seed data
+travels only in the deploy package (resolved at deploy time); it never enters the compiled
+workspace bundle.
 
 For data in a file, use `seedFile`:
 

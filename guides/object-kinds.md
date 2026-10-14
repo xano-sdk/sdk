@@ -14,11 +14,14 @@ and the seven trigger factories below. Signatures and payload keys are in
 the types don't tell you.
 
 **A knowledge item's body is a file, and `mode` is a running cost.** `knowledge()` is the
-markdown a workspace's AI agents read before they act, and it is the one kind whose payload
+markdown shared by every AI that builds this backend — Xano's AI builder, people authoring in
+XanoScript, and your local coding agent, which reads the same `.md` files in the repo (deploy
+and `pull` keep them in sync). An `agent()` run never reads it; put what that agent needs in
+its `llm.systemPrompt`. It is the one kind whose payload
 is prose — so the body is named by path (`knowledgeFile("./runbook.md", import.meta.url)`)
-rather than written as a string, and `refs: knowledgeDir(...)` ships a whole folder the
-agent searches on demand — UTF-8 text files only (other content is refused), and a
-symlink is not followed. What the agent actually receives is decided by `type` and `mode`,
+rather than written as a string, and `refs: knowledgeDir(...)` ships a whole folder Xano's AI
+builder searches on demand — UTF-8 text files only (other content is refused), and a
+symlink is not followed. What the builder actually receives is decided by `type` and `mode`,
 and nothing in the types warns you: an `agents.md` item is injected in full on every turn
 whatever `mode` says, `mode: "always"` spends the body's whole length on every request, and
 the default `mode: "auto"` sends only the name and `description` until a request matches.
@@ -173,7 +176,7 @@ realtimeMessage({
   name: "send",                      // `input` types the message PAYLOAD
   channel: room,                     // the handle carries the server too
   input: { body: input.text({ required: true }) },
-  deliverTo: "channel",              // or "sender" (request/response) / "others"
+  deliverTo: "channel",              // or "sender" (request/response) / "others" / "explicit"
   stack: [s.debug.log({ value: inp("body") })],
 });
 ```

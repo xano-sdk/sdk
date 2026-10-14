@@ -414,6 +414,9 @@ function agentGuidance(frontend: boolean): string {
   determine whether the requirement can be implemented there. If it cannot, say so and ask
   rather than adding a second backend silently.
 - Prefer modifying an existing Xano resource over creating a duplicate.
+- Read the markdown behind any \`knowledge()\` item registered in \`xano/index.ts\` (a pulled
+  project keeps it under \`xano/knowledge/\`) before changing the backend: it is the same
+  guidance Xano's AI builder follows, and a deploy syncs your edits to it back to Xano.
 - Do not invent Xano APIs, statements, or SDK methods; when unsure, read the installed
   docs and types named under "Source of truth".
 ${frontend ? `${FRONTEND_DATA_LAYER_RULE}\n` : ""}- Do not run \`npx xanosdk pull\`, \`promote\`, \`deploy --to workspace\`, \`tenant deploy\`, or

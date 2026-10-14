@@ -40,7 +40,7 @@ runtime (Xano SDK only compiles), and generating engine-side numeric ids/timesta
 
 **Deferred (by design)** — folder auto-discovery, and the `service` / `vault` / `branch`
 payload sections. (Round-trip decompile is no longer deferred: that is
-`xanosdk init --from`, in the [CLI guide](cli.md); nor is `workflow_test` — it is a
+`xanosdk init --from`, in [Pulling an existing workspace](codegen.md); nor is `workflow_test` — it is a
 first-class kind, see `workflowTest` in [Object kinds](object-kinds.md).) `InferResponse`
 auto-derivation covers the object-literal and single-`db`-variable cases (matching the engine's
 static walk), and follows a CALL into the object it invokes (`s.function.call`/`.run`,
@@ -59,8 +59,9 @@ can learn the SDK without reading source:
   --help` and the `cli` array in `manifest.json` do, from the same registry that generates
   the shell completions. The written version is the [CLI guide](cli.md).
 - **`llms/*.md`** — one file per surface (object def shapes, statements, values, fields,
-  filters, lambda bodies, what a client pays to import a def, an index of exact error
-  strings, and the legacy names a pulled workspace carries), read only when that surface
+  filters, lambda bodies, triggers, saved tests, the lock file, toolchain modules, what a
+  client pays to import a def, an index of exact error strings, and the legacy names a
+  pulled workspace carries), read only when that surface
   is in play. **`llms-full.txt`** is all
   of them concatenated, for a reader that wants one file rather than two.
 - **`manifest.json`** — the exhaustive reference tier, reached by targeted lookup (grep or

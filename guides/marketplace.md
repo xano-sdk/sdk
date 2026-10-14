@@ -48,7 +48,11 @@ is compiled or a workspace is checked.
 
 ```
 ✓ Installed @xano-sdk/auth.
-  Import it in your backend (`xano/index.ts`) and register it onto your workspace.
+  Not registered yet.
+  Add to xano/index.ts:
+    import { registerAuth } from "@xano-sdk/auth";
+    registerAuth(app, { canonical: "authn" });
+  Then run `npx xanosdk export ./xano/index.ts --out /dev/null && npm run xano:routes` to bring xano.lock and the route manifest up to date.
 ```
 
 ```
@@ -116,7 +120,7 @@ The rendering has a fixed shape, filled from the module's own catalogue record:
 ```
 
 The `Installs` rows carry one of `table`, `endpoint`, `function`, `task`, `trigger`, `agent`,
-`mcp`, `middleware`. A toolchain module lists none of them, because it puts nothing on the
+`tool`, `mcp`, `middleware`. A toolchain module lists none of them, because it puts nothing on the
 workspace.
 
 `--prompt` emits the publisher's own wiring instructions, raw and alone, written to be piped
@@ -273,6 +277,7 @@ A module also contributes lines to your `.gitattributes`, in its own marked bloc
 ```
 # xanosdk:begin @xano-sdk/xanoscript
 # xanosdk 1.2.0 — generated; edits inside this block are overwritten
+
 xanoscript/** linguist-generated
 # xanosdk:end @xano-sdk/xanoscript
 ```
@@ -362,10 +367,11 @@ run. A `--frozen-lock` run in that state exits 0 having verified less than it di
 and says nothing. Only the next `install`, `reinstall` or `remove` drops the stale block.
 
 The state that does fail **every** `--frozen-lock` run is the other one: a module still
-declared in `dependencies` but missing from `node_modules`, which is what `npm uninstall
---no-save`, a deleted `node_modules/<pkg>` or a drifted lockfile leaves behind. There the
-project still says the module is expected, so its absence is reported rather than assumed
-away:
+declared in `dependencies` and configured in the `"xanosdk"` block but missing from
+`node_modules`, which is what `npm uninstall --no-save`, a deleted `node_modules/<pkg>` or a
+drifted lockfile leaves behind. There the project still says the module is expected, so its
+absence is reported rather than assumed away (an unconfigured dependency that is missing is
+an ordinary package as far as the loader can tell, and is not reported):
 
 ```
 A toolchain module could not be loaded, so whatever it checks was not checked — and

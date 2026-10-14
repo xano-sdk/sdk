@@ -1,4 +1,4 @@
-# xanosdk v1.0.12
+# xanosdk v1.0.13
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 
@@ -45,7 +45,7 @@ plain file read resolves them at the version you have.
 - [Error index](llms/errors.md): Read when a request, test, build, or pull fails with a message you did not write — the string, its cause, and where the fix is.
 - [Saved unit tests, assertions, and mocks](llms/tests.md): Read when authoring a `workflowTest()` stack, when a query/function/middleware carries `tests`, when a statement needs a `mock`, or when running a deployed environment's tests.
 - [Agent and MCP def shapes](llms/kinds-agent-mcp.md): Read when building an MCP server (tools, prompts, resources) or an `agent()`.
-- [Knowledge def shape](llms/kinds-knowledge.md): Read when the workspace defines a `knowledge()` item for its AI agents.
+- [Knowledge def shape](llms/kinds-knowledge.md): Read when the workspace defines a `knowledge()` item.
 - [Realtime def shapes](llms/kinds-realtime.md): Read when the workspace defines a `realtimeServer()`, `realtimeChannel()`, or `realtimeMessage()` handler.
 - [Triggers](llms/triggers.md): Read when authoring any trigger. A trigger's `stack` is a callback rather than the plain array every other kind takes, so the shape does not carry over.
 - [Array and database statements](llms/statements-data.md): Read when the stack reads or writes rows (`s.db.*`), or transforms an array in place (`s.array.map`, `s.array.union`).

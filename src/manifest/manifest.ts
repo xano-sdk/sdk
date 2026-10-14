@@ -507,7 +507,7 @@ export const KIND_DESCRIPTORS: ReadonlyArray<Omit<ManifestKind, "registered">> =
     kind: "knowledge",
     payloadKey: "knowledge",
     authorFactory: "knowledge",
-    description: "Markdown Xano's own AI (the builder agent, and Meta API / MCP readers) reads before it acts — never an `agent()` run — an `agents.md` of standing instructions, a `skill`, or a `doc`. The body is a real markdown FILE via `knowledgeFile(\"./x.md\", import.meta.url)`, and `mode` decides how much of it reaches the agent.",
+    description: "Markdown shared by every AI that builds the backend — Xano's own AI (the builder agent, Meta API / MCP readers) and a local coding agent reading the same files — never an `agent()` run: an `agents.md` of standing instructions, a `skill`, or a `doc`. The body is a real markdown FILE via `knowledgeFile(\"./x.md\", import.meta.url)`, and `mode` decides how much of it reaches the agent.",
     registerMethod: "registerKnowledge",
   },
   { kind: "workspace", payloadKey: "workspace", authorFactory: "workspaceConfig", description: "Workspace-level configuration such as default middleware chains and request-history defaults per host kind.", registerMethod: "registerWorkspace" },
@@ -1880,7 +1880,7 @@ function renderSections(m: Manifest): RenderedSections {
     "- **Work on a timer** → `task` (cron or interval). **Work a request starts but does not wait for** → `s.function.run({ fn, runtime: { mode: \"async-shared\" } })`, which binds a job id, not the result (collect with `s.await`). **Work that follows a row change** → `tableTrigger`: it fires on every insert/update/delete of the table, whichever stack writes it, so the same side effect placed in one endpoint's stack misses every other write path.",
     "- **The same steps before or after many objects** (an auth check, a rate limit, logging) → `middleware`, attached per host (`middleware: { pre, post }` on a query, function, task, tool or API group) or to every host of a kind with `workspaceConfig({ middleware: { query, function, task, tool } })` — not a function call repeated at the top of each stack.",
     "- **Related rows on returned rows** → an `addon` attached to the read through its `addon: [{ addon, as, input }]` option (`db.query`/`get`/`add`/`edit`/`patch`), merged onto each row under `as` and typed in `InferResponse` — not a second read plus a loop that stitches rows together.",
-    "- **AI.** An LLM running inside the backend → `agent()`, started from a stack with `s.ai.agent.run`; it has no public endpoint. An external AI client (Claude, Cursor, any MCP client) calling the backend → `mcpServer()`. Standing instructions for Xano's own builder AI → `knowledge()`; an `agent()` run never reads it. The actions either one calls → `tool()`. What an MCP server serves besides tools (`prompt()`, `resource()`) and when each fits: `llms/kinds-agent-mcp.md`.",
+    "- **AI.** An LLM running inside the backend → `agent()`, started from a stack with `s.ai.agent.run`; it has no public endpoint. An external AI client (Claude, Cursor, any MCP client) calling the backend → `mcpServer()`. Standing instructions for Xano's own builder AI → `knowledge()` (a local coding agent reads the same files in the repo); an `agent()` run never reads it. The actions either one calls → `tool()`. What an MCP server serves besides tools (`prompt()`, `resource()`) and when each fits: `llms/kinds-agent-mcp.md`.",
     "- **Pushing to connected clients** → `realtimeServer` → `realtimeChannel` → `realtimeMessage` (the handler for a frame a client sends — the realtime analogue of a query). A server-side push from any stack is `s.realtime.publish`; a client polling a `query` is the substitute this replaces.",
     "- **Code the typed surface cannot express** → a lambda (`s.lambda`, `fl.lambda`) for a short JavaScript body, LAST, after native filters and expressions (`llms/lambda.md`); a `microservice` for a long-running container or another language; `s.api.request` for a service that already has an HTTP API.",
     "- **Tests** → `tests` on a `query`/`defineFunction`/`middleware` for that one object's input → output; a `workflowTest` for a flow across objects (`s.function.call`, `s.api.call`, `s.task.call`) asserted with `s.expect.*`.",
@@ -2018,7 +2018,7 @@ function renderSections(m: Manifest): RenderedSections {
   ];
 
   const kindsKnowledge: string[] = [
-    "- `knowledge({ name, description?, type?, mode?, enabled?, body, refs?, guid?, tags? })` — markdown Xano's own AI reads before it acts — the workspace's builder agent, and outside agents reading the workspace through the Meta API or MCP. It does NOT reach an `agent()` run by `s.ai.agent.run`, whatever its `type` or `mode`: put what such an agent must know in its `llm.systemPrompt`. Takes `registerKnowledge`.",
+    "- `knowledge({ name, description?, type?, mode?, enabled?, body, refs?, guid?, tags? })` — markdown shared by every AI that builds the backend: Xano's own AI reads it before it acts — the workspace's builder agent, and outside agents reading the workspace through the Meta API or MCP — and a local coding agent reads the same `.md` files in the repo; deploy and `pull` keep the copies in sync. It does NOT reach an `agent()` run by `s.ai.agent.run`, whatever its `type` or `mode`: put what such an agent must know in its `llm.systemPrompt`. Takes `registerKnowledge`.",
     "  - `body` (REQUIRED): `knowledgeFile(\"./runbook.md\", import.meta.url)` — a path to a real markdown FILE. There is no inline-string form. The path resolves relative to the MODULE THAT DECLARES the item, not the process working directory and not the workspace entry; `import.meta.url` is required and is what makes that true.",
     "  - `refs?`: `knowledgeDir(\"./runbook\", import.meta.url)` — a directory whose WHOLE tree ships, recursively, paths preserved: UTF-8 text only (else refused; binary `.DS_Store` skipped), symlinks not followed. Keep the body OUT of it, or it ships as a reference file.",
     "  - `type?`: `\"skill\"` (default) | `\"doc\"` | `\"agents.md\"`. `skill` and `doc` differ in how they are filed, not in what an agent receives.",
@@ -3169,7 +3169,7 @@ export function renderDocs(m: Manifest): Map<string, string> {
       path: "llms/kinds-knowledge.md",
       title: "Knowledge def shape",
       readWhen:
-        "Read when the workspace defines a `knowledge()` item for its AI agents.",
+        "Read when the workspace defines a `knowledge()` item.",
       body: s.kindsKnowledge,
     },
     {

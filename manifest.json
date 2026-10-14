@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -382,7 +382,7 @@
       "kind": "knowledge",
       "payloadKey": "knowledge",
       "authorFactory": "knowledge",
-      "description": "Markdown Xano's own AI (the builder agent, and Meta API / MCP readers) reads before it acts — never an `agent()` run — an `agents.md` of standing instructions, a `skill`, or a `doc`. The body is a real markdown FILE via `knowledgeFile(\"./x.md\", import.meta.url)`, and `mode` decides how much of it reaches the agent.",
+      "description": "Markdown shared by every AI that builds the backend — Xano's own AI (the builder agent, Meta API / MCP readers) and a local coding agent reading the same files — never an `agent()` run: an `agents.md` of standing instructions, a `skill`, or a `doc`. The body is a real markdown FILE via `knowledgeFile(\"./x.md\", import.meta.url)`, and `mode` decides how much of it reaches the agent.",
       "registerMethod": "registerKnowledge",
       "registered": true
     },

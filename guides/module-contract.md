@@ -128,9 +128,12 @@ your module is only correct against the SDK versions whose shapes it understands
 range out with a floor and a ceiling, as above: the ceiling is the next major, so a module
 built for 1.x loads on every 1.x SDK and is refused on 2.0.
 
-That range is **enforced at load**, on every command that discovers modules. An SDK outside it
+That range is **enforced at load**. On `export`, `deploy`, `preflight` and `init`, an SDK outside it
 is refused by name before your plugin file is imported, naming the range you asked for and the
-version it got. So the floor is the version whose shapes your hooks understand, not an
+version it got. The `routes.gen.ts` writers (`routes --emit`, the marketplace's route refresh,
+`pull`, `generate`) and the marketplace reconcile skip the module with a warning instead: it is
+never imported, a routes writer keeps its previous block, and `routes --emit --strict` still
+fails. So the floor is the version whose shapes your hooks understand, not an
 aspiration — declare it accurately and the SDK will never quietly run your module against a
 contract it was not built for. Ranges are read as `>=` / `>` / `<=` / `<` / `=` comparators,
 `^`, `~`, exact pins and `||` unions of those; a shape outside that subset is not refused, it
@@ -394,7 +397,7 @@ read than it is slow.
 | `BundleContext` | What it carries |
 |---|---|
 | `bundle.payload` | The compiled payload, keyed by payload key (`table`, `query`, `app`, ...). |
-| `entry` | The entry file the bundle came from. **Absent** on the `--bundle <path>` branch. |
+| `entry` | The entry file the bundle came from. **Absent** on the `--bundle <path>` branch, and when `deploy` fetches a remote source (`release:main`). |
 | `cwd` | The project root every relative path resolves against. |
 | `command` | `"export"` or `"deploy"`. |
 | `frozen` | The run is `--frozen-lock` (or `export --check` / `deploy --to … --dry-run`, which imply it): a verification, not a write. |
@@ -403,7 +406,7 @@ read than it is slow.
 
 **`entry` is optional rather than a made-up path** so a plugin may decline the
 `--bundle <path>` branch, where the input is already-serialized text with no entry and no
-registry behind it. A tree rendered from a bundle the project did not compile describes
+registry behind it, and a `deploy` from a fetched source, where nothing local was compiled. A tree rendered from a bundle the project did not compile describes
 something other than the source beside it.
 
 **Under `frozen` a plugin must compare and report, never write.** It is also the mode in which
@@ -470,8 +473,10 @@ const plugin: ToolchainPlugin = {
 
 Your module's section of the route manifest, `xano/routes.gen.ts`. It runs wherever that file
 is written: `xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts` (the scaffold's
-`xano:routes`), `pull`, `generate`, and the refresh `marketplace install`, `reinstall` and
-`remove` make, so your block lands with your module.
+`xano:routes`), `init --marketplace` when it writes the project's first manifest, `pull`,
+`generate`, and the refresh `marketplace install`, `reinstall` and `remove` make, so your
+block lands with your module. Not `init --from`: a project it creates has no module installed
+yet, and the first `xano:routes` after an install adds your section.
 
 | `RoutesManifestContext` | What it carries |
 |---|---|

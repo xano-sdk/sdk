@@ -8,6 +8,19 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.12 — Every address in routes
+
+_2026-10-14_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.12)
+
+`xanosdk routes` now lists every address a frontend uses, not only HTTP routes: realtime servers, channels and MCP servers too. The `--json` listing changes shape to match. The public repository is also ready for launch: a contributing policy, bug-only issue forms, and a clone that builds as-is.
+
+- `xanosdk routes` lists realtime servers, channels and MCP servers
+- ⚠️ `xanosdk routes --json` returns all four address kinds
+- `mcpUrl` is documented
+- The public repository takes bug reports, and builds from a fresh clone
+
+---
+
 ## 1.0.11 — MCP addresses and agent fallbacks
 
 _2026-10-14_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.11)

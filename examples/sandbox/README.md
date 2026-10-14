@@ -12,10 +12,10 @@ code, and (2) give agents concrete, verified usage examples to learn from.
 
 | Area | Count | Location |
 |---|---|---|
-| Statements (`s.*`) | 214 | `statements/**` |
-| Value filters (`fl.*`) | 345 | `filters/**` |
+| Statements (`s.*`) | 221 | `statements/**` |
+| Value filters (`fl.*`) | 226 | `filters/**` |
 | Field types (`f.*`) | 24 | `fields/**` |
-| Value constructors (`c.*`, `ref`, `inp`, `col`, `auth`, `expr`, …) | 17 | `values/**` |
+| Value constructors (`c.*`, `ref`, `inp`, `col`, `auth`, `expr`, …) | 25 | `values/**` |
 | Object kinds (`table`, `query`, `trigger`, `agent`, `workflowTest`, …) | 17 | `kinds/**` |
 
 ## Conventions
@@ -27,7 +27,7 @@ code, and (2) give agents concrete, verified usage examples to learn from.
 - **Param gates → multiple exports.** When a statement/primitive has distinct
   authoring modes, each gate is its own exported `defineFunction` with a
   `/** Gate N — … */` note (see `statements/db/add.ts`, `statements/db/query.ts`,
-  `values/const/obj.ts`, `kinds/trigger.ts`).
+  `values/obj.ts`, `values/ref.ts`, `kinds/trigger.ts`).
 - **Everything is exercised.** A statement that binds an `as` output captures it
   and returns it via `response: ref("…")`, so the whole path is real.
 - **Shared handles** (`users`, `posts`, `api`, `doubleFn`) live in `_shared.ts`
@@ -84,9 +84,10 @@ xanosdk deploy ./index.ts --ephemeral   # stand it up where a release can be cut
 xanosdk release create v2               # cut the next one
 ```
 
-`pull` **replaces** `xano/`: anything the decode did not produce is deleted. It
-lists what will go and refuses a dirty working tree, but it cannot preserve hand
-edits — keep those outside `xano/`.
+`pull` **rewrites** the files it decodes, and deletes only a file a previous decode
+wrote that this one did not; files you added under `xano/` are kept and listed. It
+lists the changes first and refuses uncommitted changes under `xano/` without
+`--yes`, which overwrites your edits to decoded files (and still keeps added ones).
 
 One escape hatch, deliberately less convenient than the path above:
 `xanosdk deploy ./index.ts --to workspace` merges the local build straight into a

@@ -23,13 +23,13 @@ are what you get when the variable is unset.
 | `XANO_ORIGIN` | OAuth host to sign in against, instead of the default — the same thing `--origin` does. An origin only (`https://host`): a path, query or fragment is refused. |
 | `XANO_NO_BROWSER` | Set to anything non-empty and `xanosdk login` will **not** launch a browser; it prints the authorize URL to stderr for you to open yourself. The loopback server still runs and still waits for the redirect, so the flow completes only if the browser you open it in can reach this machine's `127.0.0.1`. For a machine that has no browser to launch. When the browser is on a **different** machine, that redirect cannot arrive — use `xanosdk login --paste` instead. |
 
-**`xanosdk preflight`** — its own target, deliberately separate from the deploy login
+**`xanosdk preflight`** — an optional override target. With none of these set, `preflight` uses the stored login credential and creates its ephemeral under the workspace that credential pins
 
 | Variable | What it does |
 |---|---|
-| `XANO_VALIDATE_INSTANCE` | Base URL of the instance to validate against (`https://your-instance.xano.io`, or `http://localhost:8080` for local Docker). Required; `--instance <url>` overrides it. |
-| `XANO_VALIDATE_TOKEN` | Meta API bearer token for that instance. Required. |
-| `XANO_VALIDATE_WORKSPACE_ID` | Parent workspace the run's throwaway environment is created under. Defaults to `1`. |
+| `XANO_VALIDATE_INSTANCE` | Base URL of the instance to validate against (`https://your-instance.xano.io`, or `http://localhost:8080` for local Docker). Optional; when any `XANO_VALIDATE_*` is set (or `--instance <url>`, which overrides it) the pair takes over from the login, and both must then be present. |
+| `XANO_VALIDATE_TOKEN` | Meta API bearer token for that instance. Required once the override is in use. |
+| `XANO_VALIDATE_WORKSPACE_ID` | Parent workspace the run's throwaway environment is created under, when the override is in use. Defaults to `1`. |
 
 **Output & diagnostics**
 
@@ -95,7 +95,7 @@ checked-out project never holds a secret it did not fetch on purpose.
 
 | Path | What it is |
 |---|---|
-| `xano/.env` | Where the values live. Gitignored by the scaffold, and preserved across a `xanosdk pull` rather than rewritten. Read with no flag by the commands that compile a bundle: `deploy`, `export`, `preflight`, and `release create` when its optional `--bundle` comparison compiles one. |
+| `xano/.env` | Where the values live. Gitignored by the scaffold, and preserved across a `xanosdk pull` rather than rewritten. Read with no flag by the commands that compile a bundle: `deploy`, `export`, `preflight`, and `release create`, whose convergence comparison compiles the entry unless `--bundle` names one. |
 | `xano/.env.example` | Generated beside it, listing the declared names as commented lines. Committed. Copy it to `xano/.env` on a fresh clone and fill in the values. The lines stay commented on purpose, so an unedited copy meets the refusal below rather than sending empty strings to your backend. |
 
 `xano/` is the scaffold's backend directory. The file is read from the directory of the
@@ -165,7 +165,7 @@ update it too if the change should outlive the next deploy.
 | `--env-var KEY=VALUE` | One value, for this process only. Never written to `xano/.env`, never printed back. Repeatable. Highest precedence: it beats whichever file supplied values, the default `xano/.env` or an explicit `--backend-env-file`. On `export` the value is still compiled into the bundle that command writes. A secret on the command line also lands in shell history and the process table, so prefer `--backend-env-file` in CI. |
 | `--backend-env-file <path>` | Read values from this dotenv-style file **instead of** `xano/.env`. It replaces the default rather than layering over it, so pointing at a CI secret mount cannot also ship a developer's local file. The flip side: a name that only `xano/.env` had is now unsupplied. |
 | `--allow-empty-env=NAME[,NAME]` | Send these declared names empty on purpose, **clearing whatever the target holds for them**. Per-name only; there is deliberately no bare form. |
-| `--allow-empty-doc-token=NAME[,NAME]` | The same, for a documentation token — but it **opens** something: the target's doc-site gate is cleared and those docs become publicly readable. Per-name only, no bare form. |
+| `--allow-empty-doc-token=<scope>` | The same, for a documentation token — but it **opens** something: the target's doc-site gate is cleared and those docs become publicly readable. The scope is `workspace` or an API group's name; it is not comma-split, so repeat the flag for more than one. No bare form. |
 
 **A deploy replaces the workspace's env set.** So a declared name left empty in the config
 that no file and no flag supplies would clear the live value, and `deploy` refuses instead,
@@ -287,9 +287,9 @@ a rename, or to adopt an existing workspace object into code.
 **`xano.lock`** freezes the whole workspace's identities at once — every auto-derived guid,
 plus the `canonical` URL tokens of API groups and toolsets (which the engine otherwise
 randomizes, giving the same code different public URLs per environment). Every command that
-compiles an entry file writes it — `export`, `deploy`, `release`, `preflight`, with no flag —
+compiles an entry file writes it — `export`, `deploy`, `preflight`, with no flag —
 and updates it on every build, atomically, before the bundle. **Commit it next to your code.**
-`npm run xano:check` is the CI guard (`xanosdk export ./xano/index.ts --check --strict`, which implies
+`npm run xano:check` is the CI guard (the `routes --strict` freshness check, then the project typecheck, then `xanosdk export ./xano/index.ts --check --strict`, which implies
 `--frozen-lock`, writes nothing, and needs neither `xano/.env` nor `xano/.secrets.json`): it fails rather than change the lock,
 so an uncommitted identity change is caught in review instead of on a deploy. It also fails
 while the lock carries an entry no exported object matches. That entry is how a rename looks
@@ -333,7 +333,7 @@ explicitly with `--lock=<path>`.
 Precedence at emit is always **explicit in-code value → lock entry → name derivation**.
 
 **When the lock is actually load-bearing.** Because the default derivation is deterministic
-— `md5("<type>:<name>")`, and `md5("query:<group>|<verb>|<name>")` for a query — a project
+— `md5("<payloadKey>:<name>")` (the bundle's payload key: `dbo` for a table, `toolset` for an agent or MCP server), and `md5("query:<group>|<verb>|<name>")` for a query — a project
 that created all of its own objects can regenerate a
 byte-identical lock from its own source. Delete that lock, release again, and the same guids
 come back: the objects match and update in place. For that project the lock is a *cache*, and
@@ -375,7 +375,7 @@ xanosdk lock rename --entry=xano/index.ts table stock goods    # moves stock's i
 xanosdk lock prune --identity-only --yes table:stock --lock=xano/xano.lock   # or just drop it
 ```
 
-`rename`/`adopt` take no entry file, so on their own they look for `xano.lock` in the
+`rename`/`import` take no entry file, so on their own they look for `xano.lock` in the
 **current directory**. Pass `--entry=<path>` to derive it beside the entry the way
 `export`/`deploy`/`prune` do, or `--lock=<path>` to name the file outright. They never
 reach for a lock you did not point them at — when they spot one next door they say so and
@@ -392,8 +392,8 @@ real engine `packageExport`, capturing the live workspace's random guids by `(ty
 so code takes over an existing workspace and the first sync updates in place instead of
 duplicating.
 
-**CI** — `xanosdk export ./xano/index.ts --check --strict` (the scaffolded `npm run xano:check`) runs every
-check an export runs and writes nothing, so it needs no secrets. It implies `--frozen-lock`, which
+**CI** — the scaffolded `npm run xano:check` runs the `routes --strict` freshness check, the project typecheck, and
+`xanosdk export ./xano/index.ts --check --strict`, which runs every check an export runs and writes nothing, so it needs no secrets. It implies `--frozen-lock`, which
 fails instead of changing the lock, so a canonical
 minted in a throwaway container can never silently diverge public URLs. Mint locally, commit
 the lock. It fails on an entry no exported object matches too, which is the state a rename

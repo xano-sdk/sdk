@@ -127,7 +127,7 @@ as JSON, while the human-readable progress (and the live URLs) echoes to stderr:
 }
 ```
 
-Present only when they apply: `localEngine` (in place of `ephemeral`), `keepDataSkipped` and the
+Present only when they apply: `engine` (in place of `ephemeral`), `keepDataSkipped` and the
 merge lists (see [Keeping your data between deploys](#keeping-your-data-between-deploys)),
 `static` (`url`; `canonical`, the build's identity, and `verified` when the frontend was
 confirmed live serving it; `staticEnv` — `{ injected, keys, documents, skipped?, reason? }` — when config was
@@ -529,7 +529,6 @@ and `omittedInsertsFail` / `setInsertsFail` when inserts fail; see below),
 `notNullKept`, `pairedColumns` (`{ table, dropped, added }`: a drop beside an add, not a rename),
 `narrowedEnums` (`{ table, column, removed }`), `retargetedRefs` (`{ table, column, from, to }`),
 `indexChanges` (`{ table, index, action, unique }`), `notNullTightened` (`{ table, column, type }`),
-`storageChanges` (`{ table, from, to }`: the table's `useXdo` before and after),
 `removed`, `unseededTables` (new tables whose seed rows the merge did not
 write), `renamedTables` (each `{ from, to }`: renamed through `xanosdk lock rename`, rows kept),
 `unchangedEnv` and `canonicalChanges` (each `{ kind, name, from, to }`: a public URL slug a
@@ -599,9 +598,12 @@ the environment keeps its data. Each refusal is exit 2 and names its remedy:
   refused for every table, empty or seeded — the instance cannot convert a table back to JSON
   storage, and nothing is sent. A `deploy --replace` rebuilds the tables, so it switches either way.
 
-A keep-data refusal's `details` carries `refused` (the reason, a string), `conflicts`, `renames`
+A keep-data refusal's `details` carries `refused` (the reason, a string). For `identityConflict`,
+`renamePending`, `pruneOutOfScope` and `uniqueViolation` it also carries `conflicts`, `renames`
 and `outOfScope` (each a list, empty when it does not apply), `serverCode` when the environment
-itself refused, and `warnings` when the run had some. A `--keep-data` deploy never falls back to a replace.
+itself refused, and `warnings` when the run had some. The others carry `landed: false` and their
+own list: `tableTrigger` names `triggers`, `storageModeChange` names `tables`, and
+`importInProgress` carries `serverCode` and, when there is one, `rerun`. A `--keep-data` deploy never falls back to a replace.
 
 Another import already running on the instance is not a refusal of the project: any deploy
 (`--keep-data`, a replace, `--to`) exits 8 with `SDK_IMPORT_REFUSED`, `details.refused:
@@ -664,7 +666,8 @@ answering its result and logs. It never changes a primitive: tables, endpoints, 
 every other object change in `xano/` and ship with `xanosdk deploy`.
 
 `xanosdk init` connects Claude Code (`.mcp.json`) and Cursor (`.cursor/mcp.json`) to it with one
-server, `xano-local`, that launches a bridge:
+server, `xano-local`, that launches a bridge. This is the Claude Code `.mcp.json` entry; Cursor's
+appends `--project ${workspaceFolder}`, since Cursor does not promise to launch it inside the project:
 
 ```json
 { "mcpServers": { "xano-local": { "command": "npx", "args": ["--yes", "--package", "@xano/sdk", "xanosdk", "local", "mcp", "--stdio"] } } }
@@ -777,7 +780,7 @@ pin for your own runs instead of editing `package.json`:
 
 - `--local=<value>` for one deploy;
 - `XANOSDK_ENGINE_OVERRIDE=<value>` for every deploy in this shell, including
-  `npm run xano:deploy`, which passes a bare flag.
+  `npm run xano:deploy`, which names no engine.
 
 Both take a **version** (`v0.1.8`, or `0.1.8`: that release from the release manager), an
 **`https` URL** to an engine archive, or the **path** to an engine archive on this machine. A
@@ -1148,6 +1151,7 @@ publishes beside the merge, but not under `--dry-run`; `--skip-liveness` needs `
 | `--backup-branch[=<label>]` | Snapshot the live branch's logic first. Switching back restores logic only — see below. |
 | `--allow-shared-schema-changes` | Proceed even though table and microservice changes reach every branch. |
 | `--allow-branch-deletion` | Proceed even though `--replace` permanently deletes the workspace's other branches. |
+| `--overwrite` | Deploy over objects changed in Xano since the last deploy or pull, instead of refusing with `SDK_WORKSPACE_CHANGED`. See below. |
 
 #### `--replace` clears by workspace, not by branch
 
@@ -1359,7 +1363,7 @@ xanosdk workspace branch set-live staging    # promote when you are happy
 ```
 
 A promote **always** lands on a branch, named or not: without `--branch` the label is derived
-from the release and the moment (`v1-20260910T200511Z`), and the run prints it. There is no
+from the release and the moment (`v1-20260910T200511Z-3f2a`, four random hex digits last), and the run prints it. There is no
 unnamed landing — a branch the engine leaves unlabelled cannot be selected, promoted or
 deleted afterwards, so the CLI names it rather than letting that happen.
 
@@ -1445,10 +1449,13 @@ either way, and `dryRun` says which it was:
 | `renamedTables`, `droppedColumns`, `retypedColumns`, `narrowedEnums`, `retargetedRefs`, `indexChanges`, `notNullKept`, `notNullTightened`, `storageChanges` | the table effects (see [What a landing does to tables](#what-a-landing-does-to-tables)); `tenant deploy` and `promote` carry the same keys, plus `droppedTables` (`{ table, rows }`), under `tableEffects`. |
 | `unchangedEnv`, `droppedEnv`, `unappliedDocumentation`, `workspaceRename` | the rest of what the plan cannot say. |
 | `workspaceSettingsNotApplied` | workspace settings a `--branch` landing held back (`[]` otherwise). |
+| `syncBaseline` | always present: the sync baseline recorded for the branch it landed on — `null` on a dry run, for a tenant or ephemeral, and when there is no `xano.lock`. |
 
-Present only when they apply: `branchDeletion`, `unnamedPublicUrls`, `staticRemoved`, and on a
-real run `setLive` and `sharedSchemaChanges` (with `--branch`), `backupBranch`, `liveRestored`
-and `static`.
+Present only when they apply: `branchDeletion`, `unnamedPublicUrls`, `staticRemoved`,
+`sharedSchemaChanges` (with `--branch`), on a dry run `seedRows` (under `--seed`: each table's
+seed rows and how many overwrite a live row) and `changedInXano` (objects changed in Xano that the
+real run would refuse to overwrite without `--overwrite`), and on a real run `setLive` (with
+`--branch`), `backupBranch`, `liveRestored` and `static`.
 
 The comparison is deliberately one-sided: a false "changed" costs one import that was
 happening anyway, while a false "unchanged" would silently skip a real release. So anything

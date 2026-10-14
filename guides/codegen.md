@@ -20,8 +20,9 @@ or a bundle path. Unlike most commands it has no default: a pull names its sourc
 
 Everything else about the project is unchanged: `--framework` (`react`, `svelte` or `none`), the
 theme flags, `--no-agents-md` and `--web` mean the same thing here as they do without `--from`.
-The three flags that describe the pull itself — `--report`, `--skip-roundtrip` and `--branch` —
-are refused without it rather than silently ignored.
+The flags that describe the pull itself — `--report`, `--skip-roundtrip`, `--branch`,
+`--no-secrets` and `--origin` — are refused without it rather than silently ignored, as is
+`--yes` without `--from` or `--force`.
 
 The target directory decides what is written around `xano/`, as it does for a plain
 [`init`](scaffold.md#no-frontend-and-existing-apps):

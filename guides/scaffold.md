@@ -9,7 +9,10 @@ backend alone — see [No frontend, and existing apps](#no-frontend-and-existing
 (default: the folder name), `--theme <id>` / `--radius <len>` / `--dark <mode>` /
 `--font <id>` / `--font-mono <id>` / `--font-heading <id>` / `--icons <id>`
 (the look — see [Theming](#theming)), `--no-agents-md` (skip the `AGENTS.md`
-agent brief, which every coding agent reads and `init` writes by default),
+agent brief, which every coding agent reads and `init` writes by default, and the
+`.mcp.json` / `.cursor/mcp.json` configs that connect agents to the `xano-local`
+MCP server), `--ai <preset|none>` (for scripted callers: `none` is `--no-agents-md`, and
+any other value writes the one `AGENTS.md` every agent reads),
 `--marketplace <pkg>` (repeatable, comma-separated; installs add-ons and
 registers them — below), `--force` (write over what clashes when adding the backend to
 a non-empty folder; it lists the files and scripts it would overwrite and asks, `--yes`
@@ -109,11 +112,12 @@ the add-on puts on your workspace, what you have to supply, and the
 `xano/index.ts` registration to copy. Piped, it emits JSON; `--prompt` emits
 instructions written to be handed straight to a coding agent.
 
-That is `npm install` with two additions: add-ons are discoverable from `xanosdk
---help`, and the command refuses before npm runs when you are not standing in a
-project — the mistake npm answers by silently writing to the wrong `package.json`.
-The package name is passed through exactly as typed, so version specifiers, tags,
-and third-party packages all work.
+`install` resolves its argument through the marketplace before npm runs — a module's
+package or its slug (`auth`), keeping any version or tag — and refuses a name the
+marketplace does not list with **exit 8**; local paths, `file:`, tarball and git specs
+install as given. It also refuses before npm runs when you are not standing in a project,
+and reconciles afterwards, asking any toolchain module that arrived its questions. See
+[Installing](marketplace.md#installing).
 
 ## No frontend, and existing apps
 
@@ -123,7 +127,8 @@ is a **new** project, and `--framework` decides its frontend. Any other director
 
 **A new project with `--framework none`** (or "No frontend" at the prompt) gets everything
 above except the frontend: `xano/`, a `package.json` with only the backend's scripts and
-dependencies, `.gitignore`, `.gitattributes`, the CI check, a README and `AGENTS.md`. There is
+dependencies, `.gitignore`, `.gitattributes`, the CI check, a README, `AGENTS.md`, and the
+`.mcp.json` / `.cursor/mcp.json` agent configs. There is
 no `frontend/` and no root `tsconfig.json`; `xano/` type-checks under its own
 `xano/tsconfig.json`, and `npm run xano:typecheck` checks it and its lambdas.
 `xano:deploy:ephemeral` deploys the backend alone, and there is no `dev`, `build` or
@@ -143,6 +148,11 @@ no `frontend/` and no root `tsconfig.json`; `xano/` type-checks under its own
 - A marked block in `.gitignore` (created when missing) and in `AGENTS.md`, added or
   refreshed in place; the rest of each file is left as it was. A symlinked `AGENTS.md` is left
   alone, and `--no-agents-md` skips it.
+- The `xano-local` MCP server merged by key into `.mcp.json` and `.cursor/mcp.json` (created
+  when missing): the other servers a config declares are kept. A config that already declares
+  `xano-local`, or is not valid JSON, is left alone and is not a clash; a symlinked one is
+  skipped. `--no-agents-md` skips both. See
+  [Connecting a coding agent](deploying.md#connecting-a-coding-agent).
 - No frontend, README, CI workflow or root `tsconfig.json`. The line-ending rule goes in
   `xano/.gitattributes`, scoped to `xano/`, so the project's own files are not renormalized.
 
@@ -177,17 +187,19 @@ The workflow installs with the project's package manager (npm, pnpm, yarn or bun
 `init` detected it), frozen to the committed lockfile, then runs `xano:check` on every push
 and pull request. In a monorepo workspace member it installs at the workspace root and checks
 in the member's directory; move the file to the repository root's `.github/workflows/`, the
-only place GitHub reads it. That script
-runs `xanosdk export ./xano/index.ts --check --strict`: every check an export runs (a build warning fails it), under
+only place GitHub reads it. That script runs three steps in order:
+`xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts --strict`, which fails when the
+committed route manifest the frontend takes its paths from is stale or missing; the project's
+typecheck (`tsc` on React, `svelte-kit sync && svelte-check` on Svelte, `tsc -p xano` with no
+frontend, each followed by `tsc -p xano/lambdas`); and
+`xanosdk export ./xano/index.ts --check --strict`: every check an export runs (a build warning fails it), under
 `--frozen-lock`, writing nothing — no bundle, no lock. Because nothing is written, it
 reads no `xano/.env` or `xano/.secrets.json`, so the workflow needs no repository
 secrets, even for an API group whose docs are token-gated. It fails instead of
 rewriting when `xano.lock` disagrees with the source, naming what would change. A
 project with nothing to record yet (a fresh scaffold) passes without a lock. It also fails while the lock
 carries an entry no exported object matches — the state a rename leaves until
-`lock rename` moves the identity across, or `lock prune` drops it. It first runs
-`xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts --strict`, which fails when
-the committed route manifest the frontend takes its paths from is stale or missing.
+`lock rename` moves the identity across, or `lock prune` drops it.
 `dev`, `build` and `typecheck` regenerate that file, so after adding or renaming an
 endpoint run `npm run xano:routes` (or any of them) and commit it. `init --from` and
 `pull` write it with the decoded backend, and `init --marketplace` writes it (and

@@ -8,7 +8,7 @@ engine grows a new one.
 A bundle is what `export` writes:
 
 ```bash
-npx xanosdk export ./xano/index.ts --out workspace.json
+npx xanosdk export ./xano/index.ts --out bundle.json
 ```
 
 ```ts

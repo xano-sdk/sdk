@@ -53,8 +53,10 @@ xanosdk deploy ./xano/index.ts --ephemeral --expires-hours 8   # the ephemeral's
 xanosdk deploy ./xano/index.ts --ephemeral --keep-data --static ./frontend/dist --static-host docs   # publish to a named static host — merge only: a replace deletes it, and a deploy creates only `default` (create `docs` in the dashboard first)
 xanosdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-routing spa   # override URL resolution, spa|multipage (inferred from the bundle; rarely needed)
 xanosdk deploy ./xano/index.ts --keep-data  # redeploy but keep table rows (merge instead of replace; seeds aren't re-written)
+xanosdk env pull --from workspace   # fill xano/.env from a running backend (default: last deployed); lists what changes and confirms over an existing file (--yes off a terminal)
 xanosdk env set STRIPE_KEY --to workspace --yes   # set ONE env var on a running backend, value piped on stdin (no deploy; never printed)
 xanosdk env unset STRIPE_KEY --to local # clear one (--to workspace|ephemeral[:<name>]|local[:<name>]|tenant:<name>, default: last deployed)
+xanosdk secrets fill                        # mint a token in xano/.secrets.json for every documentation gate that has none (never replaces one)
 xanosdk publish ./frontend/dist             # publish a built frontend alone — no compile, no backend import (default: last deployed)
 xanosdk publish ./frontend/dist --to ephemeral   # …or onto an ephemeral instead (after a local deploy, bare publish goes to the engine)
 xanosdk deploy ./xano/index.ts --static ./frontend/dist   # on the Xano Engine, the engine serves the build at http://<prefix>.localhost:<port>
@@ -117,6 +119,7 @@ xanosdk ephemeral export <name> --format multidoc --path -          # …stream 
 xanosdk workspace details                   # which workspace your token is scoped to (instance, id, name)
 xanosdk workspace export --path ws.json     # your REAL workspace as a JSON bundle (`--path -` streams to stdout)
 xanosdk workspace diff ./xano/index.ts --branch staging   # did my release land? which objects on the branch differ from your compile, are missing, or are unexpected (default: live), and which side changed each since the last sync (`changedThere`/`changedHere`/`changedBoth`); exits 2 when anything declared differs or is missing
+xanosdk workspace reset-tables ./xano/index.ts --table <guid> --write   # put named tables back to the seed rows your project compiles (a dry run without --write; every other table is left alone)
 xanosdk workspace branch list               # its branches, and which one is live
 xanosdk workspace branch set-live staging   # promote a branch (also the way back after --backup-branch)
 xanosdk workspace branch delete staging --yes   # remove a non-live branch (a label padded with spaces is found by the trimmed one; one not there exits 0, alreadyGone; the live branch exits 2, SDK_BRANCH_LIVE)
@@ -193,28 +196,31 @@ or needs `--yes` off a terminal; an ephemeral or Xano Engine never asks.
 
 ## Bundle key names vs. the names everything else uses
 
-A bundle's `payload` arrays are keyed by the engine's **storage** name, which for five kinds
-is not the name the SDK, the CLI, or a release plan uses for the same thing. Scripting against
-a bundle means translating:
+A bundle's `payload` arrays are keyed by the engine's **storage** name, which for eight kinds
+is not the name you author it with or the name the CLI prints for it. Scripting against a
+bundle means translating:
 
-| You author / the plan reports | `payload` array |
+| You author / the CLI prints | `payload` array |
 |---|---|
 | `table` | `payload.dbo` |
-| `api_group` | `payload.app` |
+| `apiGroup` | `payload.app` |
+| `workflowTest` | `payload.workflow_test` |
+| `realtimeServer` | `payload.realtime_server` |
+| `realtimeChannel` | `payload.channel` |
+| `realtimeMessage` | `payload.message` |
 | `agent` | `payload.toolset` |
-| `mcp_server` | `payload.toolset` |
-| `toolset` | `payload.tool` |
-| `realtime_channel` | `payload.channel` |
-| `realtime_message` | `payload.message` |
+| `mcpServer` | `payload.toolset` |
 
-Everything else (`query`, `function`, `task`, `trigger`, `middleware`, `microservice`,
-`addon`, `workflow_test`, `workspace`) is keyed the same on both sides.
+A trigger is printed as the factory that authored it (`tableTrigger`, `realtimeTrigger`, …)
+and stored in `payload.trigger`; `workspaceConfig` is stored in `payload.workspace`.
+Everything else (`query`, `function`, `task`, `middleware`, `microservice`, `addon`, `tool`,
+`knowledge`, `prompt`, `resource`) is keyed the same on both sides. CLI input accepts either
+spelling.
 
-Two traps worth naming. A release plan reports operations as `{"type": "table", …}` while the
-bundle it came from stores that object under `payload.dbo` — so a table that released
-correctly looks *missing* if you go looking for `payload.table`. And `agent` and `mcp_server`
-both land in `payload.toolset`, while the kind actually named `toolset` lands in
-`payload.tool`; matching on the word alone will pick the wrong array.
+The trap worth naming: `agent` and `mcpServer` both land in `payload.toolset`, told apart
+only by each row's `type`, while a `tool` lands in `payload.tool`; matching on the word
+"toolset" alone picks the wrong array. A file format keeps the stored spelling too, so a
+`xano.lock` key is `dbo:users`, not `table:users`.
 
 This is also the format `xanosdk lock import` reads, so both directions are user-facing.
 
@@ -461,9 +467,13 @@ import { emitBundle } from "@xano/sdk";        // pure string — browser-safe
 import { writeBundle } from "@xano/sdk/node";  // writes a file — Node only
 ```
 
-**Four entry points, and only the first is the authoring API.** `@xano/sdk` is what you
+**Several entry points, and only the first is the authoring API.** `@xano/sdk` is what you
 define a workspace with; `@xano/sdk/node` adds the filesystem half; `@xano/sdk/codegen`
-is what a generated tree imports; and `@xano/sdk/internal` holds the compiler machinery —
+is what a generated tree imports; `@xano/sdk/bundle` reads a compiled bundle back
+([Reading a compiled bundle](bundle.md)); `@xano/sdk/scaffold` is the theme and framework choices
+`init` accepts, as data; `@xano/sdk/plugin` is the contract a toolchain module compiles against; `@xano/sdk/sveltekit` is the SvelteKit adapter;
+`@xano/sdk/lambda-globals` types the globals a lambda body sees; and `@xano/sdk/internal`
+holds the compiler machinery —
 the per-kind encoders, the kind and statement registries, the bundle serializer, the
 `xano.lock` model. Nothing on `/internal` is needed to author anything, and it is kept off
 the root so an agent scanning the package's exports sees the surface rather than the guts.
