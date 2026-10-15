@@ -1,6 +1,6 @@
 # Toolchain modules
 
-> Read when `package.json` has a `"xanosdk"` block or you run `xanosdk marketplace`.
+> Read when `package.json` has a `"xanosdk"` block or you run `npx @xano/sdk marketplace`.
 
 **Toolchain modules** extend the CLI, not the workspace — nothing to register in
 `xano/index.ts`. An installed one runs on `export` and `deploy` (after the compile,
@@ -25,4 +25,4 @@ the request inputs under the manifest's keys and its config, it returns `{ impor
 imports as bare package names (`@xano/sdk*`, relative and `node:` are refused). A module that
 fails to load or throws leaves its previous block as it was, with a warning naming it, and the
 core sections still refresh; under `routes --emit --strict` it is fatal. `@xano-sdk/zod`
-(`xanosdk marketplace install zod`) is one: it adds `ROUTE_SCHEMAS` and its siblings.
+(`npx @xano/sdk marketplace install zod`) is one: it adds `ROUTE_SCHEMAS` and its siblings.

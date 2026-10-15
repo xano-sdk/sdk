@@ -2,7 +2,7 @@
  * `s.trigger.call({ trigger, input?, as? })` — invoke a trigger as a workspace run.
  *
  * WORKFLOW TESTS ONLY — outside one the step fails the first real request with
- * `ERROR_FATAL: Trigger does not exist`, so `xanosdk export` refuses it. See
+ * `ERROR_FATAL: Trigger does not exist`, so `npx @xano/sdk export` refuses it. See
  * `statements/api/call.ts` for why. This is how you assert on a trigger without
  * having to produce the row change that fires it.
  *

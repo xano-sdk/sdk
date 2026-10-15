@@ -45,7 +45,7 @@ import {
 import { detectProjectFrontend } from "./project-detect.js";
 import { CODEGEN_MARKER } from "./scaffold.js";
 import { warn } from "./ui.js";
-import { projectFileCli, projectSdkDir } from "./invocation.js";
+import { projectSdkDir } from "./invocation.js";
 import { detectPackageManager } from "./package-manager.js";
 
 /**
@@ -176,7 +176,6 @@ function managedFiles(opts: RefreshOptions): readonly ManagedFile[] {
           renderAgentsMd(opts.appName ?? appNameFor(opts.projectDir), opts.mode ?? guidanceModeFor(opts.projectDir), {
             version: opts.sdkVersion,
             frontend: opts.frontend !== undefined ? opts.frontend : detectProjectFrontend(opts.projectDir),
-            cli: projectFileCli(opts.projectDir, manager),
             sdkDir: projectSdkDir(opts.projectDir, manager),
           }),
         );

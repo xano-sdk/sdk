@@ -547,7 +547,7 @@ function encodeStatementBytes(stmt: Statement): StackItemXdo {
     throw new Error(
       `Cannot encode unregistered statement "${readableStatementName(stmt.name)}": it is not registered in this copy of @xano/sdk. ` +
         `A def is encoded by the SDK copy that built it — when two copies are loaded (a global \`xanosdk\` ` +
-        `and a project install), run the project's own (\`npx xanosdk\`), or encode through the def's own workspace.`,
+        `and a project install), run the project's own (\`npx @xano/sdk\`), or encode through the def's own workspace.`,
     );
   }
   assertAnnotations(stmt);

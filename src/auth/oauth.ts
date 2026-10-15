@@ -183,6 +183,52 @@ export function decodeAudience(accessToken: string): string | undefined {
   }
 }
 
+/**
+ * The `exp` claim of a JWT, in epoch seconds, or undefined for a token that is
+ * not a JWT or carries none (an opaque meta API token, most often). Decodes the
+ * payload only, like {@link decodeAudience}: advice, never verification.
+ */
+export function decodeExpiry(token: string): number | undefined {
+  const parts = token.split(".");
+  if (parts.length !== 3) return undefined;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8")) as { exp?: unknown };
+    return typeof payload.exp === "number" && Number.isFinite(payload.exp) ? payload.exp : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The `iss` claim of a JWT when it is an https origin: the server that issued
+ * it, and so the one a fresh `xanosdk login` has to reach. Decode only.
+ */
+export function decodeIssuer(token: string): string | undefined {
+  const parts = token.split(".");
+  if (parts.length !== 3) return undefined;
+  try {
+    const { iss } = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8")) as { iss?: unknown };
+    return typeof iss === "string" && /^https:\/\/[^/]+\/?$/.test(iss) ? iss.replace(/\/$/, "") : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether an origin is a Xano-operated host (`xano.com` or a subdomain, https):
+ * the only issuers whose name a remedy may print as `login --origin`. A token's
+ * `iss` is unverified, so a planted token must not steer a sign-in elsewhere.
+ */
+export function isXanoOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    const host = url.hostname.toLowerCase();
+    return url.protocol === "https:" && (host === "xano.com" || host.endsWith(".xano.com"));
+  } catch {
+    return false;
+  }
+}
+
 /** Extract the OAuth error code from an openid-client error, if present. */
 export function oauthErrorCode(err: unknown): string | undefined {
   if (err && typeof err === "object" && "error" in err) {

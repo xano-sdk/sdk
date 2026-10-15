@@ -179,7 +179,7 @@ is paid by importing any def at all.
 almost no bundle cost:
 
 ```bash
-xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts
+npx @xano/sdk routes ./xano/index.ts --emit xano/routes.gen.ts
 ```
 
 The emitted file is plain data plus one interpolator and imports nothing at all — the same
@@ -249,7 +249,7 @@ import { mcpUrl } from "../xano/routes.gen";
 const connectUrl = mcpUrl("notes_mcp", XANO_HOST); // https://host/x2/mcp/<canonical>/mcp/stream
 ```
 
-Run `xanosdk routes ./xano/index.ts` without `--emit` to see every address the file carries:
+Run `npx @xano/sdk routes ./xano/index.ts` without `--emit` to see every address the file carries:
 each route in its `api:<canonical>/<name>` form, and each socket, channel and MCP server with
 the call that builds it.
 
@@ -284,7 +284,7 @@ manifest types it as the linked table's columns, which is what the server accept
 type them with `InferResponse` on an `import type` of the def.
 
 These are types, so they add nothing to a bundle. For runtime validation, install
-`@xano-sdk/zod` (`npx xanosdk marketplace install zod`): it writes `ROUTE_SCHEMAS`,
+`@xano-sdk/zod` (`npx @xano/sdk marketplace install zod`): it writes `ROUTE_SCHEMAS`,
 `CHANNEL_SCHEMAS` and `MESSAGE_SCHEMAS` into the same file under the same keys
 (`ROUTE_SCHEMAS["POST listings"].parse(body)`), each checked against its type when you
 typecheck, so a schema cannot drift from the type it validates. The file then imports `zod`,

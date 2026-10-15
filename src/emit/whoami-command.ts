@@ -14,6 +14,7 @@
  */
 import type { ParsedArgs } from "./cli.js";
 import { credentialRejected, getAccessToken, type ResolvedAuth } from "../auth/token.js";
+import { DEFAULT_AUTH_HOST, decodeExpiry, decodeIssuer, isXanoOrigin } from "../auth/oauth.js";
 import { profileSourceLabel, selectionDocument, type ProfileSelection } from "../auth/profile-select.js";
 import { stdoutStyle, formatFields, printHuman, warn } from "./ui.js";
 import { readReachableWorkspaces, reachableInline, reachableLines, workspaceIdFix } from "./workspace-binding.js";
@@ -85,10 +86,20 @@ function asString(v: unknown): string | undefined {
 export function rejectedRemedy(auth: ResolvedAuth, args?: ParsedArgs): string {
   const p = auth.profile;
   const command = rejectedFixCommand(auth, args);
+  const expired = expiredTokenNote(auth);
   if (p === undefined) {
     return auth.credentialType === "token"
-      ? "The meta API token in XANO_META_TOKEN was rejected — replace it with a valid token for XANO_INSTANCE_URL."
+      ? expired === undefined
+        ? "The meta API token in XANO_META_TOKEN was rejected — replace it with a valid token for XANO_INSTANCE_URL."
+        : `The meta API token in XANO_META_TOKEN was rejected: ${expired} Sign in for real with \`${realLogin(auth)}\`, or replace it with a valid token for XANO_INSTANCE_URL.`
       : "The environment's refresh credential was rejected — replace XANO_REFRESH_TOKEN, or unset it to use a stored profile.";
+  }
+  if (expired !== undefined && command !== null) {
+    return (
+      `The instance rejected the meta API token stored for profile "${p.name}" ` +
+      `(${profileSourceLabel(p.source, p.defaultIn)}): ${expired} Sign in for real with \`${realLogin(auth)}\`, ` +
+      `or replace it with \`${command}\`.`
+    );
   }
   const what = auth.credentialType === "token" ? "meta API token" : "session";
   const head = `The instance rejected the ${what} stored for profile "${p.name}" (${profileSourceLabel(p.source, p.defaultIn)}). `;
@@ -104,6 +115,36 @@ export function rejectedRemedy(auth: ResolvedAuth, args?: ParsedArgs): string {
   return auth.credentialType === "token"
     ? head + `Replace it with \`${command}\`.`
     : head + `Sign in again with \`${command}\`.`;
+}
+
+/**
+ * The clause a rejected meta token gets when it is a JWT past its `exp`: a
+ * temporary credential (the one-day token agentic signup issues, above all)
+ * that nothing can refresh, so the fix is a real sign-in, not a retry. Only
+ * `token` credentials: an OAuth session refreshes itself before it gets here.
+ */
+function expiredTokenNote(auth: ResolvedAuth): string | undefined {
+  if (auth.credentialType !== "token") return undefined;
+  const exp = decodeExpiry(auth.access_token);
+  if (exp === undefined || exp * 1000 > Date.now()) return undefined;
+  return (
+    `it expired at ${new Date(exp * 1000).toISOString()}. Temporary credentials, like the one agentic ` +
+    `signup issues, last one day and cannot be refreshed.`
+  );
+}
+
+/**
+ * The sign-in that replaces an expired temporary token: on the server that
+ * issued it (its `iss`), so an account made on another server than the default
+ * (agentic signup's dev server) is not sent to sign in where it does not exist.
+ * The `iss` is decoded, not verified, so only a Xano host is named: a planted
+ * token must not point a sign-in at someone else's server.
+ */
+function realLogin(auth: ResolvedAuth): string {
+  const iss = decodeIssuer(auth.access_token);
+  return iss === undefined || iss === DEFAULT_AUTH_HOST || !isXanoOrigin(iss)
+    ? "xanosdk login"
+    : `xanosdk login --origin ${shellQuote(iss)}`;
 }
 
 /**

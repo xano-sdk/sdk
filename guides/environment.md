@@ -15,15 +15,15 @@ are what you get when the variable is unset.
 | `XANO_WORKSPACE_ID` | Numeric workspace the meta credential acts on. |
 | `XANO_META_TOKEN` | Meta API bearer token. With the two above it forms a complete credential that outranks every other source, reads no file, and never rotates. |
 | `XANO_REFRESH_TOKEN` | OAuth refresh token for non-interactive runs (CI, agents). Paired with `XANO_CLIENT_ID`; the target instance comes from the token's own `aud` claim. Rotates on use — prefer the meta credential above. |
-| `XANO_CLIENT_ID` | OAuth client id that goes with `XANO_REFRESH_TOKEN`. Both are copied once out of the profile in `auth.json` after a local `xanosdk login`. |
+| `XANO_CLIENT_ID` | OAuth client id that goes with `XANO_REFRESH_TOKEN`. Both are copied once out of the profile in `auth.json` after a local `npx @xano/sdk login`. |
 | `XANO_CONFIG` | Explicit path to the credential file. Wins over both default locations — the same thing `--config <path>` does. Refused beside `--local-auth`, which names a different file. |
 | `XANO_PROFILE` | Which stored credential profile to act as, when no `--profile` names one. Outranked by the flag, by the project's `xano.profile.json` pin, and by an environment credential (which displaces it with a note on stderr). |
 | `XANO_GLOBAL_CONFIG` | Moves the **shared** credential cache off `~/.xanosdk/auth.json`. Only changes where the global cache lives; the project-local `./.xano/auth.json` and the `XANO_CONFIG`/`--config` override are unaffected. |
 | `XANO_CLIENT_FILE` | Moves the OAuth **client-registration** cache off `~/.xano/xanosdk-clients.json`. That file holds the `client_id` minted per auth host + redirect URI, not a credential. |
 | `XANO_ORIGIN` | OAuth host to sign in against, instead of the default — the same thing `--origin` does. An origin only (`https://host`): a path, query or fragment is refused. |
-| `XANO_NO_BROWSER` | Set to anything non-empty and `xanosdk login` will **not** launch a browser; it prints the authorize URL to stderr for you to open yourself. The loopback server still runs and still waits for the redirect, so the flow completes only if the browser you open it in can reach this machine's `127.0.0.1`. For a machine that has no browser to launch. When the browser is on a **different** machine, that redirect cannot arrive — use `xanosdk login --paste` instead. |
+| `XANO_NO_BROWSER` | Set to anything non-empty and `npx @xano/sdk login` will **not** launch a browser; it prints the authorize URL to stderr for you to open yourself. The loopback server still runs and still waits for the redirect, so the flow completes only if the browser you open it in can reach this machine's `127.0.0.1`. For a machine that has no browser to launch. When the browser is on a **different** machine, that redirect cannot arrive — use `npx @xano/sdk login --paste` instead. |
 
-**`xanosdk preflight`** — an optional override target. With none of these set, `preflight` uses the stored login credential and creates its ephemeral under the workspace that credential pins
+**`npx @xano/sdk preflight`** — an optional override target. With none of these set, `preflight` uses the stored login credential and creates its ephemeral under the workspace that credential pins
 
 | Variable | What it does |
 |---|---|
@@ -45,7 +45,7 @@ are what you get when the variable is unset.
 |---|---|
 | `XANOSDK_NO_UPDATE_CHECK` | Turns the "a newer version is out" notice off (it reads the registry at most once an hour). |
 | `NO_UPDATE_NOTIFIER` | The de-facto convention, honored identically. `CI` being set also silences the notice. |
-| `XANOSDK_INSTALL_MODE` | `global` or `local` — pins whether the notice suggests `npm i -g` or `xanosdk upgrade` (a project-local install), instead of detecting it. |
+| `XANOSDK_INSTALL_MODE` | `global` or `local` — pins whether the notice suggests `npm i -g` or `npx @xano/sdk upgrade` (a project-local install), instead of detecting it. |
 | `XANOSDK_UPDATE_REGISTRY` | Registry URL the check reads, instead of the npm endpoint for `@xano/sdk`. |
 | `XANOSDK_UPDATE_CACHE` | Moves the check's cache file off `~/.xanosdk/update-check.json`. |
 
@@ -56,13 +56,13 @@ are what you get when the variable is unset.
 | `XANOSDK_ENGINE_OVERRIDE` | An engine to run instead of the project's pinned one, for every `deploy --local` in this shell: a version (`v0.1.8`), an `https://` URL to an engine archive (plain `http://` only from this machine), or an archive path. A value on `--local=` beats it; it never reads or moves the pin. |
 | `XANOSDK_ENGINE_TOKEN` | Bearer credential sent with an override URL's download — only to that URL's own origin, never to another host a redirect leads to. |
 | `XANOSDK_ENGINE_HOME` | Moves everything the Xano Engine writes off `~/.xanosdk/local-engine`: the engine cache, the running-engine records, and the engine's own logs and runtime data — see [where the engine keeps its data](deploying.md#where-the-engine-keeps-its-data). |
-| `XANOSDK_ENGINE_RELEASES_URL` | A different engine release service for version lookups. Its engines are fetched fresh each deploy, the pin is not read or written, and `xanosdk local update` refuses while it is set. |
+| `XANOSDK_ENGINE_RELEASES_URL` | A different engine release service for version lookups. Its engines are fetched fresh each deploy, the pin is not read or written, and `npx @xano/sdk local update` refuses while it is set. |
 
 **Escape hatches**
 
 | Variable | What it does |
 |---|---|
-| `XANOSDK_MARKETPLACE_URL` | Base URL the `xanosdk marketplace` reads hit, instead of the published catalogue. Repoints the three read verbs without waiting for a release. A path is kept, so `https://<instance>/tenant/<name>` works. |
+| `XANOSDK_MARKETPLACE_URL` | Base URL the `npx @xano/sdk marketplace` reads hit, instead of the published catalogue. Repoints the three read verbs without waiting for a release. A path is kept, so `https://<instance>/tenant/<name>` works. |
 | `XANOSDK_PROVE_DIFF` | A file path. Codegen appends one JSON line per statement that fell back to `raw()` — the arm that declined and the key paths where the re-encode disagreed. The decline *reason* is on the report either way; this adds the machine-readable detail. |
 
 > `process.env` read inside a **workspace definition** is a different thing entirely: it
@@ -95,7 +95,7 @@ checked-out project never holds a secret it did not fetch on purpose.
 
 | Path | What it is |
 |---|---|
-| `xano/.env` | Where the values live. Gitignored by the scaffold, and preserved across a `xanosdk pull` rather than rewritten. Read with no flag by the commands that compile a bundle: `deploy`, `export`, `preflight`, and `release create`, whose convergence comparison compiles the entry unless `--bundle` names one. |
+| `xano/.env` | Where the values live. Gitignored by the scaffold, and preserved across a `npx @xano/sdk pull` rather than rewritten. Read with no flag by the commands that compile a bundle: `deploy`, `export`, `preflight`, and `release create`, whose convergence comparison compiles the entry unless `--bundle` names one. |
 | `xano/.env.example` | Generated beside it, listing the declared names as commented lines. Committed. Copy it to `xano/.env` on a fresh clone and fill in the values. The lines stay commented on purpose, so an unedited copy meets the refusal below rather than sending empty strings to your backend. |
 
 `xano/` is the scaffold's backend directory. The file is read from the directory of the
@@ -107,9 +107,9 @@ it looked for.
 **Filling it**
 
 ```bash
-xanosdk env pull                        # fetch the values from the source this project last deployed to
-xanosdk env pull --from tenant:prod     # name the source explicitly
-xanosdk env pull --from workspace --yes # and skip the confirmation
+npx @xano/sdk env pull                        # fetch the values from the source this project last deployed to
+npx @xano/sdk env pull --from tenant:prod     # name the source explicitly
+npx @xano/sdk env pull --from workspace --yes # and skip the confirmation
 ```
 
 The source is a backend that is running: `workspace`, `ephemeral[:<name>]`,
@@ -131,9 +131,9 @@ resolved env values in cleartext (see the `--bundle` note below).
 **Changing one value on a running backend**
 
 ```bash
-printf %s "$STRIPE_KEY" | xanosdk env set STRIPE_KEY --to workspace --yes  # value on stdin
-xanosdk env set FEATURE_FLAG on --to local                          # or as the second argument
-xanosdk env unset STRIPE_KEY --to tenant:prod-eu                            # remove it
+printf %s "$STRIPE_KEY" | npx @xano/sdk env set STRIPE_KEY --to workspace --yes  # value on stdin
+npx @xano/sdk env set FEATURE_FLAG on --to local                          # or as the second argument
+npx @xano/sdk env unset STRIPE_KEY --to tenant:prod-eu                            # remove it
 ```
 
 `env set` creates the variable or replaces its value, and `env unset` removes it. Every other
@@ -179,7 +179,7 @@ and is not refused — unless `--keep-data` cannot keep that environment's data 
 replaces it after all. A `deploy --to` without `--replace` merges the same add-only way, and it
 still refuses: a name the target does not hold would be created there with no value, on a
 backend someone keeps. A `--dry-run` sends nothing, so it reports the refusal the real deploy
-would make as a warning and prints its plan. `xanosdk env pull` warns about each declared name
+would make as a warning and prints its plan. `npx @xano/sdk env pull` warns about each declared name
 the backend holds no value for, since the file it writes has none for it either.
 
 **The refusal only covers declared names.** A variable that exists in the backend but is not
@@ -189,7 +189,7 @@ routes reach that state: someone adds a variable in the backend after your last 
 swapping `xano/.env` for an `--backend-env-file` that holds only the declared names. So declare every
 name the stack reads, and carry the rest across when you swap files.
 
-The refusal is part of the **compile**, so `xanosdk deploy --bundle <path>` does not get it. A
+The refusal is part of the **compile**, so `npx @xano/sdk deploy --bundle <path>` does not get it. A
 pre-built bundle carries whatever env it was built with and sends exactly that, so a
 build-once-deploy-the-artifact pipeline resolves its values at build time: pass
 `--backend-env-file`/`--env-var` to the `export` that produces the bundle. Two consequences worth
@@ -213,18 +213,18 @@ identity, and a dotenv file is the right shape. A documentation token is address
 **object** that holds it: this workspace, that API group. It has no name of its own, so it is
 stored under that object's identity instead, and `env(...)` cannot read it from anywhere.
 
-That file is SDK-owned. `xanosdk pull` writes it and every build reads it back, so a pull
+That file is SDK-owned. `npx @xano/sdk pull` writes it and every build reads it back, so a pull
 followed by a deploy restores the gate with no manual step — which is the whole reason it
 exists. Nobody edits it by hand; `--no-secrets` on a pull finds the tokens and writes none, for
 a machine where a secret on disk is not wanted.
 
 A pull only answers for an object that already HAS a token. A gate you declare in source — a new
 API group, or a doc site you decided to close — has none to fetch, and that is what
-`xanosdk secrets fill` is for:
+`npx @xano/sdk secrets fill` is for:
 
 ```bash
-xanosdk secrets fill                   # every declared gate with no value gets one
-xanosdk secrets fill ./xano/index.ts   # name the entry when you are not in the project root
+npx @xano/sdk secrets fill                   # every declared gate with no value gets one
+npx @xano/sdk secrets fill ./xano/index.ts   # name the entry when you are not in the project root
 ```
 
 It mints a cryptographically random token per gate, the same shape a platform-minted one has,
@@ -260,7 +260,7 @@ cleared one.
 One thing to clear out by hand if you used an earlier build: a `XANO_DOCS_TOKEN…` line left in
 `xano/.env` from when tokens lived there is now an ordinary **backend** variable, because that file
 is backend-only again. It will be sent as part of the workspace's env, where `env("NAME")` reads it
-from every request. Delete the line — the value belongs in `xano/.secrets.json`, and `xanosdk pull`
+from every request. Delete the line — the value belongs in `xano/.secrets.json`, and `npx @xano/sdk pull`
 puts it there.
 
 An entry the file holds that no scope in your source claims is **reported and never deleted** —
@@ -289,7 +289,7 @@ plus the `canonical` URL tokens of API groups and toolsets (which the engine oth
 randomizes, giving the same code different public URLs per environment). Every command that
 compiles an entry file writes it — `export`, `deploy`, `preflight`, with no flag —
 and updates it on every build, atomically, before the bundle. **Commit it next to your code.**
-`npm run xano:check` is the CI guard (the `routes --strict` freshness check, then the project typecheck, then `xanosdk export ./xano/index.ts --check --strict`, which implies
+`npm run xano:check` is the CI guard (the `routes --strict` freshness check, then the project typecheck, then `npx @xano/sdk export ./xano/index.ts --check --strict`, which implies
 `--frozen-lock`, writes nothing, and needs neither `xano/.env` nor `xano/.secrets.json`): it fails rather than change the lock,
 so an uncommitted identity change is caught in review instead of on a deploy. It also fails
 while the lock carries an entry no exported object matches. That entry is how a rename looks
@@ -316,7 +316,7 @@ delete-and-recreate of every object, reported as success. If the lock itself is 
 **Releasing to a workspace that already exists?** Adopt what it already serves *first*:
 
 ```bash
-xanosdk lock import <its-packageExport.json> --lock=xano/xano.lock
+npx @xano/sdk lock import <its-packageExport.json> --lock=xano/xano.lock
 ```
 
 Without that step your first locked build mints its own URL token for every API group that
@@ -358,9 +358,9 @@ export warns about the orphaned entry and names the fix-up:
 
 ```bash
 # code: defineFunction({ name: "signup" }) → { name: "register" }
-xanosdk export ./xano/index.ts             # stderr: lock entry "function:signup" matches no exported object…
-xanosdk lock rename --entry=xano/index.ts function signup register
-xanosdk export ./xano/index.ts             # emits signup's original guid under "register" → engine renames in place
+npx @xano/sdk export ./xano/index.ts             # stderr: lock entry "function:signup" matches no exported object…
+npx @xano/sdk lock rename --entry=xano/index.ts function signup register
+npx @xano/sdk export ./xano/index.ts             # emits signup's original guid under "register" → engine renames in place
 ```
 
 **Merge conflicts** — two branches that both touched the lock can conflict in git, and a
@@ -371,8 +371,8 @@ delete the markers. If both branches renamed the same object — one to `stock`,
 Keep the name your code exports and drop the other; both commands read such a lock:
 
 ```bash
-xanosdk lock rename --entry=xano/index.ts table stock goods    # moves stock's identity onto goods
-xanosdk lock prune --identity-only --yes table:stock --lock=xano/xano.lock   # or just drop it
+npx @xano/sdk lock rename --entry=xano/index.ts table stock goods    # moves stock's identity onto goods
+npx @xano/sdk lock prune --identity-only --yes table:stock --lock=xano/xano.lock   # or just drop it
 ```
 
 `rename`/`import` take no entry file, so on their own they look for `xano.lock` in the
@@ -383,17 +383,17 @@ stop, rather than writing a file you did not name.
 
 **After `--replace`** — a replace rebuilds the workspace with fresh engine identities, so the
 lock is stale the moment it finishes and the next ordinary merge would match nothing and
-try to create everything. `xanosdk deploy ./xano/index.ts --to workspace --replace` now re-pins the lock from the rebuilt
+try to create everything. `npx @xano/sdk deploy ./xano/index.ts --to workspace --replace` now re-pins the lock from the rebuilt
 workspace itself and tells you to commit it. If there is no lock to re-pin, it says so —
 without one, the next merge duplicates every object.
 
-**Importing a live workspace's identities** — `xanosdk lock import <bundle.json>` seeds the lock from a
+**Importing a live workspace's identities** — `npx @xano/sdk lock import <bundle.json>` seeds the lock from a
 real engine `packageExport`, capturing the live workspace's random guids by `(type, name)`
 so code takes over an existing workspace and the first sync updates in place instead of
 duplicating.
 
 **CI** — the scaffolded `npm run xano:check` runs the `routes --strict` freshness check, the project typecheck, and
-`xanosdk export ./xano/index.ts --check --strict`, which runs every check an export runs and writes nothing, so it needs no secrets. It implies `--frozen-lock`, which
+`npx @xano/sdk export ./xano/index.ts --check --strict`, which runs every check an export runs and writes nothing, so it needs no secrets. It implies `--frozen-lock`, which
 fails instead of changing the lock, so a canonical
 minted in a throwaway container can never silently diverge public URLs. Mint locally, commit
 the lock. It fails on an entry no exported object matches too, which is the state a rename

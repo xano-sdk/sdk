@@ -22,11 +22,11 @@ export const publicApi = apiGroup({
   //
   // `require_token: true` is the whole declaration — the token itself is never
   // spelled here, and a literal `token` fails the export, because this file is
-  // committed. `xanosdk pull` writes the value to `xano/.secrets.json`, keyed by
+  // committed. `npx @xano/sdk pull` writes the value to `xano/.secrets.json`, keyed by
   // this group's guid; it is gitignored, and every command that compiles a
   // bundle reads it back with no flag, so pull-then-deploy restores the gate
   // with no step in between. A gate declared HERE has no live value to pull —
-  // `xanosdk secrets fill` mints one for every declared gate the file has none
+  // `npx @xano/sdk secrets fill` mints one for every declared gate the file has none
   // for, and never replaces one it holds. CI, which has no such file, passes
   // `--secrets-file <path>` or `--doc-token "Public API=<value>"`.
   //

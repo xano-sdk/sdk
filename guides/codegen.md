@@ -1,6 +1,6 @@
 # Pulling an existing workspace
 
-What `xanosdk init --from` writes, how faithful the pull is, and how to read its report.
+What `npx @xano/sdk init --from` writes, how faithful the pull is, and how to read its report.
 
 ## Running it
 
@@ -8,10 +8,10 @@ A pull is `init` with `xano/` filled from an existing backend instead of the emp
 so it is the scaffold command with one extra flag:
 
 ```bash
-xanosdk init my-app --from workspace          # your real workspace (the one your login is scoped to)
-xanosdk init my-app --from ephemeral:my-env   # a named ephemeral environment
-xanosdk init my-app --from local:<name> # a running Xano Engine (`local list`) — no login
-xanosdk init my-app --from ./ws.json          # a bundle already on disk — offline, no login
+npx @xano/sdk init my-app --from workspace          # your real workspace (the one your login is scoped to)
+npx @xano/sdk init my-app --from ephemeral:my-env   # a named ephemeral environment
+npx @xano/sdk init my-app --from local:<name> # a running Xano Engine (`local list`) — no login
+npx @xano/sdk init my-app --from ./ws.json          # a bundle already on disk — offline, no login
 ```
 
 `--from` takes any backend in [the CLI's one grammar](cli.md#naming-a-backend) —
@@ -43,16 +43,16 @@ cd my-existing-app && npx @xano/sdk init --from workspace   # add the pulled bac
 
 ### Just the tree: `generate`
 
-`xanosdk generate <source>` writes the same decoded tree `init --from` puts in `xano/`, and nothing
+`npx @xano/sdk generate <source>` writes the same decoded tree `init --from` puts in `xano/`, and nothing
 else — no `package.json`, no frontend, no round-trip check. Use it to drop a backend into a repo
 that already has its own shell, or to read one.
 
 ```bash
-xanosdk generate workspace                    # → ./xano
-xanosdk generate release:v1 --out ./backend   # a stored release
-xanosdk generate ephemeral:my-env             # also tenant:<name>, local[:<name>]
-xanosdk generate ./ws.json                    # a bundle on disk — offline, no login
-xanosdk generate workspace --branch staging   # --branch applies to `workspace` only
+npx @xano/sdk generate workspace                    # → ./xano
+npx @xano/sdk generate release:v1 --out ./backend   # a stored release
+npx @xano/sdk generate ephemeral:my-env             # also tenant:<name>, local[:<name>]
+npx @xano/sdk generate ./ws.json                    # a bundle on disk — offline, no login
+npx @xano/sdk generate workspace --branch staging   # --branch applies to `workspace` only
 ```
 
 The output directory must be new, empty, or a tree an earlier decode wrote — `generate` and
@@ -70,9 +70,9 @@ generating a different backend into a tree cannot carry its old identities forwa
 `--branch <label>` reads that branch instead of the live one:
 
 ```bash
-xanosdk init review-staging --from workspace --branch staging
-xanosdk pull workspace --branch staging              # refresh that tree from the same branch
-xanosdk workspace export --branch staging --path -   # the raw bundle, same selector
+npx @xano/sdk init review-staging --from workspace --branch staging
+npx @xano/sdk pull workspace --branch staging              # refresh that tree from the same branch
+npx @xano/sdk workspace export --branch staging --path -   # the raw bundle, same selector
 ```
 
 Only logic differs. Tables and microservices are shared by every branch, so the schema in the
@@ -177,7 +177,7 @@ trackable release over release and gateable in CI without scraping output.
 Re-pulling is a real workflow: a second `init --from` into the same directory refreshes
 `xano/` and leaves the rest of the project — your `package.json`, your `frontend/` —
 exactly as you left it. No `--force` needed, because the tree carries a marker saying it
-was decoded. It and `xanosdk pull` share one planner: before any write it lists the files it
+was decoded. It and `npx @xano/sdk pull` share one planner: before any write it lists the files it
 will delete and the files it will rewrite — telling a file you edited since the last decode
 from one only the source changed — refuses a `xano/` git reports as dirty, and asks; without
 a terminal, `--yes` answers. It removes only files the previous decode wrote; one you added
@@ -189,9 +189,9 @@ over a `xano/` no decode wrote follows the same rules.
 > decodes, so commit before one (an existing `xano/` that isn't a previous pull is a clash, and
 > needs `--force`).
 > It carries schema only — no table rows or stored files.
-> `xanosdk deploy` sends it to the Xano Engine on this machine (`--ephemeral`: a disposable
+> `npx @xano/sdk deploy` sends it to the Xano Engine on this machine (`--ephemeral`: a disposable
 > ephemeral environment) as a *full replace*;
-> `xanosdk promote <release>` or `xanosdk deploy --to workspace` merges it into your real
+> `npx @xano/sdk promote <release>` or `npx @xano/sdk deploy --to workspace` merges it into your real
 > workspace. Workspace env vars are declared by name only — their values never enter the tree.
 
 ---

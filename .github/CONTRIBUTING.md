@@ -15,7 +15,7 @@ The fastest reports to fix include:
 
 - the exact command you ran (or the code that triggered it),
 - the output, pasted verbatim,
-- the `@xano/sdk` version (`npx xanosdk --version`) and your Node version.
+- the `@xano/sdk` version (`npx @xano/sdk --version`) and your Node version.
 
 Redact tokens and instance URLs before posting. `XANOSDK_DEBUG=1` prints raw
 server responses, which can include values you'd rather not share in a public

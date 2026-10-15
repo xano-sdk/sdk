@@ -31,7 +31,7 @@ Paths are lower case throughout — an HTTP verb is the one exception, because i
 the method rather than a word. Bindings keep the object's own casing, so a file name
 and the symbol it exports can differ.
 
-That is the shape `xanosdk init --from` writes, and its `index.ts` re-exports every object
+That is the shape `npx @xano/sdk init --from` writes, and its `index.ts` re-exports every object
 by name — import from the tree's root rather than from a file, since a file path moves
 when an object's parent or its `_shared.ts` placement changes. Hand-authored projects are
 free to use any other layout; only `index.ts` registering the objects matters.
@@ -40,15 +40,15 @@ free to use any other layout; only `index.ts` registering the objects matters.
 `new Xano().registerWorkspace({ name: "my-app" })`, returning the same chainable registry.
 Authoring is **declarative def-objects** passed to factories; there is no callback/chaining
 builder. `xano.export()` returns the importable `packageExport` bundle, and
-`xanosdk export`/`deploy` read the module's default export.
+`npx @xano/sdk export`/`deploy` read the module's default export.
 
 ## Wiring a project by hand
 
-`xanosdk init` writes all of this for you. Without it, two lines set a project up:
+`npx @xano/sdk init` writes all of this for you. Without it, two lines set a project up:
 
 ```bash
 npm init -y && npm pkg set type=module && npm install -D @xano/sdk
-npx xanosdk upgrade     # rewrites npm's caret to the range init writes
+npx @xano/sdk upgrade     # rewrites npm's caret to the range init writes
 ```
 
 Write your workspace in `xano/index.ts`; `login` and `deploy` are unchanged. `type=module`

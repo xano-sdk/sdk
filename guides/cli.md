@@ -1,158 +1,162 @@
 # CLI
 
-Every `xanosdk` command, shell completion, and what the CLI prints when something fails.
+Every CLI command, shell completion, and what the CLI prints when something fails.
 
-The examples spell the bare `xanosdk` of a global install (`npm i -g @xano/sdk`). In a project
-with `@xano/sdk` installed, run them as `npx xanosdk …`; anywhere else, `npx @xano/sdk …` (see
-[Commands the CLI prints](#commands-the-cli-prints)).
+Run every command here as `npx @xano/sdk …`. Inside a project, npx runs the project's installed
+version; anywhere else it runs the latest release. In a project, the `npm run xano:*` scripts
+`init` writes are shortcuts for the common ones.
+
+The program inside the package is named `xanosdk`. That's what the `npm run xano:*` scripts
+call, and what `npm i -g @xano/sdk` puts on your PATH. A global `xanosdk` ignores the project's
+version, so inside a project use `npx @xano/sdk` or the scripts.
 
 ```bash
-xanosdk init my-app                         # scaffold a full project (frontend/ + xano/)
-xanosdk init my-app --framework svelte      # SvelteKit instead of the default React
-xanosdk init my-api --framework none        # a new project with the backend only (no frontend/)
-xanosdk init                                # inside an existing app: add xano/ and the xano:* scripts, no frontend (lists clashes and writes nothing; --force overwrites)
-xanosdk init my-app --no-agents-md --no-install  # skip AGENTS.md and npm install
-xanosdk init my-app --theme zinc-blue --dark toggle --icons tabler  # the look
-xanosdk init my-app --marketplace @xano-sdk/auth,@xano-sdk/vector  # install add-ons AND register them
+npx @xano/sdk init my-app                         # scaffold a full project (frontend/ + xano/)
+npx @xano/sdk init my-app --framework svelte      # SvelteKit instead of the default React
+npx @xano/sdk init my-api --framework none        # a new project with the backend only (no frontend/)
+npx @xano/sdk init                                # inside an existing app: add xano/ and the xano:* scripts, no frontend (lists clashes and writes nothing; --force overwrites)
+npx @xano/sdk init my-app --no-agents-md --no-install  # skip AGENTS.md and npm install
+npx @xano/sdk init my-app --theme zinc-blue --dark toggle --icons tabler  # the look
+npx @xano/sdk init my-app --marketplace @xano-sdk/auth,@xano-sdk/vector  # install add-ons AND register them
 
-xanosdk marketplace list                    # every published add-on (no login needed)
-xanosdk marketplace search auth             # narrow by keyword
-xanosdk marketplace details @xano-sdk/auth    # what it installs + the registration to copy
-xanosdk marketplace details @xano-sdk/auth --prompt  # …as a prompt for a coding agent
-xanosdk marketplace install @xano-sdk/auth    # add an add-on to the project you're in (and configure it)
-xanosdk marketplace reinstall <toolchain-package>  # re-ask a toolchain module its questions
-xanosdk marketplace remove <toolchain-package>     # uninstall it and drop what it contributed
+npx @xano/sdk marketplace list                    # every published add-on (no login needed)
+npx @xano/sdk marketplace search auth             # narrow by keyword
+npx @xano/sdk marketplace details @xano-sdk/auth    # what it installs + the registration to copy
+npx @xano/sdk marketplace details @xano-sdk/auth --prompt  # …as a prompt for a coding agent
+npx @xano/sdk marketplace install @xano-sdk/auth    # add an add-on to the project you're in (and configure it)
+npx @xano/sdk marketplace reinstall <toolchain-package>  # re-ask a toolchain module its questions
+npx @xano/sdk marketplace remove <toolchain-package>     # uninstall it and drop what it contributed
 
-xanosdk export ./xano/index.ts              # bundle to stdout
-xanosdk export ./xano/index.ts --out ws.json
-xanosdk compile ./xano/functions/get-user.ts  # a single function's JSON
-xanosdk routes ./xano/index.ts              # every route, realtime socket/channel and MCP server address (`paths` is an alias)
+npx @xano/sdk export ./xano/index.ts              # bundle to stdout
+npx @xano/sdk export ./xano/index.ts --out ws.json
+npx @xano/sdk compile ./xano/functions/get-user.ts  # a single function's JSON
+npx @xano/sdk routes ./xano/index.ts              # every route, realtime socket/channel and MCP server address (`paths` is an alias)
 
-xanosdk export ./xano/index.ts --strict     # CI: fail the build on any warning, don't just print it
-xanosdk export ./xano/index.ts --no-lock    # build with no xano.lock (one is written by default; refused once one exists)
-xanosdk export ./xano/index.ts --frozen-lock  # CI guard: fail if the export would change the lock, or if the lock carries an entry no object matches
-xanosdk export ./xano/index.ts --check --strict  # the same guard, writing nothing (no bundle, no lock) — needs no .env or .secrets.json; the scaffold's xano:check
-xanosdk lock rename --entry=xano/index.ts table users members  # move a lock entry after renaming in code
-xanosdk lock prune ./xano/index.ts --yes    # drop lock entries nothing exports anymore
-xanosdk lock prune --identity-only --entry=xano/index.ts --yes dbo:notes  # …or drop named keys without running the workspace
-xanosdk lock import live-export.json --entry=xano/index.ts --yes  # seed the lock from a live engine export
+npx @xano/sdk export ./xano/index.ts --strict     # CI: fail the build on any warning, don't just print it
+npx @xano/sdk export ./xano/index.ts --no-lock    # build with no xano.lock (one is written by default; refused once one exists)
+npx @xano/sdk export ./xano/index.ts --frozen-lock  # CI guard: fail if the export would change the lock, or if the lock carries an entry no object matches
+npx @xano/sdk export ./xano/index.ts --check --strict  # the same guard, writing nothing (no bundle, no lock) — needs no .env or .secrets.json; the scaffold's xano:check
+npx @xano/sdk lock rename --entry=xano/index.ts table users members  # move a lock entry after renaming in code
+npx @xano/sdk lock prune ./xano/index.ts --yes    # drop lock entries nothing exports anymore
+npx @xano/sdk lock prune --identity-only --entry=xano/index.ts --yes dbo:notes  # …or drop named keys without running the workspace
+npx @xano/sdk lock import live-export.json --entry=xano/index.ts --yes  # seed the lock from a live engine export
 
-xanosdk login                               # OAuth sign-in (once) — pick the instance + workspace at consent
-xanosdk login --paste                       # …when the browser can't reach this machine's 127.0.0.1 (remote shell, container, Codespace)
-xanosdk login --scope "<list>"              # request these OAuth scopes instead of the built-in set
-xanosdk login --profile staging             # sign in as a second named credential, leaving the others alone
-xanosdk <command> --profile staging         # act as that profile for one run (-p is the short form)
-xanosdk workspace details                   # which instance/workspace am I bound to, and via which credential?
-xanosdk deploy ./xano/index.ts              # compile + import into the Xano Engine on this machine (the dev loop) → URL; no account needed
-xanosdk deploy ./xano/index.ts --ephemeral  # …or into a live ephemeral on Xano's cloud → URL
-xanosdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist   # also deploy a static frontend (onto the ephemeral)
-xanosdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-env PK=pk_live_1   # + extra public config
-xanosdk deploy --bundle ws.json             # deploy an already-exported bundle
-xanosdk deploy ./xano/index.ts --open       # …and open the deployed URL in your browser
-xanosdk deploy ./xano/index.ts --ephemeral --expires-hours 8   # the ephemeral's TTL when this deploy creates it: 1–24 hours (default: 1)
-xanosdk deploy ./xano/index.ts --ephemeral --keep-data --static ./frontend/dist --static-host docs   # publish to a named static host — merge only: a replace deletes it, and a deploy creates only `default` (create `docs` in the dashboard first)
-xanosdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-routing spa   # override URL resolution, spa|multipage (inferred from the bundle; rarely needed)
-xanosdk deploy ./xano/index.ts --keep-data  # redeploy but keep table rows (merge instead of replace; seeds aren't re-written)
-xanosdk env pull --from workspace   # fill xano/.env from a running backend (default: last deployed); lists what changes and confirms over an existing file (--yes off a terminal)
-xanosdk env set STRIPE_KEY --to workspace --yes   # set ONE env var on a running backend, value piped on stdin (no deploy; never printed)
-xanosdk env unset STRIPE_KEY --to local # clear one (--to workspace|ephemeral[:<name>]|local[:<name>]|tenant:<name>, default: last deployed)
-xanosdk secrets fill                        # mint a token in xano/.secrets.json for every documentation gate that has none (never replaces one)
-xanosdk publish ./frontend/dist             # publish a built frontend alone — no compile, no backend import (default: last deployed)
-xanosdk publish ./frontend/dist --to ephemeral   # …or onto an ephemeral instead (after a local deploy, bare publish goes to the engine)
-xanosdk deploy ./xano/index.ts --static ./frontend/dist   # on the Xano Engine, the engine serves the build at http://<prefix>.localhost:<port>
-xanosdk publish ./frontend/dist --to workspace --branch v2 --yes   # …onto the workspace, refused unless branch v2 is live
-xanosdk deploy ./xano/index.ts --local   # the default, spelled out: the Xano Engine on this machine (runs the version pinned in package.json)
-xanosdk deploy ./xano/index.ts --local=~/Downloads/engine.tar.gz   # override: run this archive, URL or version (v0.1.8), never touching the pin
+npx @xano/sdk login                               # OAuth sign-in (once) — pick the instance + workspace at consent
+npx @xano/sdk login --paste                       # …when the browser can't reach this machine's 127.0.0.1 (remote shell, container, Codespace)
+npx @xano/sdk login --scope "<list>"              # request these OAuth scopes instead of the built-in set
+npx @xano/sdk login --profile staging             # sign in as a second named credential, leaving the others alone
+npx @xano/sdk <command> --profile staging         # act as that profile for one run (-p is the short form)
+npx @xano/sdk workspace details                   # which instance/workspace am I bound to, and via which credential?
+npx @xano/sdk deploy ./xano/index.ts              # compile + import into the Xano Engine on this machine (the dev loop) → URL; no account needed
+npx @xano/sdk deploy ./xano/index.ts --ephemeral  # …or into a live ephemeral on Xano's cloud → URL
+npx @xano/sdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist   # also deploy a static frontend (onto the ephemeral)
+npx @xano/sdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-env PK=pk_live_1   # + extra public config
+npx @xano/sdk deploy --bundle ws.json             # deploy an already-exported bundle
+npx @xano/sdk deploy ./xano/index.ts --open       # …and open the deployed URL in your browser
+npx @xano/sdk deploy ./xano/index.ts --ephemeral --expires-hours 8   # the ephemeral's TTL when this deploy creates it: 1–24 hours (default: 1)
+npx @xano/sdk deploy ./xano/index.ts --ephemeral --keep-data --static ./frontend/dist --static-host docs   # publish to a named static host — merge only: a replace deletes it, and a deploy creates only `default` (create `docs` in the dashboard first)
+npx @xano/sdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-routing spa   # override URL resolution, spa|multipage (inferred from the bundle; rarely needed)
+npx @xano/sdk deploy ./xano/index.ts --keep-data  # redeploy but keep table rows (merge instead of replace; seeds aren't re-written)
+npx @xano/sdk env pull --from workspace   # fill xano/.env from a running backend (default: last deployed); lists what changes and confirms over an existing file (--yes off a terminal)
+npx @xano/sdk env set STRIPE_KEY --to workspace --yes   # set ONE env var on a running backend, value piped on stdin (no deploy; never printed)
+npx @xano/sdk env unset STRIPE_KEY --to local # clear one (--to workspace|ephemeral[:<name>]|local[:<name>]|tenant:<name>, default: last deployed)
+npx @xano/sdk secrets fill                        # mint a token in xano/.secrets.json for every documentation gate that has none (never replaces one)
+npx @xano/sdk publish ./frontend/dist             # publish a built frontend alone — no compile, no backend import (default: last deployed)
+npx @xano/sdk publish ./frontend/dist --to ephemeral   # …or onto an ephemeral instead (after a local deploy, bare publish goes to the engine)
+npx @xano/sdk deploy ./xano/index.ts --static ./frontend/dist   # on the Xano Engine, the engine serves the build at http://<prefix>.localhost:<port>
+npx @xano/sdk publish ./frontend/dist --to workspace --branch v2 --yes   # …onto the workspace, refused unless branch v2 is live
+npx @xano/sdk deploy ./xano/index.ts --local   # the default, spelled out: the Xano Engine on this machine (runs the version pinned in package.json)
+npx @xano/sdk deploy ./xano/index.ts --local=~/Downloads/engine.tar.gz   # override: run this archive, URL or version (v0.1.8), never touching the pin
 XANOSDK_ENGINE_OVERRIDE=v0.1.8 npm run xano:deploy   # the same override for every deploy in the shell
-xanosdk local list                   # Xano Engines on this machine, marking the ones xanosdk started
-xanosdk local token                  # print its meta API bearer: XANO_META_TOKEN=$(xanosdk local token)
-xanosdk local mcp                    # how a coding agent connects to its MCP server (url, command, config); never the bearer
-xanosdk local mcp --stdio            # the bridge an agent's .mcp.json launches: follows restarts, brings the current bearer
-xanosdk local stop <name>            # stop one (--all: every one xanosdk started, and what a crashed one left running)
-xanosdk local update                 # move this project's pinned engine to the latest (--version <v>: that one) and restart it — commit package.json
-xanosdk local cache list             # each cached engine version, its size, and the engines running on it
-xanosdk local cache clear            # remove every cached engine and its unpacked runtime (--version <v>: just that one); running ones are stopped first
-xanosdk ephemeral list                      # list your ephemeral environments (--all-workspaces spans every workspace; --json: { ephemerals: [...] })
-xanosdk ephemeral get <name>                # base URL, state, and expiry for one (<name> = the tenant name, e.g. ewap-8wz9-9e13, NOT the display name — `ephemeral list` shows it in bold)
-xanosdk ephemeral delete <name> --yes       # destroy one
-xanosdk tables                              # the last-deployed backend's tables: id, guid, name (for release create --seed)
-xanosdk tables tenant:acme                  # …or name one
-xanosdk test run-all                        # run the tests the last-deployed backend carries (exits 5 on a failure)
-xanosdk test run-all --on local      # …or name one (--on ephemeral:<name>|tenant:<name>|workspace)
-xanosdk test list                           # list the tests a backend carries, without running any
-xanosdk test run "<name>"                   # run one test by its name
-xanosdk test run-all --kind unit            # only one family (unit|workflow; default: both) — also on test list
-xanosdk test run-all --concurrency 4        # run 4 at once (default: 1); tests share the backend's database, so only when yours don't share state
-xanosdk impersonate                         # open what this project last deployed to in the builder (--guest = read-only; --url-only prints the URL; the URL is a session — treat it as a credential)
-xanosdk impersonate ephemeral:<tenant>      # …or name one: local[:<name>] or tenant:<name> (open your workspace from the Xano dashboard)
-xanosdk deploy ./xano/index.ts --ephemeral --test   # THE RELEASE FLOW, step 1: stand it up on an ephemeral and run its tests (a bare deploy goes to the Xano Engine, which release create cannot cut from)
-xanosdk release create v1                   # …2: cut a release from the ephemeral this project last deployed to (after a local deploy: --from ephemeral)
-xanosdk release create v1 --from ephemeral:e4f2-9ab1 --description "what shipped"   # …from a named source
-xanosdk release create v1 --from workspace --branch staging   # …or from a branch of your workspace (default: what it serves)
-xanosdk release list                        # every release in this workspace, newest first, a description cut to one line (--json: { releases: [...] }, each with the origin show names)
-xanosdk release show v1                     # one release: when it was cut, from what (a cut from an environment records it in the description), what it carries
+npx @xano/sdk local list                   # Xano Engines on this machine, marking the ones the SDK started
+npx @xano/sdk local token                  # print its meta API bearer: XANO_META_TOKEN=$(npx @xano/sdk local token)
+npx @xano/sdk local mcp                    # how a coding agent connects to its MCP server (url, command, config); never the bearer
+npx @xano/sdk local mcp --stdio            # the bridge an agent's .mcp.json launches: follows restarts, brings the current bearer
+npx @xano/sdk local stop <name>            # stop one (--all: every one the SDK started, and what a crashed one left running)
+npx @xano/sdk local update                 # move this project's pinned engine to the latest (--version <v>: that one) and restart it — commit package.json
+npx @xano/sdk local cache list             # each cached engine version, its size, and the engines running on it
+npx @xano/sdk local cache clear            # remove every cached engine and its unpacked runtime (--version <v>: just that one); running ones are stopped first
+npx @xano/sdk ephemeral list                      # list your ephemeral environments (--all-workspaces spans every workspace; --json: { ephemerals: [...] })
+npx @xano/sdk ephemeral get <name>                # base URL, state, and expiry for one (<name> = the tenant name, e.g. ewap-8wz9-9e13, NOT the display name — `ephemeral list` shows it in bold)
+npx @xano/sdk ephemeral delete <name> --yes       # destroy one
+npx @xano/sdk tables                              # the last-deployed backend's tables: id, guid, name (for release create --seed)
+npx @xano/sdk tables tenant:acme                  # …or name one
+npx @xano/sdk test run-all                        # run the tests the last-deployed backend carries (exits 5 on a failure)
+npx @xano/sdk test run-all --on local      # …or name one (--on ephemeral:<name>|tenant:<name>|workspace)
+npx @xano/sdk test list                           # list the tests a backend carries, without running any
+npx @xano/sdk test run "<name>"                   # run one test by its name
+npx @xano/sdk test run-all --kind unit            # only one family (unit|workflow; default: both) — also on test list
+npx @xano/sdk test run-all --concurrency 4        # run 4 at once (default: 1); tests share the backend's database, so only when yours don't share state
+npx @xano/sdk impersonate                         # open what this project last deployed to in the builder (--guest = read-only; --url-only prints the URL; the URL is a session — treat it as a credential)
+npx @xano/sdk impersonate ephemeral:<tenant>      # …or name one: local[:<name>] or tenant:<name> (open your workspace from the Xano dashboard)
+npx @xano/sdk deploy ./xano/index.ts --ephemeral --test   # THE RELEASE FLOW, step 1: stand it up on an ephemeral and run its tests (a bare deploy goes to the Xano Engine, which release create cannot cut from)
+npx @xano/sdk release create v1                   # …2: cut a release from the ephemeral this project last deployed to (after a local deploy: --from ephemeral)
+npx @xano/sdk release create v1 --from ephemeral:e4f2-9ab1 --description "what shipped"   # …from a named source
+npx @xano/sdk release create v1 --from workspace --branch staging   # …or from a branch of your workspace (default: what it serves)
+npx @xano/sdk release list                        # every release in this workspace, newest first, a description cut to one line (--json: { releases: [...] }, each with the origin show names)
+npx @xano/sdk release show v1                     # one release: when it was cut, from what (a cut from an environment records it in the description), what it carries
                                            # --json origin: {kind:"branch",label} | {kind:"environment",name,type} | {kind:"copy",source:{host,workspaceId,release},from?:<branch or environment>} (transferred in) | null
-xanosdk release export v1                   # download it as a XanoScript multidoc (workspace block named "v1")
-xanosdk release delete v1 --yes             # remove one (a tenant may be running it — there is no undo)
-xanosdk release transfer v1 --to-profile prod   # copy a release to another workspace/instance, checked by content hash
-xanosdk promote v1                          # …3: land it in your workspace, as a new branch
-xanosdk promote v1 --branch staging         # …on a named branch instead of one named after the release (a taken label exits 2, SDK_BRANCH_TAKEN)
+npx @xano/sdk release export v1                   # download it as a XanoScript multidoc (workspace block named "v1")
+npx @xano/sdk release delete v1 --yes             # remove one (a tenant may be running it — there is no undo)
+npx @xano/sdk release transfer v1 --to-profile prod   # copy a release to another workspace/instance, checked by content hash
+npx @xano/sdk promote v1                          # …3: land it in your workspace, as a new branch
+npx @xano/sdk promote v1 --branch staging         # …on a named branch instead of one named after the release (a taken label exits 2, SDK_BRANCH_TAKEN)
                                            # (a label is letters, digits, _ . - and starts with a letter, digit or _; surrounding spaces are trimmed)
-xanosdk tenant list                         # every tenant under this workspace (--json: { tenants: [...] })
-xanosdk tenant get acme                     # base URL and state for one
-xanosdk tenant deploy acme v1               # …or 3: land it on a customer tenant instead
-xanosdk tenant delete acme --yes            # destroy one (by its NAME — a display name fails with exit 8 and names the tenant it belongs to)
-xanosdk pull release:v1                     # refresh xano/ from a release: rewrites decoded files, keeps and names files you added, lists and confirms (also workspace, ephemeral[:<name>], local, tenant:<name>)
-xanosdk pull release:v1 --yes               # …skip the confirmation and the dirty-tree refusal (CI)
-xanosdk pull workspace --backend-dir ./backend   # …when this project keeps its backend somewhere other than xano/ and nothing on disk says so (also on env pull)
-xanosdk generate release:v1 --out ./backend # write ONLY the decoded xano/ tree, no project around it (any source above, or a bundle path; --force replaces the files an earlier generate wrote, asks first when that loses your edits (--yes answers), and keeps and lists any others)
-xanosdk deploy ./xano/index.ts --to workspace --dry-run   # ALTERNATIVE to the release flow: preview a merge of the local build
-xanosdk deploy ./xano/index.ts --to workspace             # …send it: add + update, never delete, never touch table data. Leaves no release to re-land
-xanosdk deploy ./xano/index.ts --to workspace --prune     # …also delete objects this project LANDED here and no longer defines (per xano.lock's `landed` record; commit it)
-xanosdk deploy ./xano/index.ts --to workspace --branch staging   # …land on a NEW branch instead of live (created; an existing label is refused, exit 2; stages LOGIC only — schema and workspace settings are shared, so not applied from a branch)
-xanosdk deploy ./xano/index.ts --to workspace --branch staging --set-live   # …and set it live the moment the import succeeds
-xanosdk deploy ./xano/index.ts --to tenant:acme          # …or merge into a customer tenant
-xanosdk ephemeral export <name>             # export a DEPLOYED ephemeral as a JSON bundle → .xano/exports/<name>.json
-xanosdk ephemeral export <name> --format multidoc --name backend    # …or as XanoScript → .xano/exports/backend.xs (--path picks elsewhere; a secret-bearing file git would commit is added to .gitignore)
-xanosdk ephemeral export <name> --format multidoc --path -          # …stream the multidoc to stdout (deploy first)
+npx @xano/sdk tenant list                         # every tenant under this workspace (--json: { tenants: [...] })
+npx @xano/sdk tenant get acme                     # base URL and state for one
+npx @xano/sdk tenant deploy acme v1               # …or 3: land it on a customer tenant instead
+npx @xano/sdk tenant delete acme --yes            # destroy one (by its NAME — a display name fails with exit 8 and names the tenant it belongs to)
+npx @xano/sdk pull release:v1                     # refresh xano/ from a release: rewrites decoded files, keeps and names files you added, lists and confirms (also workspace, ephemeral[:<name>], local, tenant:<name>)
+npx @xano/sdk pull release:v1 --yes               # …skip the confirmation and the dirty-tree refusal (CI)
+npx @xano/sdk pull workspace --backend-dir ./backend   # …when this project keeps its backend somewhere other than xano/ and nothing on disk says so (also on env pull)
+npx @xano/sdk generate release:v1 --out ./backend # write ONLY the decoded xano/ tree, no project around it (any source above, or a bundle path; --force replaces the files an earlier generate wrote, asks first when that loses your edits (--yes answers), and keeps and lists any others)
+npx @xano/sdk deploy ./xano/index.ts --to workspace --dry-run   # ALTERNATIVE to the release flow: preview a merge of the local build
+npx @xano/sdk deploy ./xano/index.ts --to workspace             # …send it: add + update, never delete, never touch table data. Leaves no release to re-land
+npx @xano/sdk deploy ./xano/index.ts --to workspace --prune     # …also delete objects this project LANDED here and no longer defines (per xano.lock's `landed` record; commit it)
+npx @xano/sdk deploy ./xano/index.ts --to workspace --branch staging   # …land on a NEW branch instead of live (created; an existing label is refused, exit 2; stages LOGIC only — schema and workspace settings are shared, so not applied from a branch)
+npx @xano/sdk deploy ./xano/index.ts --to workspace --branch staging --set-live   # …and set it live the moment the import succeeds
+npx @xano/sdk deploy ./xano/index.ts --to tenant:acme          # …or merge into a customer tenant
+npx @xano/sdk ephemeral export <name>             # export a DEPLOYED ephemeral as a JSON bundle → .xano/exports/<name>.json
+npx @xano/sdk ephemeral export <name> --format multidoc --name backend    # …or as XanoScript → .xano/exports/backend.xs (--path picks elsewhere; a secret-bearing file git would commit is added to .gitignore)
+npx @xano/sdk ephemeral export <name> --format multidoc --path -          # …stream the multidoc to stdout (deploy first)
 
-xanosdk workspace details                   # which workspace your token is scoped to (instance, id, name)
-xanosdk workspace export --path ws.json     # your REAL workspace as a JSON bundle (`--path -` streams to stdout)
-xanosdk workspace diff ./xano/index.ts --branch staging   # did my release land? which objects on the branch differ from your compile, are missing, or are unexpected (default: live), and which side changed each since the last sync (`changedThere`/`changedHere`/`changedBoth`); exits 2 when anything declared differs or is missing
-xanosdk workspace reset-tables ./xano/index.ts --table <guid> --write   # put named tables back to the seed rows your project compiles (a dry run without --write; every other table is left alone)
-xanosdk workspace branch list               # its branches, and which one is live
-xanosdk workspace branch set-live staging   # promote a branch (also the way back after --backup-branch)
-xanosdk workspace branch delete staging --yes   # remove a non-live branch (a label padded with spaces is found by the trimmed one; one not there exits 0, alreadyGone; the live branch exits 2, SDK_BRANCH_LIVE)
-xanosdk init my-app --from workspace        # …or as a runnable project (the pull direction)
-xanosdk init my-app --from ephemeral:<tenant>   # same, from an ephemeral (the env is named inside the flag)
-xanosdk init my-app --from ./ws.json        # …or from a bundle already on disk (offline, no auth)
+npx @xano/sdk workspace details                   # which workspace your token is scoped to (instance, id, name)
+npx @xano/sdk workspace export --path ws.json     # your REAL workspace as a JSON bundle (`--path -` streams to stdout)
+npx @xano/sdk workspace diff ./xano/index.ts --branch staging   # did my release land? which objects on the branch differ from your compile, are missing, or are unexpected (default: live), and which side changed each since the last sync (`changedThere`/`changedHere`/`changedBoth`); exits 2 when anything declared differs or is missing
+npx @xano/sdk workspace reset-tables ./xano/index.ts --table <guid> --write   # put named tables back to the seed rows your project compiles (a dry run without --write; every other table is left alone)
+npx @xano/sdk workspace branch list               # its branches, and which one is live
+npx @xano/sdk workspace branch set-live staging   # promote a branch (also the way back after --backup-branch)
+npx @xano/sdk workspace branch delete staging --yes   # remove a non-live branch (a label padded with spaces is found by the trimmed one; one not there exits 0, alreadyGone; the live branch exits 2, SDK_BRANCH_LIVE)
+npx @xano/sdk init my-app --from workspace        # …or as a runnable project (the pull direction)
+npx @xano/sdk init my-app --from ephemeral:<tenant>   # same, from an ephemeral (the env is named inside the flag)
+npx @xano/sdk init my-app --from ./ws.json        # …or from a bundle already on disk (offline, no auth)
 
-xanosdk status                              # who am I, which workspace, and the env this project last deployed to
-xanosdk whoami                              # print the scoped user + instance base URL (pretty on a TTY, JSON when piped)
-xanosdk profile list                        # every stored credential profile, with the default and the active one marked
-xanosdk profile show [name]                 # what one profile addresses — never its token
-xanosdk profile use <name>                  # pin THIS PROJECT to a profile (writes a committed xano.profile.json)
-xanosdk profile set-default <name>          # set the profile THIS MACHINE falls back to
-xanosdk profile add <name> --instance <url> --workspace-id <n>   # store a meta API token (prompts, or reads it piped on stdin; checked before storing)
-xanosdk profile delete <name>               # revoke that session and remove the profile (xano.profile.json is kept, as logout keeps it)
-xanosdk logout                              # revoke the active profile and remove it (--all for every profile)
+npx @xano/sdk status                              # who am I, which workspace, and the env this project last deployed to
+npx @xano/sdk whoami                              # print the scoped user + instance base URL (pretty on a TTY, JSON when piped)
+npx @xano/sdk profile list                        # every stored credential profile, with the default and the active one marked
+npx @xano/sdk profile show [name]                 # what one profile addresses — never its token
+npx @xano/sdk profile use <name>                  # pin THIS PROJECT to a profile (writes a committed xano.profile.json)
+npx @xano/sdk profile set-default <name>          # set the profile THIS MACHINE falls back to
+npx @xano/sdk profile add <name> --instance <url> --workspace-id <n>   # store a meta API token (prompts, or reads it piped on stdin; checked before storing)
+npx @xano/sdk profile delete <name>               # revoke that session and remove the profile (xano.profile.json is kept, as logout keeps it)
+npx @xano/sdk logout                              # revoke the active profile and remove it (--all for every profile)
 # Both ask first (--yes off a terminal) when the profile is the one xano.profile.json pins, or the default while others stay.
-xanosdk version                             # print the installed @xano/sdk version
-xanosdk upgrade --check                     # is a newer @xano/sdk published? exits 7 if so, 0 if current
-xanosdk upgrade                             # install it: globally (npm i -g) for a global CLI; in a project, into the block that lists it (--save-prod or --save-dev)
-xanosdk agent-skill install                 # put the xano-backend skill into each coding agent detected on this machine (--agent <id> to pick)
-xanosdk agent-skill status                  # each copy: current, stale, edited or absent
-xanosdk agent-skill uninstall               # remove the copies install wrote (an edited copy is kept)
-xanosdk help                                # grouped command reference (also the no-arg default)
-xanosdk <command> --help                    # that command's usage, subcommands, and flags (`xanosdk deploy --help`)
-xanosdk <noun> <verb> --help                # scoped to one verb (`xanosdk workspace export --help`)
-xanosdk <command> --json                    # force JSON on stdout (otherwise: whenever stdout isn't a terminal)
-xanosdk <command> --no-refresh              # don't refresh the managed blocks in AGENTS.md and the README (a build that writes nothing outside its output)
-xanosdk completion zsh                      # shell completion script (also bash, fish) — see below
+npx @xano/sdk version                             # print the installed @xano/sdk version
+npx @xano/sdk upgrade --check                     # is a newer @xano/sdk published? exits 7 if so, 0 if current
+npx @xano/sdk upgrade                             # install it: globally (npm i -g) for a global CLI; in a project, into the block that lists it (--save-prod or --save-dev)
+npx @xano/sdk agent-skill install                 # put the xano-backend skill into each coding agent detected on this machine (--agent <id> to pick)
+npx @xano/sdk agent-skill status                  # each copy: current, stale, edited or absent
+npx @xano/sdk agent-skill uninstall               # remove the copies install wrote (an edited copy is kept)
+npx @xano/sdk help                                # grouped command reference (also the no-arg default)
+npx @xano/sdk <command> --help                    # that command's usage, subcommands, and flags (`npx @xano/sdk deploy --help`)
+npx @xano/sdk <noun> <verb> --help                # scoped to one verb (`npx @xano/sdk workspace export --help`)
+npx @xano/sdk <command> --json                    # force JSON on stdout (otherwise: whenever stdout isn't a terminal)
+npx @xano/sdk <command> --no-refresh              # don't refresh the managed blocks in AGENTS.md and the README (a build that writes nothing outside its output)
+npx @xano/sdk completion zsh                      # shell completion script (also bash, fish) — see below
 
-xanosdk preflight ./xano/index.ts           # import into a live instance, diff each object back (needs auth + a throwaway tenant)
-xanosdk preflight ./xano/index.ts --runtime # also run each deployed function on the engine
-xanosdk preflight ./xano/index.ts --capture # write the fetched JSON as fixture candidates
+npx @xano/sdk preflight ./xano/index.ts           # import into a live instance, diff each object back (needs auth + a throwaway tenant)
+npx @xano/sdk preflight ./xano/index.ts --runtime # also run each deployed function on the engine
+npx @xano/sdk preflight ./xano/index.ts --capture # write the fetched JSON as fixture candidates
 ```
 
 The `marketplace` family has a guide of its own: [The marketplace](marketplace.md) for what
@@ -166,8 +170,8 @@ Every command that reads, writes or opens a running backend names it with one gr
 | Spelling | What it is |
 |---|---|
 | `workspace` | Your real workspace — the one your login is scoped to |
-| `ephemeral` / `ephemeral:<name>` | The ephemeral this project deployed to, or a named one — by its name (`e4f2-9ab1`, from `xanosdk ephemeral list`), not its display name |
-| `local` / `local:<name>` | The engine this project deployed to, or a named one from `xanosdk local list`. Needs no Xano account |
+| `ephemeral` / `ephemeral:<name>` | The ephemeral this project deployed to, or a named one — by its name (`e4f2-9ab1`, from `npx @xano/sdk ephemeral list`), not its display name |
+| `local` / `local:<name>` | The engine this project deployed to, or a named one from `npx @xano/sdk local list`. Needs no Xano account |
 | `tenant:<name>` | A tenant on your instance |
 | `release:<name>` | A stored release — where a command reads one (`deploy`, `pull`, `generate`, `init --from`) |
 | a bundle path | Where a command takes a file (`deploy`, `generate`, `init --from`) |
@@ -181,8 +185,8 @@ takes **`--on`**, and a command whose subject IS the backend takes it positional
 in `.xano/deployed.json` by an ephemeral or local deploy, and never by a deploy to your
 workspace or a tenant, so a bare command cannot reach something real unasked. With no record,
 it falls back to the ephemeral recorded under your current credential, then to the engine
-recorded for this directory, and otherwise refuses naming the flag, `xanosdk deploy` and
-`xanosdk deploy --local`.
+recorded for this directory, and otherwise refuses naming the flag, `npx @xano/sdk deploy` and
+`npx @xano/sdk deploy --local`.
 `deploy` is the exception: bare, it compiles the project and stands it up on the Xano Engine
 on this machine unless `--ephemeral` or `--to` says otherwise, so it writes that record rather
 than reading it. `generate` and `init --from` need a backend named.
@@ -222,7 +226,7 @@ only by each row's `type`, while a `tool` lands in `payload.tool`; matching on t
 "toolset" alone picks the wrong array. A file format keeps the stored spelling too, so a
 `xano.lock` key is `dbo:users`, not `table:users`.
 
-This is also the format `xanosdk lock import` reads, so both directions are user-facing.
+This is also the format `npx @xano/sdk lock import` reads, so both directions are user-facing.
 
 
 **Build warnings, and `--strict`.** `export`/`deploy` print a warning (a `!` line) for the
@@ -279,37 +283,37 @@ string, `values` its whole closed set, `examples` a few values of a flag that ta
 
 ## Shell completion
 
-`xanosdk completion <bash|zsh|fish>` prints a completion script covering every command, verb, flag,
+`npx @xano/sdk completion <bash|zsh|fish>` prints a completion script covering every command, verb, flag,
 and closed value set (`--on workspace|ephemeral|local`, `--format json|multidoc`, `--icons lucide|tabler|phosphor`).
 A flag's value completes as what it takes: its closed set, file names for a path (`--config`,
 `--secrets-file`), directories for a directory (`--backend-dir`), stored profile names for
 `--profile`/`--to-profile`, and nothing for a free-form value (`--name`, `--expires-hours`).
-`xanosdk help <Tab>` completes command names, then verbs.
+`npx @xano/sdk help <Tab>` completes command names, then verbs.
 It is generated from the CLI's own command table, so it never drifts from what the CLI accepts — but it
 is baked at generation time, so re-run it after upgrading.
 
 ```bash
 # zsh
-xanosdk completion zsh > "${fpath[1]}/_xanosdk"   # then restart your shell
+npx @xano/sdk completion zsh > "${fpath[1]}/_xanosdk"   # then restart your shell
 
 # bash
-xanosdk completion bash > ~/.xanosdk-completion.bash
+npx @xano/sdk completion bash > ~/.xanosdk-completion.bash
 echo 'source ~/.xanosdk-completion.bash' >> ~/.bashrc
 
 # fish
-xanosdk completion fish > ~/.config/fish/completions/xanosdk.fish
+npx @xano/sdk completion fish > ~/.config/fish/completions/xanosdk.fish
 ```
 
 After a command succeeds the CLI checks npm (at most once an hour, cached in
 `~/.xanosdk/update-check.json`) and prints a one-line nudge to **stderr** when a newer
 `@xano/sdk` is published — never to stdout, so piped bundles stay clean. The suggested
 command adapts to how you installed it: `npm i -g @xano/sdk@latest` for a global install,
-`xanosdk upgrade` when it's a project dependency (it keeps the SDK in the `package.json` block
+`npx @xano/sdk upgrade` when it's a project dependency (it keeps the SDK in the `package.json` block
 that lists it and restores the scaffolded range, which a raw `npm i` would not). The check is best-effort and bounded (a slow or offline
 registry never delays a command), and stays silent under CI or when stderr isn't a terminal.
 Opt out with `XANOSDK_NO_UPDATE_CHECK=1` (or the conventional `NO_UPDATE_NOTIFIER=1`).
 
-`xanosdk upgrade` is the same question asked on purpose, and it answers under all the
+`npx @xano/sdk upgrade` is the same question asked on purpose, and it answers under all the
 conditions the nudge stays quiet for — CI, a piped stderr, the opt-out variables — reading the
 registry live rather than serving the hourly cache. `--check` reports without installing and
 exits **7** when a newer version is published, **0** when you are current or ahead of the
@@ -317,8 +321,8 @@ latest published version (a local build; `status: "ahead"`, and a bare `upgrade`
 nothing), so a pipeline can branch on it:
 
 ```bash
-xanosdk upgrade --check || echo "an upgrade is waiting"
-xanosdk upgrade --check | jq -r .latest        # piped stdout is JSON already
+npx @xano/sdk upgrade --check || echo "an upgrade is waiting"
+npx @xano/sdk upgrade --check | jq -r .latest        # piped stdout is JSON already
 ```
 
 A registry it cannot reach is an error (exit 1), never a quiet "you are up to date". Without
@@ -356,7 +360,7 @@ silently ignored. `init --from` follows the same two modes
 ([Pulling an existing workspace](codegen.md#running-it)).
 
 ```bash
-xanosdk init --json   # inside the app; then run the command in `next`
+npx @xano/sdk init --json   # inside the app; then run the command in `next`
 ```
 
 `init --json` reports `mode` (`new` or `existing`), `files` (every file it wrote or merged
@@ -371,11 +375,11 @@ tells the agent when to set up a Xano backend and hands it to `init`, then to th
 AI agents read. The package ships it at `skills/xano-backend/SKILL.md`.
 
 ```bash
-xanosdk agent-skill install                       # every coding agent detected on this machine
-xanosdk agent-skill install --agent claude-code   # …or name one (repeatable)
-xanosdk agent-skill install --dry-run             # report what would change, write nothing
-xanosdk agent-skill status --json                 # each copy, as data
-xanosdk agent-skill uninstall
+npx @xano/sdk agent-skill install                       # every coding agent detected on this machine
+npx @xano/sdk agent-skill install --agent claude-code   # …or name one (repeatable)
+npx @xano/sdk agent-skill install --dry-run             # report what would change, write nothing
+npx @xano/sdk agent-skill status --json                 # each copy, as data
+npx @xano/sdk agent-skill uninstall
 ```
 
 It writes at most two copies. Claude Code reads `~/.claude/skills/xano-backend/SKILL.md`
@@ -421,13 +425,13 @@ import manifest from "@xano/sdk/manifest.json" with { type: "json" };
 const has = (cmd: string) => manifest.cli.some((c) => c.command === cmd);
 ```
 
-Read the manifest from the install whose `xanosdk` you will run: a project dependency and a
+Read the manifest from the install `npx @xano/sdk` will run: a project dependency and a
 global install can be different versions.
 
 - **Check each operation, not the whole feature.** A backend-only promotion needs `promote`,
   and it should not be refused because `publish` is missing. Gate each command on its own entry.
-- **When something is missing, name the command.** `This workflow needs \`xanosdk publish\`,
-  which the installed @xano/sdk (1.0.x) does not have. Run \`xanosdk upgrade\`.` is accurate. "This SDK has
+- **When something is missing, name the command.** `This workflow needs \`npx @xano/sdk publish\`,
+  which the installed @xano/sdk (1.0.x) does not have. Run \`npx @xano/sdk upgrade\`.` is accurate. "This SDK has
   no release support" is not, when `release create` and `promote` are right there.
 - **The manifest describes the package, not the target.** Whether a particular workspace or
   instance will accept an operation is decided when the command runs. The command's own
@@ -436,11 +440,10 @@ global install can be different versions.
 ## Commands the CLI prints
 
 Every command the CLI prints for you to run next (a remedy, a rerun, a hint, `--help`) is spelled
-for where it runs, in the text and in `--json` fields such as `rerun` alike: plain `xanosdk …` from a
-global install; otherwise `npx xanosdk …` in a project with `@xano/sdk` installed, and
-`npx @xano/sdk …` anywhere else (a `cd <dir> && …` is spelled for `<dir>`). Paths in it read from
-where you typed — under `npm run`, the directory you ran npm in. Files it writes to disk (a
-scaffold's README, `AGENTS.md`, `.env.example`) always say `npx xanosdk …`.
+`npx @xano/sdk …`, in the text and in `--json` fields such as `rerun` alike, and so is every file it
+writes to disk (a scaffold's README, `AGENTS.md`, `.env.example`). Paths in it read from where you
+typed — under `npm run`, the directory you ran npm in. Never `npx xanosdk`: outside a project,
+npx would fetch the `xanosdk` package from the registry, which is only a placeholder.
 
 ## When something fails
 
@@ -453,7 +456,7 @@ what it could not reach and why (`workspace list could not reach https://…: fe
 response body underneath — nothing is discarded, only folded away.
 
 A malformed invocation fails before any work happens: a missing or misspelled entry file, an
-argument the command has nowhere to put (`xanosdk export --lock xano.lock` — that flag takes
+argument the command has nowhere to put (`npx @xano/sdk export --lock xano.lock` — that flag takes
 its value attached, as `--lock=xano.lock`), or a missing credential, each answered with the
 command's usage block instead of a stack trace. `deploy` and `release` check that you are
 signed in *before* compiling, so a lapsed session costs you a message, not a build.
@@ -480,4 +483,4 @@ the root so an agent scanning the package's exports sees the surface rather than
 
 `emit`, `emitBundle` and the `@xano/sdk/node` writers run the same build-time checks, including seed validation of a literal
 `seed: [...]` array. A **deferred** seed (a thunk, or `seedFile()`) needs an await or the
-filesystem, so it is materialised and checked only by `xanosdk export` / `xanosdk deploy`.
+filesystem, so it is materialised and checked only by `npx @xano/sdk export` / `npx @xano/sdk deploy`.

@@ -8,7 +8,7 @@ engine grows a new one.
 A bundle is what `export` writes:
 
 ```bash
-npx xanosdk export ./xano/index.ts --out bundle.json
+npx @xano/sdk export ./xano/index.ts --out bundle.json
 ```
 
 ```ts
@@ -39,7 +39,7 @@ for (const { raw, path, depth } of walk(bundle.payload.query[0].run)) {
   engine-filled operands excluded — so adding a column to a table leaves `db.edit` /
   `db.add_or_edit` unchanged. A `db.add` writes every column, so its hash does change.
 - **`tableRefOf(column)` / `linkedTableOf(column)`** → the table a column points at.
-- **`normalize(value)`** → the normalizer `xanosdk preflight` compares with, for diffing a
+- **`normalize(value)`** → the normalizer `npx @xano/sdk preflight` compares with, for diffing a
   stored workspace against a compiled one.
 
 Everything on the entry is pure — no filesystem, network, or Node built-ins — so it runs anywhere.

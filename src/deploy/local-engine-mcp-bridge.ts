@@ -25,6 +25,7 @@ import { request as httpsRequest } from "node:https";
 import { isLoopbackUrl } from "./local-engine-handshake.js";
 import type { EngineLookup } from "./local-engine-lookup.js";
 import { isRecord as isObject } from "./answer-shape.js";
+import { PROJECT_CLI } from "../emit/invocation.js";
 
 /** Protocol revisions the bridge's own `initialize` answer can speak, newest first. */
 const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -89,8 +90,6 @@ export interface BridgeOptions {
   recordSignal: () => string;
   /** Called with each bearer the lookup hands back, before it is first sent. */
   registerSecret: (token: string) => void;
-  /** How the fix in a no-engine answer spells a command (`npx xanosdk`). */
-  cli?: string;
   post?: EnginePost;
   pollMs?: number;
   setInterval?: (fn: () => void, ms: number) => unknown;
@@ -112,7 +111,6 @@ export async function runMcpBridge(opts: BridgeOptions): Promise<void> {
 
 class Bridge {
   private readonly post: EnginePost;
-  private readonly cli: string;
   /** The engine in use, or why there is none. Undefined until first looked up. */
   private state: EngineLookup | undefined;
   private resolving: Promise<EngineLookup> | undefined;
@@ -126,7 +124,6 @@ class Bridge {
 
   constructor(private readonly opts: BridgeOptions) {
     this.post = opts.post ?? defaultPost;
-    this.cli = opts.cli ?? "npx xanosdk";
   }
 
   async run(): Promise<void> {
@@ -226,7 +223,7 @@ class Bridge {
         protocolVersion: asked !== undefined && PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
         capabilities: { tools: { listChanged: true } },
         serverInfo: { name: "xano-local", title: "Xano Engine (local, via xanosdk)", version: "1" },
-        instructions: noEngineText(state, this.cli),
+        instructions: noEngineText(state, PROJECT_CLI),
       },
     };
     if (state.state !== "usable") return local;
@@ -241,7 +238,7 @@ class Bridge {
   /** The answer a request gets while there is no engine: what to do, in words the model reads. */
   private noEngineAnswer(msg: Message, state: EngineLookup): Message {
     const id = idOf(msg);
-    const text = noEngineText(state, this.cli);
+    const text = noEngineText(state, PROJECT_CLI);
     if (msg.method === "tools/list") return { jsonrpc: "2.0", id, result: { tools: [] } };
     if (msg.method === "tools/call") {
       return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text }], isError: true } };
@@ -295,7 +292,7 @@ class Bridge {
     if (attempt.kind === "refused") {
       this.opts.log(`xano-local MCP bridge: the engine refused the connection (${attempt.message}).`);
       return isRequest
-        ? errorFrame(id, SERVER_ERROR, `The Xano Engine is not answering. Deploy again with \`${this.cli} deploy --local\`, then retry.`)
+        ? errorFrame(id, SERVER_ERROR, `The Xano Engine is not answering. Deploy again with \`${PROJECT_CLI} deploy --local\`, then retry.`)
         : undefined;
     }
     if (attempt.kind === "unknown") {

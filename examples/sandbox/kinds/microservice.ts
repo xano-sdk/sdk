@@ -17,7 +17,7 @@
  * provisional.
  *
  * SECRETS RIDE ALONG. `chart.values` and `registryAuth.dockerconfigjson` are
- * carried into the bundle — and into a tree `xanosdk codegen` writes — verbatim.
+ * carried into the bundle — and into a tree `npx @xano/sdk generate` writes — verbatim.
  * They have to be, or a pulled microservice could not be redeployed. So a bundle
  * or tree holding a private-registry microservice holds a live credential, and
  * both export and the pull report every one they carry.

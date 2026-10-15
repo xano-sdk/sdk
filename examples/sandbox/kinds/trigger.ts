@@ -26,7 +26,7 @@ export const onUserInsert = tableTrigger({
  *
  * It fires against Xano's older workspace-global realtime layer, which is a
  * different object from the current `channel` despite the shared vocabulary. It is
- * here only so the corpus proves `xanosdk codegen` can bring one back out of a
+ * here only so the corpus proves `npx @xano/sdk generate` can bring one back out of a
  * workspace that still holds it — the round-trip has to keep working for people
  * migrating off it.
  *

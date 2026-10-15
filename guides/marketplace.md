@@ -7,14 +7,14 @@ An **add-on** is an ordinary npm package that declares itself to Xano SDK in its
 marketplace` verbs that find one and change what your project has installed.
 
 ```bash
-xanosdk marketplace list                          # every published add-on, newest first
-xanosdk marketplace search auth                   # narrow by keyword
-xanosdk marketplace details @xano-sdk/auth          # what it installs, and how to register it
-xanosdk marketplace details @xano-sdk/auth --prompt # ...as instructions for a coding agent
+npx @xano/sdk marketplace list                          # every published add-on, newest first
+npx @xano/sdk marketplace search auth                   # narrow by keyword
+npx @xano/sdk marketplace details @xano-sdk/auth          # what it installs, and how to register it
+npx @xano/sdk marketplace details @xano-sdk/auth --prompt # ...as instructions for a coding agent
 
-xanosdk marketplace install @xano-sdk/auth          # add it to the project you are in
-xanosdk marketplace reinstall <toolchain-package>  # re-ask a toolchain module its questions
-xanosdk marketplace remove <toolchain-package>     # uninstall it and drop what it contributed
+npx @xano/sdk marketplace install @xano-sdk/auth          # add it to the project you are in
+npx @xano/sdk marketplace reinstall <toolchain-package>  # re-ask a toolchain module its questions
+npx @xano/sdk marketplace remove <toolchain-package>     # uninstall it and drop what it contributed
 ```
 
 The split is deliberate. The three read verbs hit a public catalogue: no token, no
@@ -52,7 +52,7 @@ is compiled or a workspace is checked.
   Add to xano/index.ts:
     import { registerAuth } from "@xano-sdk/auth";
     registerAuth(app, { canonical: "authn" });
-  Then run `npx xanosdk export ./xano/index.ts --out /dev/null && npm run xano:routes` to bring xano.lock and the route manifest up to date.
+  Then run `npx @xano/sdk export ./xano/index.ts --out /dev/null && npm run xano:routes` to bring xano.lock and the route manifest up to date.
 ```
 
 ```
@@ -75,7 +75,7 @@ Both print a formatted summary to a terminal and stable JSON to a pipe. There is
 discover: an agent gets the machine shape by doing what an agent already does.
 
 ```bash
-xanosdk marketplace search auth | jq -r '.modules[].npm_package'
+npx @xano/sdk marketplace search auth | jq -r '.modules[].npm_package'
 ```
 
 Each JSON row is the whole record `details` returns — `description`, `includes`,
@@ -115,8 +115,8 @@ The rendering has a fixed shape, filled from the module's own catalogue record:
   Register it
     <the xano/index.ts snippet, verbatim>
 
-  xanosdk marketplace install @scope/name
-  xanosdk marketplace details @scope/name --prompt  to hand the wiring to a coding agent
+  npx @xano/sdk marketplace install @scope/name
+  npx @xano/sdk marketplace details @scope/name --prompt  to hand the wiring to a coding agent
 ```
 
 The `Installs` rows carry one of `table`, `endpoint`, `function`, `task`, `trigger`, `agent`,
@@ -146,22 +146,22 @@ tenant (`https://<instance>/tenant/<name>`) can stand in for it. See
 ## Installing
 
 ```bash
-xanosdk marketplace install @xano-sdk/auth
+npx @xano/sdk marketplace install @xano-sdk/auth
 ```
 
 The argument is resolved through the marketplace the way `details` resolves it, before npm
-runs: a module's npm name or its slug (`xanosdk marketplace install auth` installs
+runs: a module's npm name or its slug (`npx @xano/sdk marketplace install auth` installs
 `@xano-sdk/auth`), keeping any version or tag (`auth@next`). The install is then
 `npm install` of that module's package. A name the marketplace does not list is refused
 before npm runs, whatever its scope, with the not-found **exit 8** `details` uses
-(`xanosdk marketplace search <name>` finds the real one) — `install` adds marketplace modules,
+(`npx @xano/sdk marketplace search <name>` finds the real one) — `install` adds marketplace modules,
 not arbitrary npm packages. When the catalogue cannot be
 reached, an `@xano-sdk/` name still installs as typed and any other name is refused. `file:`
 paths, tarball URLs and git specs are installed as given, without a lookup.
 
 What the command adds over typing `npm install` yourself is three things npm will not do:
 
-1. **Add-ons are on the CLI's map.** `xanosdk --help` says they exist.
+1. **Add-ons are on the CLI's map.** `npx @xano/sdk --help` says they exist.
 2. **It refuses before npm runs when you are not in a project.** This is the oldest reason
    the command exists: run `npm install` from a parent directory and npm cheerfully creates
    or mutates the wrong `package.json` and tells you it succeeded.
@@ -195,10 +195,10 @@ what happened to the file:
 scaffolded with its add-ons already installed and registered:
 
 ```bash
-xanosdk init my-app --marketplace @xano-sdk/auth,@xano-sdk/vector
+npx @xano/sdk init my-app --marketplace @xano-sdk/auth,@xano-sdk/vector
 ```
 
-`reinstall` and `remove` take those names too: `xanosdk marketplace remove auth` removes the
+`reinstall` and `remove` take those names too: `npx @xano/sdk marketplace remove auth` removes the
 `@xano-sdk/auth` that `install auth` added. A name the project already depends on is taken as
 typed, with no catalogue lookup, so both keep working offline. A name that is neither in the
 project nor in the catalogue exits 8, as `install` does. `remove` is idempotent: removing a
@@ -257,12 +257,12 @@ only memory a module has.
 no settings: the next `deploy` fires its hooks with an empty config and it runs on its own
 fallbacks with nothing you chose. `export` and `deploy` report that state on every run,
 because the likeliest way a module reaches it is a plain `npm install` or a merged PR,
-neither of which runs a xanosdk verb:
+neither of which runs an SDK command:
 
 ```
 ! A toolchain module is installed but never configured, so it runs on its own
   defaults with nothing this project chose.
-  @xano-sdk/xanoscript — configure it with `xanosdk marketplace install @xano-sdk/xanoscript`
+  @xano-sdk/xanoscript — configure it with `npx @xano/sdk marketplace install @xano-sdk/xanoscript`
 ```
 
 Running `install` on a package that is already installed reads as a no-op until you know it
@@ -293,7 +293,7 @@ Each question a module declares derives a long flag that answers it, so a non-in
 does not have to accept defaults:
 
 ```bash
-xanosdk marketplace install @xano-sdk/xanoscript --xanoscript --xanoscript-dir=generated
+npx @xano/sdk marketplace install @xano-sdk/xanoscript --xanoscript --xanoscript-dir=generated
 ```
 
 A `string` or `choice` question takes `--flag=value`, not `--flag value`. The CLI cannot know
@@ -319,7 +319,7 @@ setting on the next run.
 ## Re-asking: reinstall
 
 ```bash
-xanosdk marketplace reinstall @xano-sdk/xanoscript
+npx @xano/sdk marketplace reinstall @xano-sdk/xanoscript
 ```
 
 `reinstall` re-runs npm, then re-asks one module its questions and reconciles, offering your
@@ -352,7 +352,7 @@ every prompt and finding your chosen directory reverted.
 ## Removing
 
 ```bash
-xanosdk marketplace remove @xano-sdk/xanoscript
+npx @xano/sdk marketplace remove @xano-sdk/xanoscript
 ```
 
 `remove` uninstalls the package and then drops the settings and the contributed lines
@@ -432,7 +432,7 @@ than a warning, and so is a hook that throws.
 On a normal run both are reported and skipped, matching every other optional side effect in
 the CLI. The asymmetry exists because if a plugin fails to resolve in CI (a partial install, a
 stale plugin path after a version bump) then its hook never fires, nothing checks what it
-checks, and `xanosdk export ./xano/index.ts --frozen-lock` exits 0 against a tree that is wrong. A red guard
+checks, and `npx @xano/sdk export ./xano/index.ts --frozen-lock` exits 0 against a tree that is wrong. A red guard
 gets fixed; a green one gets trusted.
 
 A module's own check therefore rides on the same `--frozen-lock` run as `xano.lock`, so a

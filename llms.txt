@@ -1,4 +1,4 @@
-# xanosdk v1.0.13
+# xanosdk v1.0.14
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 
@@ -6,8 +6,8 @@ Xano is one platform to build, run and govern AI-built software: one WORKSPACE
 serves a managed PostgreSQL database, HTTP APIs, background tasks, realtime
 websocket channels, AI agents, MCP servers, file storage and redis. This SDK
 authors it in TypeScript — typed def objects registered on a
-`workspace(name)` — compiled to one importable bundle by `xanosdk export
-./xano/index.ts`, shipped live by `xanosdk deploy`.
+`workspace(name)` — compiled to one importable bundle by `npx @xano/sdk export
+./xano/index.ts`, shipped live by `deploy`.
 
 Def modules execute at BUILD time only: `s.*` factories return data, and the engine
 runs the compiled stack per request — statements in order, a statement's `as:`
@@ -41,7 +41,7 @@ plain file read resolves them at the version you have.
 - [Object kinds](llms/object-kinds.md): Read when deciding WHAT to build — every authorable primitive, what each is, and which factory + register method builds it. Also when `register*` will not typecheck an array built by `.flatMap()`/`.concat()`.
 - [Core def shapes](llms/kinds-core.md): Read when authoring a function, query, api group, task, workflow test, middleware, tool, or addon — and for the `response` and `expr` shapes every one of them uses.
 - [Consuming defs from a client](llms/client.md): Read when a frontend calls the deployed backend or imports a def — request types and zod schemas without the import, its cost, `window.XANO_HOST`, local dev, file URLs, a Node spot-check.
-- [Toolchain modules](llms/toolchain.md): Read when `package.json` has a `"xanosdk"` block or you run `xanosdk marketplace`.
+- [Toolchain modules](llms/toolchain.md): Read when `package.json` has a `"xanosdk"` block or you run `npx @xano/sdk marketplace`.
 - [Error index](llms/errors.md): Read when a request, test, build, or pull fails with a message you did not write — the string, its cause, and where the fix is.
 - [Saved unit tests, assertions, and mocks](llms/tests.md): Read when authoring a `workflowTest()` stack, when a query/function/middleware carries `tests`, when a statement needs a `mock`, or when running a deployed environment's tests.
 - [Agent and MCP def shapes](llms/kinds-agent-mcp.md): Read when building an MCP server (tools, prompts, resources) or an `agent()`.
@@ -112,7 +112,7 @@ export default workspace("my-blog")
   .registerQueries([createPost, listPosts]);
 ```
 
-Compile: `xanosdk export ./index.ts --out bundle.json` (or `writeBundle(app, path)`
+Compile: `npx @xano/sdk export ./index.ts --out bundle.json` (or `writeBundle(app, path)`
 from `@xano/sdk/node` in code). The default export must be the `Xano` registry. The entry must be an
 ES module (Xano SDK defs are ESM-only): set `"type": "module"` in the nearest
 package.json or name the entry `.mts`. `npm init -y` writes `"type": "commonjs"`,
@@ -120,7 +120,7 @@ which fails with a "must be ES modules" error until you switch it to module.
 
 Set `canonical` on every `apiGroup`. The engine mints the URL token server-side, so
 without one a group's client paths are unresolvable until a lock exists: the bundle
-exports fine and `xanosdk routes` / `getPath()` then fail on the very queries it just
+exports fine and `npx @xano/sdk routes` / `getPath()` then fail on the very queries it just
 built. An explicit `canonical` resolves them from the source alone.
 ⚠ A canonical is unique across the whole INSTANCE, not per workspace — two
 workspaces cannot serve the same one, and no flag shares it. One set in code is a PIN:
@@ -134,8 +134,8 @@ operand, a `ref()` nothing binds). Each has a legitimate use, so each only warns
 but nothing fails on a message no one reads, so in CI and in unattended agent builds
 pass `--strict` (`emitBundle(app, { strict: true })` / `app.export({ strict: true })`):
 every warning becomes a hard failure. Same bundle bytes either way.
-Before calling the work done: `npm run typecheck`, `xanosdk export <entry> --strict`,
-`xanosdk deploy <entry>`, then `xanosdk test run-all` against what deployed.
+Before calling the work done: `npm run typecheck`, `npx @xano/sdk export <entry> --strict`,
+`deploy <entry>`, then `test run-all` against what deployed.
 
 Identity: object guids derive from `(type, name)` — a query's from `(api group,
 verb, name)` — so renames change identity.
@@ -144,15 +144,15 @@ BESIDE THE ENTRY FILE — `xano/xano.lock` for the standard scaffold,
 NOT the project root — which you COMMIT (`--no-lock` opts out; CI guard
 `--frozen-lock` fails instead of changing it).
 To rename an object: rename in code, export (stderr prints the exact fix-up), run
-`xanosdk lock rename <kind> <old> <new>`, export again — the original guid is emitted
+`npx @xano/sdk lock rename <kind> <old> <new>`, export again — the original guid is emitted
 under the new name, so the engine renames in place instead of delete+create. Taking
-over an existing workspace: `xanosdk lock import <live-bundle.json>` first, then
+over an existing workspace: `npx @xano/sdk lock import <live-bundle.json>` first, then
 export. Pruning, programmatic seeding, and which commands write the lock:
 `llms/lock.md`.
 
 ## Deploy
 
-`xanosdk init` → `xanosdk deploy` → URL. A deploy runs the same compile pipeline as
+Commands here run as `npx @xano/sdk <cmd>`: `init` → `deploy` → URL. A deploy runs the same compile pipeline as
 `export` (honoring `xano.lock`), imports the result, and prints the URL.
 ⚠ Every deploy is a FULL REPLACE of its destination — objects AND records.
 
@@ -168,7 +168,7 @@ and a `tenant:` only if throwaway (`standard`/`run` refused).
 
 **Destinations** — the Xano Engine by default, real only when you say so:
 
-- `xanosdk deploy [source]` → the Xano Engine on this machine (no account). `--ephemeral` → a NAMED, auto-expiring ephemeral (~1h; `--expires-hours`
+- `deploy [source]` → the Xano Engine on this machine (no account). `--ephemeral` → a NAMED, auto-expiring ephemeral (~1h; `--expires-hours`
   1–24), tracked in `./.xano/ephemeral.json`, so deploying again REFRESHES it at the same
   URL; if it expired or was swept, a fresh one is created and the new URL called out.
   ⚠ Only the BACKEND URL survives a refresh — the replace clears static hosting, so
@@ -176,17 +176,17 @@ and a `tenant:` only if throwaway (`standard`/`run` refused).
   (not under `--keep-data`, which MERGES an env a deploy filled: rows kept, no re-seed,
   removed objects deleted; ⚠ a rename loses values, a RETYPE reads unfit ones as null, env
   VALUES are not applied, a table trigger refuses it — `--reset` replaces and re-seeds).
-- `xanosdk release create <name>` cuts from a running source and LANDS in your workspace
+- `release create <name>` cuts from a running source and LANDS in your workspace
   — the record that it came up, and the only thing `promote`/`tenant deploy` take. A
   taken name is refused, and so is one that addresses a LOCATION instead of naming: `/`,
   `\`, `:`, or a leading `.`. Every export derives its FILENAME from the name it is given,
   so `release|ephemeral|workspace export` refuse those same shapes unless `--path` names
   the file. Carries EVERY table's SCHEMA either way; `--seed[=<guids>]` adds
-  ROWS — guids from `xanosdk tables <backend>`; a redeploy KEEPS them.
-- `xanosdk release transfer <name> --to-profile <profile>` copies a release to another
+  ROWS — guids from `tables <backend>`; a redeploy KEEPS them.
+- `release transfer <name> --to-profile <profile>` copies a release to another
   workspace/instance by CONTENT (tar sha256): identical → reused; same name, other
   bytes → exit 2.
-- `xanosdk promote <release>` / `xanosdk tenant deploy <tenant> <release>` land it.
+- `promote <release>` / `tenant deploy <tenant> <release>` land it.
   `promote` adds a branch; ⚠ its TABLE edits hit live
   (`--allow-shared-schema-changes`). `tenant deploy` REPLACES: DROPS tables it lacks,
   CONVERTS retypes (`--seed`: rows).
@@ -204,24 +204,24 @@ and a `tenant:` only if throwaway (`standard`/`run` refused).
 - Backend SECRETS stay out of the repo: declare the NAME, value empty, in `workspaceConfig({ env })`
   passed to `registerWorkspace()`; the VALUE lives in `xano/.env` — gitignored, kept across a
   pull, read by every build. `--backend-env-file <path>` replaces that default (CI has
-  no `xano/.env`), `--env-var KEY=VALUE` beats both, and `xanosdk env pull` fills the file from
+  no `xano/.env`), `--env-var KEY=VALUE` beats both, and `env pull` fills the file from
   a running backend — the only command that writes `xano/.env`.
   ⚠ A deploy REPLACES the env set: a declared name with NO value refuses the deploy rather
   than clearing the live one — `--allow-empty-env=NAME` clears it on purpose.
-  ONE live value, no deploy: `xanosdk env set NAME` (value on stdin) / `env unset NAME`.
+  ONE live value, no deploy: `env set NAME` (value on stdin) / `env unset NAME`.
   (`--static-env` is the other one — PUBLIC frontend config.)
 - A DOCUMENTATION token is a secret too, in a SECOND ignored file: source declares only the
   gate — `documentation: { require_token: true }` on `workspaceConfig` or an `apiGroup` — and
   the value lives in `xano/.secrets.json`, keyed by the object it gates. A literal `token`
-  FAILS the export. `xanosdk pull` writes that file and every build reads it back;
-  `xanosdk secrets fill` MINTS one per gate that has none — a gate you AUTHORED has no value
+  FAILS the export. `pull` writes that file and every build reads it back;
+  `secrets fill` MINTS one per gate that has none — a gate you AUTHORED has no value
   to pull. CI, which does not have the file, passes `--secrets-file <path>` or
   `--doc-token "<scope>=<value>"`
   (scope = `workspace`, or the group's NAME).
   ⚠ OMISSION IS OPPOSITE PER SCOPE: off `workspaceConfig` the target's gate is left alone;
   off an `apiGroup` it is CLEARED (an absent key there is written as the engine default). An
   unsupplied gate refuses a `deploy` and fails the export for a publishing group.
-- `xanosdk deploy --to workspace|tenant:<name>` skips the release flow to merge a LOCAL
+- `deploy --to workspace|tenant:<name>` skips the release flow to merge a LOCAL
   build in, keeping the checks that need one (`--dry-run`, `--prune`, loss warnings) and
   leaving nothing to roll back to. Prefer the release path.
   ⚠ Branches scope LOGIC: tables and microservices are shared by EVERY branch, so a
@@ -230,28 +230,28 @@ and a `tenant:` only if throwaway (`standard`/`run` refused).
   ⚠ `--replace` CLEARS BY WORKSPACE, NOT BY BRANCH: every non-live branch goes, with the
   saved versions that would restore one — unrecoverable. Refused without
   `--allow-branch-deletion`; `--yes` does not imply it. The default merge leaves them alone.
-- `xanosdk workspace reset-tables <entry> --table <guid>` puts NAMED tables back to their
+- `workspace reset-tables <entry> --table <guid>` puts NAMED tables back to their
   compiled `table({ seed })` rows, touching no other table. Dry run unless `--write`.
   ⚠ ROWS BEFORE LOGIC: rows are workspace-shared like schema, so they reach production when
   applied even while the logic reading them is staged — no ordering makes a half-data change
   atomic. Reset rows FIRST, then `promote`: new rows under old logic break only a feature
   being removed; new logic over old rows breaks the one you are shipping.
-- `xanosdk pull` refreshes THIS project from a backend: rewrites decoded files,
+- `pull` refreshes THIS project from a backend: rewrites decoded files,
   keeps yours, lists and confirms (`--yes`).
-- `xanosdk generate <source>`: the decoded tree ONLY, no project.
-- `xanosdk status` names the env this project last deployed to, its URL and its expiry.
+- `generate <source>`: the decoded tree ONLY, no project.
+- `status` names the env this project last deployed to, its URL and its expiry.
 
-**Frontend wiring.** `--static <dir>` (or `xanosdk publish <dir>`) injects the env's backend URL as
+**Frontend wiring.** `--static <dir>` (or `publish <dir>`) injects the env's backend URL as
 `window.XANO_HOST` into EVERY html document in the build, before the app bundle runs,
 so the frontend needs no rebuild to target an env. How to read it, local dev, verifying
 the inject, and displaying a stored file: `llms/client.md`.
 ⚠ A static host serves its files verbatim, so everything injected is PUBLIC — base
 URLs and publishable keys only, never secrets. Secrets go in backend env, read
 server-side via `env(name)`.
-⚠ `xanosdk preflight` uses the deploy credential unless `XANO_VALIDATE_INSTANCE` /
+⚠ `preflight` uses the deploy credential unless `XANO_VALIDATE_INSTANCE` /
 `XANO_VALIDATE_TOKEN` (+ optional `XANO_VALIDATE_WORKSPACE_ID`) are set.
 
-**Full CLI surface:** `xanosdk <command> --help` — every command, flag, default and accepted
+**Full CLI surface:** `npx @xano/sdk <command> --help` — every command, flag, default and accepted
 backend; `manifest.json` carries the same in its `cli` array.
 **Style:** reach statements through the `s` namespace (`s.db.add`, `s.math.add`, …).
 The flat aliases (`dbAdd`, `setVar`, …) are identical in output; prefer `s.*`.
@@ -430,11 +430,11 @@ Non-obvious authoring rules:
   refuses the pair (`export()` warns even unlocked); it is for pinning identity
   across a rename, not for sharing a name.
 - **`export()` vs `emitBundle()` vs `writeBundle()`:** `export()` returns the object,
-  `emitBundle()` the JSON, `writeBundle(app, path)` writes `xanosdk export`'s file. All
+  `emitBundle()` the JSON, `writeBundle(app, path)` writes `export`'s file. All
   three run the SAME build-time checks, INCLUDING seed validation of a literal `seed: [...]`
   array (row shape, unknown column, coercion, enum membership, the all-or-nothing `id`
   rule). A DEFERRED seed — a thunk (`() => import("./seed.json")`) or `seedFile()` — is
-  checked only by the `xanosdk export`/`deploy` CLI path. Only `deploy` ships seed rows.
+  checked only by the `export`/`deploy` CLI path. Only `deploy` ships seed rows.
   - Entry points: the `node:fs` writers (`writeBundle`/`writeArtifact`) and lock-file I/O
     import from `@xano/sdk/node`, NOT the browser-safe `@xano/sdk` entry (a frontend
     imports from it; request types come from `routes.gen.ts`). `@xano/sdk/internal` is the
@@ -442,15 +442,18 @@ Non-obvious authoring rules:
     — a statement walker (`2.if.0` paths), a structural hash, `mvp:*` catalog, `tableRefOf`.
 - **Intra-workspace imports use `.js` specifiers** (`../tables/links.js`), not
   extensionless — the defs compile under `moduleResolution: bundler`. Add the `.js`.
-- **Agents authenticate with env vars — never `xanosdk login`.** `login` blocks on a
+- **Agents authenticate with env vars — never `npx @xano/sdk login`.** `login` blocks on a
   browser consent no agent can complete. Set all three of `$XANO_INSTANCE_URL`,
   `$XANO_WORKSPACE_ID`, `$XANO_META_TOKEN` and run `deploy`/`promote` directly: no disk, no
   rotation, so it survives repeated runs.
+  - Not signed in: ask the human whether they have a Xano account; never guess. No: sign
+    them up via https://app.dev.xano.com/.well-known/auth.md; it returns this triple once they confirm by email. Yes: the
+    human runs `login`.
   - The triple outranks every other credential (`--config`, `$XANO_PROFILE` and
     `$XANO_REFRESH_TOKEN` included, each named on stderr when displaced). Setting SOME of the
     three is a hard error, so a misspelled secret cannot fall through to whatever credential
     the runner has. An explicit `--profile` against it is a hard error too, not a displacement.
-  - On disk: `xanosdk profile add <name> --instance … --workspace-id <n>` reads the token
+  - On disk: `npx @xano/sdk profile add <name> --instance … --workspace-id <n>` reads the token
     from piped stdin, else PROMPTS (a flag would reach the process list); the instance must accept it.
     `auth.json` holds a map of named profiles, selected by `--profile <name>`. The older
     `$XANO_REFRESH_TOKEN` + `$XANO_CLIENT_ID` pair still works but ROTATES: single-use.

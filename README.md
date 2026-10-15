@@ -51,7 +51,7 @@ network round-trip, and your data kept between redeploys. Your agent changes the
 redeploy in seconds. When it's ready to share, `npm run xano:deploy:ephemeral` puts the same
 code on a live URL on Xano.
 
-Outside a project the command is `npx @xano/sdk <cmd>`; inside one, `npx xanosdk <cmd>`.
+Every command is `npx @xano/sdk <cmd>`: inside a project it runs the installed SDK, anywhere else the latest release.
 
 </div>
 
@@ -87,7 +87,7 @@ SOC 2 Type II, ISO 27001, HIPAA and GDPR coverage ([trust center](https://securi
   network, starts in seconds, keeps your rows, and opens the Xano editor so you can see what
   got built. Its version is pinned in `package.json` ([details](#xano-on-your-machine)).
 
-- **🚀 Deploy to Xano.** One `xanosdk deploy` ships the same code, backend **and** static
+- **🚀 Deploy to Xano.** One `npx @xano/sdk deploy` ships the same code, backend **and** static
   frontend, to an **ephemeral** on Xano's cloud, then a release takes it to your **workspace**.
 
 - **🛤️ Guardrails ahead of every change.** One set of rules for every person and every agent:
@@ -147,7 +147,7 @@ the backend and frontend URLs and bakes the backend one into your build as
 `window.XANO_HOST`, so the frontend never needs to know it ahead of time.
 
 ```bash
-npx xanosdk login              # OAuth in your browser, no API keys to copy around
+npx @xano/sdk login            # OAuth in your browser, no API keys to copy around
 npm run xano:deploy:ephemeral  # build the frontend, ship both → live URLs
 ```
 
@@ -158,7 +158,7 @@ npm run xano:deploy:ephemeral  # build the frontend, ship both → live URLs
 **4. Release it to your workspace:** `deploy --ephemeral --test`, `release create v1`, `promote v1` ([Deploying](#deploying)).
 
 **Prefer to wire it by hand?** Install `@xano/sdk` in an ESM project and deploy
-`xano/index.ts` with `npx xanosdk deploy ./xano/index.ts`; [Project structure](https://github.com/xano-sdk/sdk/blob/main/guides/project-structure.md)
+`xano/index.ts` with `npx @xano/sdk deploy ./xano/index.ts`; [Project structure](https://github.com/xano-sdk/sdk/blob/main/guides/project-structure.md)
 has the two-line setup and the one rule that bites.
 
 ---
@@ -166,7 +166,7 @@ has the two-line setup and the one rule that bites.
 ## Xano, on your machine
 
 Xano has always been a hosted platform. The **Xano Engine** is the whole Xano backend,
-packaged to run on your laptop: a single binary with Postgres built in. `xanosdk deploy`
+packaged to run on your laptop: a single binary with Postgres built in. `npx @xano/sdk deploy`
 brings one up and deploys into it; it is where a deploy goes by default.
 
 - **No account, no network.** A Xano Engine needs no sign-in, a cached one deploys offline,
@@ -187,11 +187,11 @@ brings one up and deploys into it; it is where a deploy goes by default.
   rows, seed data, and run functions and tests. Code still changes in `xano/` and ships with a deploy.
 
 ```bash
-npx xanosdk local list          # the engines running on this machine
-npx xanosdk local mcp           # how a coding agent connects to the engine's MCP server
-npx xanosdk local stop <name>   # stop one
-npx xanosdk local update        # move the pin to the latest engine
-npx xanosdk local cache clear   # reclaim the disk space
+npx @xano/sdk local list          # the engines running on this machine
+npx @xano/sdk local mcp           # how a coding agent connects to the engine's MCP server
+npx @xano/sdk local stop <name>   # stop one
+npx @xano/sdk local update        # move the pin to the latest engine
+npx @xano/sdk local cache clear   # reclaim the disk space
 ```
 
 Where it keeps its data, serving a frontend, trying an engine build without moving the pin:
@@ -291,7 +291,7 @@ Because your API is a typed def, the code that *calls* it never re-types a URL o
 body: paths and request types come from a generated route manifest, responses from the defs:
 
 ```bash
-npx xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts   # scaffolds run this before dev/build/typecheck
+npx @xano/sdk routes ./xano/index.ts --emit xano/routes.gen.ts   # scaffolds run this before dev/build/typecheck
 ```
 
 ```ts
@@ -320,7 +320,7 @@ async function createPost(body: NewPost): Promise<Post> {
 - **`InferRow<typeof post>`** / **`InferResponse<typeof someQuery>`** → the table's row type
   and the endpoint's response type, closing the round trip. Rename or retype a column and
   every consumer breaks at compile time, exactly where you want it.
-- **Runtime validation:** `npx xanosdk marketplace install zod` adds zod schemas to the file,
+- **Runtime validation:** `npx @xano/sdk marketplace install zod` adds zod schemas to the file,
   keyed alike (`ROUTE_SCHEMAS["POST posts"].parse(body)`) and typechecked against the types.
 
 Import defs with `import type` only: a def imported as a value carries the SDK runtime into
@@ -380,15 +380,15 @@ Code moves through three places: the **Xano Engine** on your machine, a disposab
 Reaching anything real goes through a **release**: the stored record that this code came up
 and answered: `deploy --ephemeral --test`, then `release create v1`, then `promote v1`.
 
-| Command | Where it goes |
-|---|---|
-| `xanosdk deploy` | The **Xano Engine** on this machine, the default. No network round-trip per deploy, and no Xano account needed. The first run downloads the engine and pins its version in `package.json` ([details](#xano-on-your-machine)). |
-| `xanosdk deploy --ephemeral` | A disposable **ephemeral** on Xano's cloud: create-or-refreshed each run, auto-expiring, with its own URL. |
-| `xanosdk promote <release>` | Your **main Xano instance** workspace, the production target. Lands a release on a branch named for it, reads the branch back, and fails naming anything the release declared that did not arrive. `--set-live` serves it once that check passes. |
-| `xanosdk tenant deploy <tenant> <release>` | A **customer tenant**: the same release, on someone else's deployment. It **replaces** what the tenant serves; static hosting is kept. |
-| `xanosdk release transfer <release> --to-profile <profile>` | **Another workspace or instance**: copies the stored release, checked by content hash, to `promote` there. |
-| `xanosdk deploy --to <dest>` | The **escape hatch**: merges a local build straight into `workspace` or `tenant:<name>`, skipping the release record. |
-| `xanosdk publish <dir>` | **Just the frontend**: an already-built directory onto the Xano Engine or ephemeral you last deployed to, `workspace`, or `tenant:<name>`. The retry when a frontend fails after its backend landed. |
+| Command | Project shortcut (adds a typecheck) | Where it goes |
+|---|---|---|
+| `npx @xano/sdk deploy` | `npm run xano:deploy` (adds `--keep-data`) | The **Xano Engine** on this machine, the default. No network round-trip per deploy, and no Xano account needed. The first run downloads the engine and pins its version in `package.json` ([details](#xano-on-your-machine)). |
+| `npx @xano/sdk deploy --ephemeral` | `npm run xano:deploy:ephemeral` (with the built frontend) | A disposable **ephemeral** on Xano's cloud: create-or-refreshed each run, auto-expiring, with its own URL. |
+| `npx @xano/sdk promote <release>` |  | Your **main Xano instance** workspace, the production target. Lands a release on a branch named for it, reads the branch back, and fails naming anything the release declared that did not arrive. `--set-live` serves it once that check passes. |
+| `npx @xano/sdk tenant deploy <tenant> <release>` |  | A **customer tenant**: the same release, on someone else's deployment. It **replaces** what the tenant serves; static hosting is kept. |
+| `npx @xano/sdk release transfer <release> --to-profile <profile>` |  | **Another workspace or instance**: copies the stored release, checked by content hash, to `promote` there. |
+| `npx @xano/sdk deploy --to <dest>` |  | The **escape hatch**: merges a local build straight into `workspace` or `tenant:<name>`, skipping the release record. |
+| `npx @xano/sdk publish <dir>` | `npm run xano:deploy:frontend` | **Just the frontend**: an already-built directory onto the Xano Engine or ephemeral you last deployed to, `workspace`, or `tenant:<name>`. The retry when a frontend fails after its backend landed. |
 
 Every `deploy` is a **full replace** of the disposable environment, table records included,
 unless `--keep-data` merges. Promoting is the opposite by design: it changes what your code
@@ -400,7 +400,7 @@ snapshots live's logic, not its shared tables, for a one-`set-live` rollback.
 `deploy --to workspace` refuses to overwrite an object edited in Xano since your last deploy or
 pull (`workspace diff` lists them); pull first, or pass `--overwrite`.
 
-`xanosdk status` answers where you stand in one read: who you are signed in as, which
+`npx @xano/sdk status` answers where you stand in one read: who you are signed in as, which
 instance and workspace, and the backend this project last deployed to. Every flag, the
 identity model, `--json` and exit codes, and headless CI runs are in
 [Signing in & deploying](https://github.com/xano-sdk/sdk/blob/main/guides/deploying.md).
@@ -411,12 +411,12 @@ The tests you author (a `tests` entry on a query, function, or middleware, or a 
 `workflowTest()`) run against a deployed environment:
 
 ```bash
-npx xanosdk test run-all                       # the Xano Engine or ephemeral you last deployed to
-npx xanosdk test run-all --on workspace        # or your real workspace
+npx @xano/sdk test run-all                       # the Xano Engine or ephemeral you last deployed to
+npx @xano/sdk test run-all --on workspace        # or your real workspace
 ```
 
 A failing suite exits **5**, distinct from a crash, so CI can tell the two apart. To deploy
-and prove it in one step, `xanosdk deploy ./xano/index.ts --test`. A test's `datasource` is
+and prove it in one step, `npx @xano/sdk deploy ./xano/index.ts --test`. A test's `datasource` is
 stored on the test and cloned before every run, so read
 [Object kinds](https://github.com/xano-sdk/sdk/blob/main/guides/object-kinds.md) before
 pointing one at your real workspace.
@@ -433,17 +433,17 @@ shape of a project and the behavior that will bite you:
 | Guide | What's in it |
 |---|---|
 | [Project structure](https://github.com/xano-sdk/sdk/blob/main/guides/project-structure.md) | How a `xano/` project is laid out, why registration is explicit, wiring one by hand |
-| [The scaffolded project](https://github.com/xano-sdk/sdk/blob/main/guides/scaffold.md) | What `xanosdk init` writes, the two frontend presets, no frontend, existing apps, theming, add-ons, SvelteKit rules |
+| [The scaffolded project](https://github.com/xano-sdk/sdk/blob/main/guides/scaffold.md) | What `npx @xano/sdk init` writes, the two frontend presets, no frontend, existing apps, theming, add-ons, SvelteKit rules |
 | [The marketplace](https://github.com/xano-sdk/sdk/blob/main/guides/marketplace.md) | Finding add-ons, the two kinds of module, and the install/reinstall/remove lifecycle |
 | [The module contract](https://github.com/xano-sdk/sdk/blob/main/guides/module-contract.md) | Building an add-on: the manifest fields, the plugin types, every hook, and what is refused |
 | [Object kinds](https://github.com/xano-sdk/sdk/blob/main/guides/object-kinds.md) | Every authorable kind, and splitting a workspace across microservices |
 | [Authoring reference](https://github.com/xano-sdk/sdk/blob/main/guides/authoring.md) | Tables and fields, statements, values, inputs, middleware, seed data |
 | [CLI](https://github.com/xano-sdk/sdk/blob/main/guides/cli.md) | Every command, the agent skill, shell completion, and what failures look like |
 | [Warning and error codes](https://github.com/xano-sdk/sdk/blob/main/guides/codes.md) | Every code the CLI and the build emit, with what it means |
-| [Signing in & deploying](https://github.com/xano-sdk/sdk/blob/main/guides/deploying.md) | Auth, ephemerals, `--static`, releasing to production, `xanosdk preflight` |
+| [Signing in & deploying](https://github.com/xano-sdk/sdk/blob/main/guides/deploying.md) | Auth, ephemerals, `--static`, releasing to production, `npx @xano/sdk preflight` |
 | [Environment & identity](https://github.com/xano-sdk/sdk/blob/main/guides/environment.md) | Every environment variable, and how `xano.lock` pins identity |
 | [The typed frontend surface](https://github.com/xano-sdk/sdk/blob/main/guides/typed-frontend.md) | Path resolution, input/response inference, bundle cost, the route manifest |
-| [Pulling an existing workspace](https://github.com/xano-sdk/sdk/blob/main/guides/codegen.md) | What `xanosdk init --from` writes, how faithful it is, and how to read its report |
+| [Pulling an existing workspace](https://github.com/xano-sdk/sdk/blob/main/guides/codegen.md) | What `npx @xano/sdk init --from` writes, how faithful it is, and how to read its report |
 | [Reading a compiled bundle](https://github.com/xano-sdk/sdk/blob/main/guides/bundle.md) | `@xano/sdk/bundle`: walking, hashing and diffing compiled JSON from your own tools |
 | [Coverage & agent grounding](https://github.com/xano-sdk/sdk/blob/main/guides/coverage.md) | What is covered, what is out of scope, and the files agents read |
 

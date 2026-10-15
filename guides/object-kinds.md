@@ -133,7 +133,7 @@ query({
 
 A pull brings tests back, along with a query's saved request/response `example`. The one
 thing it withholds is a test's auth `token` — that is an expiring credential rather than
-authored configuration, so `xanosdk init --from` reports it as a deliberate omission instead of
+authored configuration, so `npx @xano/sdk init --from` reports it as a deliberate omission instead of
 writing it into a committed tree.
 
 **Four of the `Run …` statements only run inside a workflow test.** `s.api.call`,
@@ -142,7 +142,7 @@ run time, and outside a `workflowTest` stack it cannot reach the target — so o
 a query, function or task type-checks, exports, imports and **deploys clean**, then answers
 the first real request
 with `ERROR_FATAL: <Type> does not exist`. It is not per host kind: the same call fails
-identically from a function that a query runs. `xanosdk export` refuses them outside a
+identically from a function that a query runs. `npx @xano/sdk export` refuses them outside a
 workflow test. `s.function.call`, `s.tool.call`, `s.middleware.call` and `s.addon.call` run
 from any stack, as does `s.function.run` — the ordinary way to invoke a function. To share
 logic between two endpoints, put it in a `defineFunction` and `s.function.run` it from both.
@@ -351,10 +351,10 @@ a microservice fixes every call site at once. A plain `"name:port"` string is al
 and is the only way to reach an instance-level microservice, which isn't a workspace object;
 nothing checks that spelling, so prefer the def wherever there is one.
 
-A container takes time to come up, so `xanosdk deploy` waits for it: after the import it
+A container takes time to come up, so `npx @xano/sdk deploy` waits for it: after the import it
 reads each microservice and reports whether it is ready, still starting, or failed, then
 lists them. Skip the wait with `--skip-liveness`. The same report is available any time from
-`xanosdk status`, `xanosdk ephemeral get <name>`, and `xanosdk workspace details`.
+`npx @xano/sdk status`, `npx @xano/sdk ephemeral get <name>`, and `npx @xano/sdk workspace details`.
 
 Two outcomes, and only one of them is a warning:
 

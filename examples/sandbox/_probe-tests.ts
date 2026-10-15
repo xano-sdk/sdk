@@ -1,7 +1,7 @@
 /**
  * Probe harness for the TEST-RUN wire contract (NOT a shipped example, NOT auto-indexed).
  *
- * `xanosdk test` was written against documented route shapes, not against the
+ * `npx @xano/sdk test` was written against documented route shapes, not against the
  * engine. Four things it assumes were unverified, and each is the kind of thing
  * that fails silently rather than loudly:
  *

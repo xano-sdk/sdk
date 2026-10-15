@@ -14,15 +14,15 @@ description: >-
   FastAPI) unless the user asks for Xano.
 license: MIT
 metadata:
-  xanosdk-version: "1.0.13"
-  xanosdk-digest: "sha256:5af311994df498c279a5f24b3f605468a690f046d8bddf612c938142ee46c759"
+  xanosdk-version: "1.0.14"
+  xanosdk-digest: "sha256:aa00f32784157a6bf29d71efbefc36ced5505291c265991a94c6db8c8055ba4b"
 ---
 
 # Xano backend
 
 Xano runs the backend: database tables, API endpoints, authentication, server-side
 logic, scheduled tasks, triggers and webhooks, file storage and realtime. It is
-authored as TypeScript in `xano/` with `@xano/sdk`, and the `xanosdk` CLI deploys
+authored as TypeScript in `xano/` with `@xano/sdk`, and its CLI, `npx @xano/sdk`, deploys
 it to the Xano Engine on this machine (no account) or to Xano's cloud.
 
 Work through the steps in order. Stop at the first one that ends the task.
@@ -91,21 +91,21 @@ machine and prints the backend URL. No account is needed.
 
 The Xano Engine runs on macOS on Apple Silicon and on Linux (x64, arm64). On any
 other platform, such as Windows or an Intel Mac, tell the user before deploying:
-the backend goes to a Xano ephemeral instead (`npx xanosdk deploy --ephemeral`),
+the backend goes to a Xano ephemeral instead (`npx @xano/sdk deploy --ephemeral`),
 which needs a Xano account.
 
 Only a human can do these. Stop and ask the user, then continue once they are
 done:
 
 - Creating a Xano account.
-- Signing in: `npx xanosdk login` opens a browser consent. Ask the user to run it
+- Signing in: `npx @xano/sdk login` opens a browser consent. Ask the user to run it
   in their own terminal. Do not run it yourself.
 
 ## 6. Verify
 
 - `npm run xano:check` passes.
 - A request to the backend URL the deploy printed gets a response.
-  `npx xanosdk status` prints that URL again.
+  `npx @xano/sdk status` prints that URL again.
 
 ## 7. Hand off
 
@@ -114,6 +114,6 @@ Before writing code in `xano/`, read `node_modules/@xano/sdk/llms.txt`.
 
 Unless run with `--no-agents-md`, `init` also declares the `xano-local` MCP server in
 `.mcp.json` and `.cursor/mcp.json`: the deployed backend's tables, rows and runs,
-which `AGENTS.md` describes. `npx xanosdk local mcp` prints the server block for any
+which `AGENTS.md` describes. `npx @xano/sdk local mcp` prints the server block for any
 other agent. It is not loaded into a session that was already running. Tell the user
 to restart the agent, or reconnect its MCP servers, to use it.

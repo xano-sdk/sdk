@@ -51,7 +51,7 @@ typed against the table's schema as a WRITE shape (a column without
 (`seed: seedFile("./seed.json", import.meta.url)`; path resolves against the DECLARING
 file), or a thunk (`seed: () => import("./seed.json")`, async ok, `.default` unwrapped).
 Inline rows are TYPED against the schema at compile time; a `seedFile`/thunk seed is
-not — `xanosdk export`/`deploy` validates it, naming the row index and column.
+not — `npx @xano/sdk export`/`deploy` validates it, naming the row index and column.
 Timestamp seeds: epoch ms, `Date`, ISO 8601 date, or date-time with `Z`/offset; else THROWS.
 Int seeds: whole, in int64 (past 2^53: a string).
 ⚠ Prefer `seedFile` for a file: a thunk's `import()` sits in

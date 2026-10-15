@@ -134,7 +134,7 @@ import { composeBlock, gitattributesSpec, upsertBlock } from "./managed-blocks.j
 import { defaultThemeChoice, type ThemeChoice } from "./theme-presets.js";
 import type { FrontendPreset, LandingContent } from "./frontend-presets.js";
 import { detectInstallRoot, detectPackageManager, installCommandFor, userAgentVersion } from "./package-manager.js";
-import { cliPrefixAt, projectFileCli, projectSdkDir, spellProjectCli, spellProjectSdkDir } from "./invocation.js";
+import { PROJECT_CLI, projectSdkDir, spellProjectSdkDir } from "./invocation.js";
 
 /**
  * How the project at `dir` installs, for its CI workflow and README: the
@@ -221,14 +221,13 @@ function workflowRootDir(projectDir: string, jobDir: string): string {
   return resolve(projectDir, ...jobDir.split("/").map(() => ".."));
 }
 
-/** The template inputs for a project scaffolded at `dir`: how it installs, and the CLI prefix its files spell. */
+/** The template inputs for a project scaffolded at `dir`: how it installs, and where its files say the SDK is. */
 export function templateVarsFor(appName: string, dir: string, env: NodeJS.ProcessEnv = process.env): TemplateVars {
   const install = projectInstallOf(dir, env);
   return {
     appName,
     sdkVersion: readVersion(),
     install,
-    cli: projectFileCli(dir, install.manager),
     sdkDir: projectSdkDir(dir, install.manager),
   };
 }
@@ -523,9 +522,9 @@ function moduleGitattributes(dir: string, contributions: readonly GitattributesC
   return [{ path: ".gitattributes", content: text }];
 }
 
-/** `files` with every `npx xanosdk` command spelled as the project's own files spell it ({@link TemplateVars.cli}). */
+/** `files` with every `node_modules/@xano/sdk` path spelled from the project's install ({@link TemplateVars.sdkDir}). */
 function spelledForProject(vars: TemplateVars, files: ScaffoldFile[]): ScaffoldFile[] {
-  return files.map((f) => ({ ...f, content: spellProjectSdkDir(spellProjectCli(f.content, vars.cli), vars.sdkDir) }));
+  return files.map((f) => ({ ...f, content: spellProjectSdkDir(f.content, vars.sdkDir) }));
 }
 
 /** The `init` file set: the shell for this mode and frontend, plus the empty-but-valid starter backend. */
@@ -1222,7 +1221,7 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
       if (outcome.installed.length > 0) {
         writeFileSync(
           join(targetDir, "xano", "index.ts"),
-          spellProjectCli(renderXanoIndexWithModules(appName, outcome.registered, outcome.unwired), vars.cli),
+          renderXanoIndexWithModules(appName, outcome.registered, outcome.unwired),
           "utf8",
         );
       }
@@ -1244,7 +1243,7 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
         if (result.install === "installed" && sdkResolves(targetDir)) {
           const derivation = await writeDerivedFiles(
             targetDir,
-            (env) => spellProjectCli(renderXanoIndexWithModules(appName, outcome.registered, outcome.unwired, env), vars.cli),
+            (env) => renderXanoIndexWithModules(appName, outcome.registered, outcome.unwired, env),
             toolchain,
           );
           derived = derivation.written;
@@ -1361,13 +1360,13 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
         // the cloud deploy that does.
         `  npm run xano:deploy    # run the backend on the Xano Engine, on this machine\n` +
         (preset === null ? `` : `  npm run dev            # run the frontend, pointed at it\n`) +
-        loginNextStep(pin, targetDir) +
+        loginNextStep(pin) +
         `${ephemeralNextStep(preset !== null)}\n` +
         `\n` +
         (hadLock !== undefined
           ? `xano/xano.lock was kept (${hadLock} ${hadLock === 1 ? "entry" : "entries"}). An entry the new xano/index.ts\n` +
             `does not export fails \`npm run xano:check\`; once those objects are gone for good,\n` +
-            `\`${projectCli(targetDir)} lock prune ./xano/index.ts --yes\` drops them.`
+            `\`${PROJECT_CLI} lock prune ./xano/index.ts --yes\` drops them.`
           : (derived.includes(LOCK_REL)
               ? `xano/xano.lock was written for the add-ons' objects — commit it. It pins each\n`
               : `The first export or deploy writes xano/xano.lock — commit it. It pins each\n`) +
@@ -1654,8 +1653,8 @@ async function envCredentialSet(): Promise<boolean> {
  * and none pinned, where the remedy is `profile use`), telling the reader to
  * authenticate sends them to redo what is already done.
  */
-export function loginNextStep(pin: Pick<ProfilePin, "signedIn">, projectDir: string): string {
-  return pin.signedIn ? "" : `  ${projectCli(projectDir)} login       # authenticate with Xano\n`;
+export function loginNextStep(pin: Pick<ProfilePin, "signedIn">): string {
+  return pin.signedIn ? "" : `  ${PROJECT_CLI} login       # authenticate with Xano\n`;
 }
 
 /** The `xano:deploy:ephemeral` line of the next steps, without its newline: a project with no frontend has none to build. */
@@ -1680,21 +1679,11 @@ export function runFiles(...groups: ReadonlyArray<readonly string[]>): string[] 
 }
 
 /**
- * The CLI prefix for a closing step that runs in the project once its install
- * (a step itself when this run did not install) is done: what npx there
- * reaches, and `npx xanosdk` before that install exists.
- */
-export function projectCli(projectDir: string): string {
-  const prefix = cliPrefixAt(projectDir);
-  return prefix === "xanosdk" || prefix === "npx @xano/sdk" ? "npx xanosdk" : prefix;
-}
-
-/**
- * Text written for a file inside the project, which spells `npx xanosdk`,
+ * Text written for a file inside the project, which spells `npx @xano/sdk`,
  * printed instead — each such command made to run from where `init` was typed.
  */
 function runFromHere(text: string, targetDir: string): string {
-  return text.replace(/`npx xanosdk /g, `\`${inProject(targetDir)}xanosdk `);
+  return text.replace(/`npx @xano\/sdk /g, `\`${inProject(targetDir)}xanosdk `);
 }
 
 /**

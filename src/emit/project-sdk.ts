@@ -14,7 +14,7 @@ import { createRequire } from "node:module";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { pathsShownFrom } from "../util/rel-path.js";
 import { shellWord } from "./command-line.js";
-import { installedCliAt } from "./invocation.js";
+import { PROJECT_CLI } from "./invocation.js";
 import { compareSemver, parseSemver } from "./semver.js";
 
 const PACKAGE = "@xano/sdk";
@@ -93,8 +93,7 @@ export function skewedProjectSdk(dir: string, running: string): InstalledSdk | u
 
 /**
  * A command that runs the project's INSTALLED CLI, pasteable where the user
- * typed: `npx xanosdk …` from the project root (`npx --workspaces=false xanosdk …`
- * in a workspace member npx's workspace lookup misses), prefixed with a `cd` into it
+ * typed: `npx @xano/sdk …` from the project root, prefixed with a `cd` into it
  * when the user is elsewhere. `tail` spells the arguments; the `path` it is
  * handed quotes a path relative to that root.
  */
@@ -104,7 +103,7 @@ export function installedCliCommand(root: string, tail: (path: (p: string) => st
   const home = real(root);
   const typed = real(pathsShownFrom() ?? process.cwd());
   const spelled = (from: string, to: string): string => shellWord(relative(from, to).split(sep).join("/") || ".");
-  const command = `${installedCliAt(home)} ${tail((p) => spelled(home, real(p)))}`;
+  const command = `${PROJECT_CLI} ${tail((p) => spelled(home, real(p)))}`;
   return typed === home ? command : `cd ${spelled(typed, home)} && ${command}`;
 }
 

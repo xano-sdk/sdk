@@ -2,7 +2,7 @@
  * Capture harness (NOT a shipped example, NOT auto-indexed).
  *
  * A curated subset of the sandbox — one object per authored KIND plus the deps
- * each needs — used as the `xanosdk preflight --capture` input to source real
+ * each needs — used as the `npx @xano/sdk preflight --capture` input to source real
  * engine goldens for the per-kind byte-verify corpus.
  *
  * It reuses the maintained `kinds/` example objects verbatim rather than

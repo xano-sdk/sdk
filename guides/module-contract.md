@@ -27,7 +27,7 @@ and defaulting the other way would strand them. A `kind` the SDK does not recogn
 defaulted to one kind or the other: the failure a default would produce is a module reported
 as unwired when its only fault is a typo in one string.
 
-What that costs you depends on where the typo is read. `xanosdk init` refuses by name, with
+What that costs you depends on where the typo is read. `npx @xano/sdk init` refuses by name, with
 the valid kinds listed, because a scaffold that silently drops your module is worse than one
 that stops. Every other path, the marketplace verbs and the CLI's own module loading
 included, warns and reads the package as an ordinary dependency rather than taking a whole
@@ -76,7 +76,7 @@ register function being read. Declare `"options": {}` and the call is written ba
 **Omit the key and your module has said nothing either way**, so the SDK imports your entry
 and measures `register`'s arity. A function that takes a second parameter nobody declared is
 left **out** of the generated `xano/index.ts` rather than called without it, with a commented
-call and a pointer to `xanosdk marketplace details <pkg> --prompt`. The call would not compile,
+call and a pointer to `npx @xano/sdk marketplace details <pkg> --prompt`. The call would not compile,
 and a fresh scaffold that passes `npm run typecheck` is worth more than one that has your
 module in it.
 
@@ -221,7 +221,7 @@ questions: [
 Two reasons the callback form does not exist, and both are hard. A callback would let a
 module hang a command on a TTY read in CI, where there is no one to answer it, and the SDK
 could not even impose a timeout because it cannot tell a slow prompt from a slow computation.
-And `xanosdk init --web` renders the questionnaire as a browser form, which can display a list
+And `npx @xano/sdk init --web` renders the questionnaire as a browser form, which can display a list
 of choices but cannot run your callback at all. Declaring the question as data means the SDK
 owns every way of answering it.
 
@@ -284,7 +284,7 @@ which command is running and no access to the filesystem, and it may be called s
 in one run and must return the same thing for the same answers.
 
 That is what makes the reconcile idempotent. A module is configured whenever its project is
-reconciled, and `xanosdk init` is only the first of those moments: installing into a project
+reconciled, and `npx @xano/sdk init` is only the first of those moments: installing into a project
 that already exists, re-answering later, and removing all run the same pass. The correct
 state is a function of the project's dependencies and its stored answers, so it can be
 rebuilt from scratch at any moment, however your module arrived.
@@ -431,7 +431,7 @@ onPreflight: async (ctx) => {
 },
 ```
 
-Fires on `xanosdk preflight`, contributing a comparison to the report.
+Fires on `npx @xano/sdk preflight`, contributing a comparison to the report.
 
 | `PreflightContext` | What it carries |
 |---|---|
@@ -472,7 +472,7 @@ const plugin: ToolchainPlugin = {
 ```
 
 Your module's section of the route manifest, `xano/routes.gen.ts`. It runs wherever that file
-is written: `xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts` (the scaffold's
+is written: `npx @xano/sdk routes ./xano/index.ts --emit xano/routes.gen.ts` (the scaffold's
 `xano:routes`), `init --marketplace` when it writes the project's first manifest, `pull`,
 `generate`, and the refresh `marketplace install`, `reinstall` and `remove` make, so your
 block lands with your module. Not `init --from`: a project it creates has no module installed
@@ -517,7 +517,7 @@ the file free of the SDK runtime in a frontend bundle. Declare yours in `imports
 subpaths, a relative or absolute path, and a protocol (`node:`) are all refused, naming your
 module. Each name must be a plain identifier, with no `as` rename. A package you import must
 resolve from the user's project, so declare it in your `peerDependencies`:
-`xanosdk marketplace install` adds each peer other than `@xano/sdk` that the project does not
+`npx @xano/sdk marketplace install` adds each peer other than `@xano/sdk` that the project does not
 already declare as a direct dependency, with your range, through the project's package manager.
 
 **Synchronous and pure.** No filesystem, network, clock or randomness: the same context must
@@ -569,7 +569,7 @@ and refuses it by name, with the upgrade to make.
 | Shape | Why it is refused | The fix |
 |---|---|---|
 | A `files` hook and no `contributes` | `files` was renamed once the hook stopped running only at scaffold time. | Rename it. `contributes(answers)` returns a `ProjectContributions`. |
-| A `ciSteps` entry in what `contributes` returns | The slot is gone. Your check already rides on `xanosdk export ./xano/index.ts --frozen-lock` through `onBundle` with `frozen` set. | Drop it. No workflow step of your own is needed. |
+| A `ciSteps` entry in what `contributes` returns | The slot is gone. Your check already rides on `npx @xano/sdk export ./xano/index.ts --frozen-lock` through `onBundle` with `frozen` set. | Drop it. No workflow step of your own is needed. |
 | `contributes` returning a string, a number, an array or a Promise | Indistinguishable from "contributed nothing", which is recorded as switched off. | Return an object, or nothing at all. `contributes` is synchronous. |
 | A default export whose `kind` is not `"toolchain"` | The manifest and the module disagree, so one of the two is stale. | Make them agree. |
 | An SDK outside your declared `peerDependencies["@xano/sdk"]` range | Your hooks were written against shapes this SDK does not have, so it would apply nothing. | Upgrade the SDK, or install a build of your module made for it. |
@@ -628,7 +628,7 @@ Things worth proving about your own module:
 
 ## Publishing
 
-Publish to npm like any package. To appear in `xanosdk marketplace list` and `search`, the
+Publish to npm like any package. To appear in `npx @xano/sdk marketplace list` and `search`, the
 module also needs a catalogue entry, which carries its title, tagline, description, tags, the
 objects it installs, what the user supplies, the registration snippet, and the agent prompt
 `details --prompt` emits. Write that prompt for a machine: it is what `init --marketplace`

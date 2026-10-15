@@ -13,7 +13,7 @@
  *       the CLI actually requests? The CLI holds
  *       `offline_access workspace:read workspace:write xano:dev` — no
  *       `workspace:database` — and the table routes reference that scope on
- *       their write verbs. If the read is gated too, `xanosdk tables workspace` and
+ *       their write verbs. If the read is gated too, `npx @xano/sdk tables workspace` and
  *       every `--seed` path fail, not just the tenant one.
  *   Q2  Does table-browse succeed against an EPHEMERAL's own host at
  *       workspaceId 1, where `/auth/me` reports `membership.workspace` as []?

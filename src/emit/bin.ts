@@ -34,7 +34,7 @@ installSentWriteTracking();
 installCliDiagnosticSink();
 // A reader that closed stdout early ends the output, not the command.
 installStdoutPipeGuard();
-// Printed commands spelled as the reader runs the CLI: `npx xanosdk …` unless
+// Printed commands spelled as the reader runs the CLI: `npx @xano/sdk …` unless
 // it is installed globally.
 installCliPrefix(fileURLToPath(import.meta.url));
 

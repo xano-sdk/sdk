@@ -8,13 +8,13 @@ verb, name)`). Committed. A composed entry is keyed by that identity —
 `query:<group>|<verb>|<name>`, `channel:<server>|<path>`, `message:<server>|<path>|<name>`
 — its guid's seed; a legacy `query:<name>` is migrated by the next locked export.
 
-- `xanosdk lock rename <kind> <old> <new>` — `kind` is the SDK kind (`table`, `apiGroup`) or stored key (`dbo`).
+- `npx @xano/sdk lock rename <kind> <old> <new>` — `kind` is the SDK kind (`table`, `apiGroup`) or stored key (`dbo`).
   Run it when `export` names it after a rename in code (it prints the command); the next export emits the original guid under the new name.
   Reads the `index.ts` beside the lock (or `--entry`); refused while `<old>` is still exported. Composed names go in full; renaming a parent moves them.
-- `xanosdk lock prune <entry-file> [keys…] --yes` — drops orphaned entries. Finding orphans
+- `npx @xano/sdk lock prune <entry-file> [keys…] --yes` — drops orphaned entries. Finding orphans
   RUNS the entry's module scope (env assertions included); `--identity-only --yes <key>…`
   prunes named keys (`table:users`) with no evaluation and no orphan check.
-- `xanosdk lock import <live-bundle.json> [--yes]` — seed the lock from a `workspace export`
+- `npx @xano/sdk lock import <live-bundle.json> [--yes]` — seed the lock from a `workspace export`
   to take over an existing workspace (a compiled bundle is refused).
 - Every lock subcommand accepts `--lock=<path>`; from outside the lock's directory pass it.
 - Merge conflict: keep both sides; two keys on one guid → `lock rename` onto the kept

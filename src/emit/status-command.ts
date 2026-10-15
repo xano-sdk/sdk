@@ -54,6 +54,7 @@ import { formatFields, formatExpiration, printHuman, stdoutStyle } from "./ui.js
 import { selectionDocument, type ProfileSelection } from "../auth/profile-select.js";
 import { readTrackedBackend, type TrackedAnswer } from "./tracked-backend.js";
 import { shellQuote } from "../util/shell-quote.js";
+import { AGENT_SIGNUP_URL } from "../auth/agent-signup.js";
 import { displayPath } from "../util/rel-path.js";
 import {
   loginCommand,
@@ -104,6 +105,23 @@ export interface Status {
    * refresh failure; correct a variable). Null otherwise.
    */
   credentialFailure: string | null;
+  /**
+   * Where an agent with no Xano account creates a free one, with no browser:
+   * the agentic signup walkthrough, whose one POST returns the
+   * XANO_INSTANCE_URL / XANO_WORKSPACE_ID / XANO_META_TOKEN triple. Set only when
+   * no credential exists on this machine at all; null whenever one does, even
+   * one that failed, since a broken credential's fix is not a new account.
+   */
+  agentSignup: string | null;
+  /**
+   * What to do about `agentSignup`, when it is set. `"signup"`: nothing has
+   * ever signed in on this machine (no credential file, no credential
+   * variable), so the human is likely new: offer the free account, and fall
+   * back to `signIn` only if they say they have one. `"ask"`: ask the human
+   * whether they have a Xano account (yes: `signIn`; no: `agentSignup`), and
+   * never guess the answer from context. Null when `agentSignup` is.
+   */
+  suggest: "signup" | "ask" | null;
   /**
    * Instance base URL from the token binding, or null when no credential was
    * found. A rejected credential still names the instance it was bound to.
@@ -457,6 +475,8 @@ export async function readStatus(
         signIn: `xanosdk login --profile ${shellQuote(missing.name)}${readFileFlag(args)}`,
         rejected: null,
         credentialFailure: err.message,
+        agentSignup: null,
+    suggest: null,
         instance: null,
         profile: missing,
         user: null,
@@ -480,6 +500,8 @@ export async function readStatus(
         signIn: stored?.fix ?? null,
         rejected: null,
         credentialFailure: err instanceof Error ? err.message : String(err),
+        agentSignup: null,
+    suggest: null,
         instance: stored?.instance ?? null,
         profile: stored?.profile ?? null,
         user: null,
@@ -495,12 +517,17 @@ export async function readStatus(
     // question a bare `xanosdk login` hid: the project is reachable, through
     // that profile and file, and a fresh sign-in would not reach it.
     const tracked = project === null ? [] : trackedUnderOthers(project, undefined);
+    const offerSignup = tracked.length === 0 && err.storedProfiles.length === 0;
     return {
       signedIn: false,
       project,
       signIn: trackedRemedy(tracked) ?? signInCommand(err, args),
       rejected: null,
       credentialFailure: null,
+      // Nothing stored anywhere and nothing tracked: a machine with no account,
+      // not one a profile command or a tracked credential would fix.
+      agentSignup: offerSignup ? AGENT_SIGNUP_URL : null,
+      suggest: offerSignup ? (err.firstRun ? "signup" : "ask") : null,
       instance: null,
       profile: null,
       user: null,
@@ -535,6 +562,8 @@ export async function readStatus(
         signIn: rejectedFixCommand(auth, args),
         rejected: rejectedRemedy(auth, args),
         credentialFailure: null,
+        agentSignup: null,
+    suggest: null,
         instance: auth.instance,
         profile: auth.profile ?? null,
         user: null,
@@ -555,6 +584,8 @@ export async function readStatus(
     signIn: null,
     rejected: null,
     credentialFailure: null,
+    agentSignup: null,
+    suggest: null,
     instance: auth.instance,
     profile: auth.profile ?? null,
     user: {
@@ -747,6 +778,20 @@ function trackedRows(status: Status, s: ReturnType<typeof stdoutStyle>): Array<[
   return rows;
 }
 
+/**
+ * The signed-out decision as rows: a likely-new machine leads with the free
+ * account, any other asks the human first. Empty when no signup is offered.
+ */
+function signupRows(status: Status, s: ReturnType<typeof stdoutStyle>): Array<[string, string]> {
+  if (status.agentSignup === null) return [];
+  return status.suggest === "signup"
+    ? [["New to Xano", s.dim(`likely: offer a free account (their email; they confirm by email): ${status.agentSignup}`)]]
+    : [
+        ["Next", s.dim("ask your human whether they have a Xano account")],
+        ["", s.dim(`yes: \`${status.signIn ?? "xanosdk login"}\` · no: free account, confirmed by email: ${status.agentSignup}`)],
+      ];
+}
+
 /** The instance and profile of a credential that exists but failed, when known. */
 function credentialRows(status: Status, s: ReturnType<typeof stdoutStyle>): Array<[string, string]> {
   const rows: Array<[string, string]> = [];
@@ -784,7 +829,10 @@ function prettyStatus(status: Status, fileFlag = "", rerun = `xanosdk status${fi
               ...credentialRows(status, s),
               ...status.credentialFailure.split("\n").map((line): [string, string] => ["", s.dim(line)]),
             ]
-          : [["Signed in", `${s.bold("no")} ${s.dim(`· run \`${status.signIn ?? "xanosdk login"}\``)}`]];
+          : [
+              ["Signed in", `${s.bold("no")} ${s.dim(`· run \`${status.signIn ?? "xanosdk login"}\``)}`],
+              ...signupRows(status, s),
+            ];
     // The credential the project's ephemeral is recorded under — signed out,
     // the one fact that says which sign-in reaches it.
     if (status.project !== null && status.environmentTrackedUnder !== null) {

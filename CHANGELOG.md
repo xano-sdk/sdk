@@ -8,6 +8,21 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.13 — Docs that match the CLI
+
+_2026-10-14_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.13)
+
+A documentation release: every guide, the README and the agent grounding were checked against the current CLI and corrected where they had drifted. `knowledge()` is now described as what it is, markdown shared by every AI that builds your backend, and the `AGENTS.md` that `init` writes tells your coding agent to read it. No API changes.
+
+- `knowledge()` is shared context for every AI building your backend
+- `init`'s `AGENTS.md` points your coding agent at the knowledge files
+- The CLI guide lists every command and the real bundle keys
+- Deploy and environment guides match the CLI
+- Scaffold and marketplace guides match `init` and `install`
+- `--backup-branch` is a `deploy --to workspace` flag
+
+---
+
 ## 1.0.12 — Every address in routes
 
 _2026-10-14_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.12)

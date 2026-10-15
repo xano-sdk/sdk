@@ -12,7 +12,7 @@
  *
  * Two cuts, because the fields that went dead were the EMPTY ones:
  *   - a default workspace cut (`branch: ""`, no description, no rows), which is
- *     what `xanosdk release create <name>` sends; and
+ *     what `npx @xano/sdk release create <name>` sends; and
  *   - a cut naming a branch, carrying a description and one table's rows, for
  *     the populated spelling of every field.
  *

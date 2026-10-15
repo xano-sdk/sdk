@@ -1,40 +1,35 @@
 /**
  * How the reader runs this CLI, so the commands it prints run as printed.
  *
- * A globally installed `xanosdk` answers to its bare name. Everything else is
- * reached through npx, and what npx resolves depends on WHERE the printed
- * command runs: `npx xanosdk` finds the `xanosdk` bin of a project that has
- * `@xano/sdk` installed (in that directory or above it), and anywhere else
- * asks the registry for a package called `xanosdk`, which is not this one. So a
- * printed command is spelled for the directory it runs in:
+ * Every command is spelled `npx @xano/sdk …`, a global install included: run
+ * in a project that has `@xano/sdk` installed (its root, a subdirectory, a
+ * workspace member under any package manager), npx runs that install; anywhere
+ * else it fetches the published SDK. A bare `xanosdk` is never printed to a
+ * user — a global one ignores the project's installed version — and neither is
+ * `npx xanosdk`, which outside such a project asks the registry for the
+ * `xanosdk` placeholder, not this SDK. Only this repository's own build keeps
+ * the bare name.
  *
- * - global install (or this repository's own build): `xanosdk …`;
- * - under npx, in a directory whose project has `@xano/sdk` installed:
- *   `npx xanosdk …`;
- * - under npx, in a workspace member whose installed bin npx does not search
- *   (see {@link sdkInstalledAt}): `npx --workspaces=false xanosdk …`;
- * - under npx anywhere else: `npx @xano/sdk …`.
+ * The rewrite happens in one place ({@link withCliPrefix}, applied to stderr,
+ * help and `--json` documents by the bin) rather than at each of the hundreds
+ * of hints that spell one, and touches only command-shaped occurrences: inside
+ * backticks, at the start of a line or a string, after a shell operator (`&&`,
+ * `|`, `;`, `$(`) or a `label: `.
  *
- * A command runs where the user typed (`INIT_CWD` for an npm script), or —
- * for `cd <dir> && xanosdk …` — in `<dir>`. The rewrite happens in one place
- * ({@link withCliPrefix}, applied to stderr, help and `--json` documents by the
- * bin) rather than at each of the hundreds of hints that spell one, and touches
- * only command-shaped occurrences: inside backticks, at the start of a line or
- * a string, after a shell operator (`&&`, `|`, `;`, `$(`) or a `label: `.
- *
- * Files written to disk (a scaffold's README, AGENTS.md, xano/EXAMPLE.md) are
- * read inside the project they describe: they spell what npx reaches there
- * ({@link projectFileCli}), independent of how this run was launched.
+ * Files written to disk (a scaffold's README, AGENTS.md, xano/EXAMPLE.md) say
+ * {@link PROJECT_CLI}, independent of how this run was launched.
  */
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { homedir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { COMMANDS } from "./commands.js";
 import { setTypedCwdBase } from "./typed-cwd.js";
 import type { PackageManager } from "./package-manager.js";
 
 /** The prefix a printed command starts with. */
-export type CliPrefix = "xanosdk" | "npx xanosdk" | "npx --workspaces=false xanosdk" | "npx @xano/sdk";
+export type CliPrefix = "xanosdk" | typeof PROJECT_CLI;
+
+/** How a command is spelled for npx, and in every file written into a project. */
+export const PROJECT_CLI = "npx @xano/sdk";
 
 /** How this run was launched: by a name on the PATH, or through npx (a project's install, an npm script, `npx`). */
 export type Launcher = "path" | "npx";
@@ -48,40 +43,13 @@ export interface InvocationFacts {
 }
 
 /**
- * Directories a global install lives under: npm's `<prefix>/lib/node_modules`
- * (Homebrew, nvm, Volta, a system Node), npm on Windows (`%AppData%\npm`), and
- * pnpm's and yarn's global stores.
- */
-const GLOBAL_STORES = [
-  `${sep}lib${sep}node_modules${sep}`,
-  `${sep}npm${sep}node_modules${sep}`,
-  `${sep}pnpm${sep}global${sep}`,
-  `${sep}yarn${sep}global${sep}`,
-];
-
-/**
- * The launcher for a run with these facts:
- *
- * - not under a `node_modules` at all — this repository's own build, or a
- *   linked checkout: `path`, the name its developer has on the PATH;
- * - `npx` / `npm exec` (its cache is `_npx`): `npx`;
- * - installed in a project the command was typed in (`node_modules/.bin`, an
- *   npm script): `npx`;
- * - installed globally: `path`;
- * - anything else (a project's install run from outside it): `npx`.
+ * The launcher for a run with these facts: `path` for a bin outside any
+ * `node_modules` — this repository's own build, or a linked checkout, run by
+ * its developer; `npx` for every install a user has (npx's cache, a project's
+ * `node_modules`, a global store), wherever it was typed.
  */
 export function launcherFor(facts: InvocationFacts): Launcher {
-  const bin = facts.binPath;
-  const marker = `${sep}node_modules${sep}`;
-  const at = bin.lastIndexOf(marker);
-  if (at === -1) return "path";
-  if (bin.includes(`${sep}_npx${sep}`) || facts.env.npm_command === "exec") return "npx";
-  const installRoot = bin.slice(0, at);
-  const cwd = facts.cwd;
-  if (cwd === installRoot || cwd.startsWith(installRoot + sep)) return "npx";
-  const store = bin.slice(0, at + marker.length);
-  if (GLOBAL_STORES.some((s) => store.endsWith(s) || bin.includes(s))) return "path";
-  return "npx";
+  return facts.binPath.includes(`${sep}node_modules${sep}`) ? "npx" : "path";
 }
 
 /**
@@ -99,38 +67,11 @@ export function typedDirFor(cwd: string, env: NodeJS.ProcessEnv): string {
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel)) ? resolve(init) : cwd;
 }
 
-/**
- * Whether `@xano/sdk` is installed for a command run in a directory:
- * `true` where `npx xanosdk` finds its bin, `"member-only"` where the bin is
- * installed in the directory's own tree but npx does not search there, `false`
- * where it is not installed at all.
- */
-export type SdkInstall = boolean | "member-only";
-
-const installedCache = new Map<string, SdkInstall>();
-
-/** The `node_modules/.bin` holding a `xanosdk` bin, searching `from` and every directory above it. */
-function binDirAbove(from: string): string | undefined {
-  for (let d = from; ; d = dirname(d)) {
-    const bin = join(d, "node_modules", ".bin");
-    if (existsSync(join(bin, "xanosdk")) || existsSync(join(bin, "xanosdk.cmd"))) return bin;
-    if (dirname(d) === d) return undefined;
-  }
-}
-
 function readManifest(dir: string): { name?: unknown; workspaces?: unknown } | undefined {
   try {
     return JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { name?: unknown; workspaces?: unknown };
   } catch {
     return undefined;
-  }
-}
-
-function isDir(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
   }
 }
 
@@ -159,31 +100,7 @@ function listsWorkspace(root: string, workspaces: unknown, member: string): bool
   return globs.some((g) => !g.startsWith("!") && hit(g)) && !globs.some((g) => g.startsWith("!") && hit(g.slice(1)));
 }
 
-/**
- * The `node_modules/.bin` that `npx xanosdk` run in `from` takes its bin from.
- *
- * npx searches from its local prefix, not from where it was typed: the nearest
- * directory with a `package.json` or a `node_modules`. When a `package.json`
- * further up lists that directory in its `workspaces`, the prefix becomes that
- * root and npx searches from `<root>/node_modules/<member name>` upward — the
- * link to the member that npm and yarn create, and bun's and pnpm's installs
- * do not. Without that link only the root's own `node_modules/.bin` is
- * searched, so a bin installed in the member is never found.
- */
-function npxBinDir(from: string): string | undefined {
-  let prefix: string | undefined;
-  for (let d = from; prefix === undefined; d = dirname(d)) {
-    if (existsSync(join(d, "package.json")) || isDir(join(d, "node_modules"))) prefix = d;
-    else if (dirname(d) === d) break;
-  }
-  if (prefix === undefined) return binDirAbove(from);
-  const root = listingWorkspaceRoot(prefix);
-  if (root === undefined) return binDirAbove(prefix);
-  const name = readManifest(prefix)?.name;
-  return binDirAbove(join(root, "node_modules", typeof name === "string" && name !== "" ? name : basename(prefix)));
-}
-
-/** The directory above `prefix` whose `package.json` `workspaces` lists it — the root npx treats it as a member of. */
+/** The directory above `prefix` whose `package.json` `workspaces` lists it — the workspace root it is a member of. */
 function listingWorkspaceRoot(prefix: string): string | undefined {
   for (let d = dirname(prefix); ; d = dirname(d)) {
     if (existsSync(join(d, "package.json"))) {
@@ -192,24 +109,6 @@ function listingWorkspaceRoot(prefix: string): string | undefined {
     }
     if (dirname(d) === d) return undefined;
   }
-}
-
-/** The prefix a file inside a project spells its commands with. */
-export type ProjectCli = "npx xanosdk" | "npx --workspaces=false xanosdk";
-
-/**
- * The prefix for commands written into the project at `dir` (its README,
- * AGENTS.md, xano/EXAMPLE.md): what npx run there reaches once the project is
- * installed. npm and yarn link a workspace member under the root's
- * `node_modules`, where npx looks for it; bun and pnpm do not, so in a member
- * of a `package.json` workspace that `manager` installs only
- * `npx --workspaces=false xanosdk` reaches the member's own bin. Decided from
- * the layout rather than the install, so a file written before the install
- * reads the same as one re-rendered after it.
- */
-export function projectFileCli(dir: string, manager: PackageManager): ProjectCli {
-  if (manager === "npm" || manager === "yarn") return "npx xanosdk";
-  return listingWorkspaceRoot(resolve(dir)) === undefined ? "npx xanosdk" : "npx --workspaces=false xanosdk";
 }
 
 /** The server an agent's MCP config declares for the bridge. Not the engine's own name. */
@@ -247,15 +146,13 @@ export interface McpServerCommand {
  * both up when it runs).
  *
  * The agent launches it, often before anyone has run `npm install` (a fresh
- * clone opened in an editor), so it must not depend on `node_modules`.
- * `--package @xano/sdk` gives that: npx runs the project's own install when
- * there is one, and otherwise fetches the SDK into its cache — never an
- * unrelated package that happens to be named `xanosdk`. `--yes` answers npx's
- * install prompt, which an agent has no terminal to answer. The spec carries
- * no version range: `cmd /c` would read the `>` of one as a redirect.
+ * clone opened in an editor), so it must not depend on `node_modules`:
+ * {@link PROJECT_CLI} runs the project's own install when there is one, and
+ * otherwise fetches the SDK into npx's cache. `--yes` answers npx's install
+ * prompt, which an agent has no terminal to answer. The spec carries no
+ * version range: `cmd /c` would read the `>` of one as a redirect.
  *
- * An argv rather than a string, so nothing re-splits it. `--workspaces=false`
- * is its own argument where {@link projectFileCli} needs it; native Windows
+ * An argv rather than a string, so nothing re-splits it. Native Windows
  * launches npx through `cmd /c`, since `npx` there is a script, not an
  * executable.
  *
@@ -265,32 +162,12 @@ export interface McpServerCommand {
  * from where it was launched, so outside the project it runs the published SDK,
  * which serves the same bridge.
  */
-export function mcpServerCommand(
-  dir: string,
-  manager: PackageManager,
-  opts: { platform?: NodeJS.Platform; workspaceFolder?: string } = {},
-): McpServerCommand {
+export function mcpServerCommand(opts: { platform?: NodeJS.Platform; workspaceFolder?: string } = {}): McpServerCommand {
   const folder = opts.workspaceFolder;
-  const npx = [
-    "npx",
-    "--yes",
-    "--package",
-    "@xano/sdk",
-    ...(projectFileCli(dir, manager) === "npx xanosdk" ? [] : ["--workspaces=false"]),
-    "xanosdk",
-    "local",
-    "mcp",
-    "--stdio",
-    ...(folder === undefined ? [] : ["--project", folder]),
-  ];
+  const npx = ["npx", "--yes", "@xano/sdk", "local", "mcp", "--stdio", ...(folder === undefined ? [] : ["--project", folder])];
   return (opts.platform ?? process.platform) === "win32"
     ? { command: "cmd", args: ["/c", ...npx] }
     : { command: npx[0]!, args: npx.slice(1) };
-}
-
-/** `text` — written with `npx xanosdk` — with each such command spelled `cli`. */
-export function spellProjectCli(text: string, cli: ProjectCli | undefined): string {
-  return cli === undefined || cli === "npx xanosdk" ? text : text.replace(/\bnpx xanosdk(?=[\s`'")\]]|$)/g, cli);
 }
 
 /** Where the project's files say `@xano/sdk` is installed, as written by the templates. */
@@ -320,52 +197,17 @@ export function spellProjectSdkDir(text: string, sdkDir: string | undefined): st
   return text.replace(/(?<![\w./-])node_modules\/@xano\/sdk(?=\/)/g, sdkDir);
 }
 
-/**
- * The prefix that runs the `@xano/sdk` installed for `dir` — whatever
- * launched this run: `npx --workspaces=false xanosdk` where npx's workspace
- * lookup misses it ({@link sdkInstalledAt}), `npx xanosdk` otherwise.
- */
-export function installedCliAt(dir: string): ProjectCli {
-  return sdkInstalledAt(dir) === "member-only" ? "npx --workspaces=false xanosdk" : "npx xanosdk";
-}
-
-function sameDir(a: string, b: string): boolean {
-  try {
-    return realpathSync(a) === realpathSync(b);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Whether `@xano/sdk` is installed for a command run in `dir`, and whether
- * `npx xanosdk` there reaches that install ({@link SdkInstall}). Only a found
- * install is remembered: an install during this run can turn a miss into a hit.
- */
-export function sdkInstalledAt(dir: string): SdkInstall {
-  const start = resolve(dir);
-  const cached = installedCache.get(start);
-  if (cached !== undefined) return cached;
-  const own = binDirAbove(start);
-  if (own === undefined) return false;
-  const npx = npxBinDir(start);
-  const found: SdkInstall = npx !== undefined && sameDir(npx, own) ? true : "member-only";
-  installedCache.set(start, found);
-  return found;
-}
-
 export interface PrefixState {
   launcher: Launcher;
   /** Where a printed command without a `cd` runs. */
   typedDir: string;
-  installedAt: (dir: string) => SdkInstall;
 }
 
 let state: PrefixState | undefined;
 
 /** Set once by the bin. A library caller keeps bare `xanosdk`. */
-export function setCliLauncher(launcher: Launcher, typedDir?: string, installedAt: (dir: string) => SdkInstall = sdkInstalledAt): void {
-  state = launcher === "path" ? undefined : { launcher, typedDir: typedDir ?? process.cwd(), installedAt };
+export function setCliLauncher(launcher: Launcher, typedDir?: string): void {
+  state = launcher === "path" ? undefined : { launcher, typedDir: typedDir ?? process.cwd() };
 }
 
 /** The run's typed directory as the bin recorded it — `INIT_CWD` under an npm script. */
@@ -373,19 +215,9 @@ export function typedDir(): string {
   return state?.typedDir ?? process.cwd();
 }
 
-/**
- * The prefix for a command that runs in `dir` (default: where the user typed):
- * `xanosdk` for a global launch, otherwise `npx xanosdk` where npx finds the
- * installed `@xano/sdk`, `npx --workspaces=false xanosdk` where it is
- * installed but npx's workspace lookup misses it (it then searches from the
- * directory itself, so it runs that install rather than a global one or the
- * registry's unrelated `xanosdk`), and `npx @xano/sdk` where it is not
- * installed.
- */
-export function cliPrefixAt(dir?: string, s: PrefixState | undefined = state): CliPrefix {
-  if (s === undefined) return "xanosdk";
-  const installed = s.installedAt(resolve(s.typedDir, dir ?? "."));
-  return installed === true ? "npx xanosdk" : installed === "member-only" ? "npx --workspaces=false xanosdk" : "npx @xano/sdk";
+/** The prefix a printed command starts with: {@link PROJECT_CLI}, or bare `xanosdk` for this repository's own build and a library caller. */
+export function cliPrefix(s: PrefixState | undefined = state): CliPrefix {
+  return s === undefined ? "xanosdk" : PROJECT_CLI;
 }
 
 let pattern: RegExp | undefined;
@@ -415,29 +247,10 @@ function commandPattern(): RegExp {
   return pattern;
 }
 
-/**
- * The directory the last `cd <dir> && ` on the command line before `at`
- * changes to, unquoted — so every command of `cd <dir> && a | xanosdk … &&
- * xanosdk …` is spelled for `<dir>`. A command line starts after a backtick or a
- * line break.
- */
-function cdTarget(text: string, at: number): string | undefined {
-  const from = Math.max(text.lastIndexOf("`", at - 1), text.lastIndexOf("\n", at - 1)) + 1;
-  const m = [...text.slice(from, at).matchAll(/(?:^|\s)cd ('(?:[^']|'\\'')*'|"(?:[^"\\]|\\.)*"|[^\s`'"]+) && /g)].at(-1);
-  if (m === undefined) return undefined;
-  const word = m[1]!;
-  if (word.startsWith("'")) return word.slice(1, -1).replace(/'\\''/g, "'");
-  if (word.startsWith('"')) return word.slice(1, -1).replace(/\\(.)/g, "$1");
-  return word.startsWith("~/") ? join(homedir(), word.slice(2)) : word;
-}
-
-/** `text` with every printed `xanosdk <command>` spelled for where it runs. */
+/** `text` with every printed `xanosdk <command>` spelled as this run's reader runs it. */
 export function withCliPrefix(text: string, s: PrefixState | undefined = state): string {
   if (s === undefined || !text.includes("xanosdk ")) return text;
-  return text.replace(commandPattern(), (_whole, boundary: string, indent: string, offset: number) => {
-    const dir = boundary === "`" || boundary === "\n" ? undefined : cdTarget(text, offset + boundary.length);
-    return `${boundary}${indent}${cliPrefixAt(dir, s)} `;
-  });
+  return text.replace(commandPattern(), (_whole, boundary: string, indent: string) => `${boundary}${indent}${cliPrefix(s)} `);
 }
 
 /** `value` with {@link withCliPrefix} applied to every string in it — a `--json` document. */

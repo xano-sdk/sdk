@@ -28,9 +28,9 @@ export const wsConfig = workspaceConfig({
   // addressed: a backend variable is addressed by NAME (`env("NAME")` is how a
   // stack reads it), a documentation token by the OBJECT that holds it. So this
   // one has no name at all, never reaches the workspace's own env, and
-  // `env(...)` in a stack cannot read it. `xanosdk pull` writes that file and
+  // `env(...)` in a stack cannot read it. `npx @xano/sdk pull` writes that file and
   // every build reads it back; a gate declared here has no live value to pull,
-  // so `xanosdk secrets fill` mints one for every declared gate the file has none
+  // so `npx @xano/sdk secrets fill` mints one for every declared gate the file has none
   // for.
   //
   // (For realtime, author `realtimeServer` / `realtimeChannel` /
@@ -59,8 +59,8 @@ export const wsConfig = workspaceConfig({
   // Workspace environment variables — read at request time with `env("NAME")`.
   // VALUES ARE SECRETS. The best-practice shape is a NAME here with an empty
   // value and the value in `xano/.env`, which is gitignored, survives a
-  // `xanosdk pull`, and is read with no flag by every command that compiles a
-  // bundle (`xanosdk env pull` fills it from a running backend). A deploy
+  // `npx @xano/sdk pull`, and is read with no flag by every command that compiles a
+  // bundle (`npx @xano/sdk env pull` fills it from a running backend). A deploy
   // REPLACES the tenant's env set, so a declared name with no value anywhere
   // refuses the deploy rather than clearing the live value.
   //

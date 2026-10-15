@@ -36,7 +36,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { condenseNpmError, runNpmQuiet, sameNpmFailure } from "./npm.js";
 import { detectInstallRoot } from "./package-manager.js";
-import { MCP_CONFIGS, MCP_SERVER_NAME, mcpServerCommand, projectFileCli, projectSdkDir } from "./invocation.js";
+import { MCP_CONFIGS, MCP_SERVER_NAME, mcpServerCommand, projectSdkDir } from "./invocation.js";
 import { classifyNpmFailure } from "./init-modules.js";
 import { removeEmptiedDirs, removeFiles } from "./backend-tree.js";
 import { detail, info, success, warn, withSpinner } from "./ui.js";
@@ -595,7 +595,6 @@ export function plannedAgentsMd(
   const manager = detectInstallRoot(targetDir).manager;
   const rendered = renderAgentsMd(opts.appName, guidanceMode(opts.regenerable), {
     version: opts.sdkVersion,
-    cli: projectFileCli(targetDir, manager),
     sdkDir: projectSdkDir(targetDir, manager),
     // `null` renders the brief with no frontend slots.
     frontend:
@@ -633,10 +632,9 @@ export function plannedMcpConfigs(
   platform: NodeJS.Platform = process.platform,
 ): ScaffoldFile[] {
   if (!opts.agentsMd) return [];
-  const manager = detectInstallRoot(targetDir).manager;
   const planned: ScaffoldFile[] = [];
   for (const config of MCP_CONFIGS) {
-    const server = mcpServerCommand(targetDir, manager, {
+    const server = mcpServerCommand({
       platform,
       ...(config.workspaceFolder === undefined ? {} : { workspaceFolder: config.workspaceFolder }),
     });

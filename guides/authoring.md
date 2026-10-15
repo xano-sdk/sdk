@@ -658,12 +658,12 @@ workspaceConfig({ name: "my-app", env: { STRIPE_KEY: "" } });
 STRIPE_KEY=sk_live_...
 ```
 
-`xano/.env.example` is generated beside it listing the declared names, and `xanosdk env pull`
+`xano/.env.example` is generated beside it listing the declared names, and `npx @xano/sdk env pull`
 fills `xano/.env` from a running backend after confirming. Two flags override the default:
 
 ```bash
-xanosdk deploy --backend-env-file ci.env                  # REPLACES the default (CI has no xano/.env)
-xanosdk deploy --env-var STRIPE_KEY=sk_live_...   # one value, beats both files
+npx @xano/sdk deploy --backend-env-file ci.env         # REPLACES the default (CI has no xano/.env)
+npx @xano/sdk deploy --env-var STRIPE_KEY=sk_live_...  # one value, beats both files
 ```
 
 A deploy REPLACES the workspace's env set, so a declared name that no file and no flag
@@ -688,15 +688,15 @@ groups that legitimately share a name keep their own tokens.
 
 A literal `token` in source fails the export — there is no migration path, because declaring
 the gate covers every use and the literal form's only distinguishing property is that it commits
-a secret. `xanosdk pull` writes the value to the sidecar, reports every scope it carried, and
+a secret. `npx @xano/sdk pull` writes the value to the sidecar, reports every scope it carried, and
 every build reads it back, so pull-then-deploy restores the gate with no step in between.
 
 A gate you write here is the other direction: there is no live value to pull, because the
-object has never had one. `xanosdk secrets fill` mints one for every declared gate the sidecar
+object has never had one. `npx @xano/sdk secrets fill` mints one for every declared gate the sidecar
 has no value for, and leaves every value it already holds alone:
 
 ```bash
-xanosdk secrets fill                      # or `xanosdk secrets fill ./xano/index.ts`
+npx @xano/sdk secrets fill                      # or `npx @xano/sdk secrets fill ./xano/index.ts`
 ```
 
 It writes nothing when every gate is already filled, so it is safe to re-run. A minted token
@@ -734,7 +734,7 @@ values stay inert. Two consequences to plan around:
 - A release carries no env values. A **newly declared** name the target does not hold yet
   is not created by `promote` or `tenant deploy`: the release's objects read it as null there
   until it is set. Both commands name every env var the release reads that the target lacks,
-  before the confirmation, with the `printf %s "$VALUE" | xanosdk env set NAME --to … --yes`
+  before the confirmation, with the `printf %s "$VALUE" | npx @xano/sdk env set NAME --to … --yes`
   that sets it.
 - `deploy --to workspace --replace` rebuilds the workspace, so the env set becomes exactly what the config
   declares. Every env var the target holds that your config does not declare is DROPPED —
@@ -743,7 +743,7 @@ values stay inert. Two consequences to plan around:
   holds: by definition the project never declared it. Declare the name to keep it, or merge
   without `--replace`.
 
-> ⚠️ The refusal is part of the COMPILE, so `xanosdk deploy --bundle <path>` does not get it:
+> ⚠️ The refusal is part of the COMPILE, so `npx @xano/sdk deploy --bundle <path>` does not get it:
 > a pre-built bundle carries whatever env it was built with, and deploying it sends exactly
 > that. A build-once-deploy-the-artifact pipeline therefore has to resolve its values at
 > BUILD time — pass `--backend-env-file`/`--env-var` to the `export` that produces the bundle, and
@@ -843,7 +843,7 @@ Four things that are easy to get wrong:
 - **`create_only` is the whole idempotency mechanism.** Without it the write always succeeds
   and the branch always runs, so the guard reads as present and does nothing.
 - **Redis is an instance capability.** On an instance without cache support every
-  `s.redis.*` statement fails at request time; `xanosdk export` lists what a bundle needs.
+  `s.redis.*` statement fails at request time; `npx @xano/sdk export` lists what a bundle needs.
   The unique index on `webhook_events.provider_event_id` above is the durable fallback — the insert fails on a
   duplicate rather than being skipped, so wrap it in `s.try_catch` if you take that route.
 
@@ -904,7 +904,7 @@ seed: seedFile("./products.seed.json", import.meta.url),
 
 The path resolves against the file that declares the table, and it is read with `node:fs`
 at deploy time. Note the tradeoff: inline rows are typed against the table schema at compile
-time, while a `seedFile`/thunk seed is opaque to the typechecker — `xanosdk export`/`deploy`
+time, while a `seedFile`/thunk seed is opaque to the typechecker — `npx @xano/sdk export`/`deploy`
 validates it instead, naming the row index, the offending column and the table's known
 columns. A thunk (`seed: () => import("./products.seed.json")`) also works and is
 the right shape for *computed* seeds — but be aware it does **not** keep seed values out of
@@ -914,7 +914,7 @@ ships the seed to the browser. `seedFile` stores a path string, which a bundler 
 to follow.
 
 Either way, keep secrets out of `seed` — it is throwaway fixture data for disposable
-environments. As a backstop, `xanosdk deploy <entry> --static <dir>` and `xanosdk deploy <entry> --to workspace --static <dir>`
+environments. As a backstop, `npx @xano/sdk deploy <entry> --static <dir>` and `npx @xano/sdk deploy <entry> --to workspace --static <dir>`
 refuse to publish a frontend build containing seed values from password columns or columns
 your schema marks `access: "internal"` or `sensitive`. If the data is deliberately public (a
 demo login the frontend shows), declare it on the table: `publicSeed: ["password"]`.

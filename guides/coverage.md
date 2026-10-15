@@ -40,7 +40,7 @@ runtime (Xano SDK only compiles), and generating engine-side numeric ids/timesta
 
 **Deferred (by design)** — folder auto-discovery, and the `service` / `vault` / `branch`
 payload sections. (Round-trip decompile is no longer deferred: that is
-`xanosdk init --from`, in [Pulling an existing workspace](codegen.md); nor is `workflow_test` — it is a
+`npx @xano/sdk init --from`, in [Pulling an existing workspace](codegen.md); nor is `workflow_test` — it is a
 first-class kind, see `workflowTest` in [Object kinds](object-kinds.md).) `InferResponse`
 auto-derivation covers the object-literal and single-`db`-variable cases (matching the engine's
 static walk), and follows a CALL into the object it invokes (`s.function.call`/`.run`,
@@ -55,7 +55,7 @@ can learn the SDK without reading source:
 
 - **`llms.txt`** — the always-read router: the mental model, the deploy contract, control
   flow, the non-obvious rules in `## Gotchas`, and a `## Topic files` list naming each
-  **`llms/*.md`** and when to open it. It does not document the CLI — `xanosdk <command>
+  **`llms/*.md`** and when to open it. It does not document the CLI — `npx @xano/sdk <command>
   --help` and the `cli` array in `manifest.json` do, from the same registry that generates
   the shell completions. The written version is the [CLI guide](cli.md).
 - **`llms/*.md`** — one file per surface (object def shapes, statements, values, fields,

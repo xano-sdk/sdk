@@ -73,7 +73,7 @@ export const userByNameQuery = query({
  *
  * The one consequence worth knowing: because the VERB is part of identity,
  * changing it is an identity change, not an edit. Switching `POST` to `PUT` here
- * would delete the POST endpoint and create a PUT one. `xanosdk lock rename query
+ * would delete the POST endpoint and create a PUT one. `npx @xano/sdk lock rename query
  * "<group>|POST|ex_items" "<group>|PUT|ex_items"` carries the identity across
  * when that is not what you meant.
  *
@@ -113,7 +113,7 @@ export const createItemQuery = query({
  * that are NOT in the path (`verbose` here) stay ordinary query-string params.
  *
  * Client side, `routePath()` from the generated route manifest
- * (`xanosdk routes <entry> --emit xano/routes.gen.ts`) builds the real URL —
+ * (`npx @xano/sdk routes <entry> --emit xano/routes.gen.ts`) builds the real URL —
  * never interpolate by hand, or a value containing `/` silently addresses a
  * different endpoint:
  *

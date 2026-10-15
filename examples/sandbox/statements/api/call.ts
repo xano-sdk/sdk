@@ -6,7 +6,7 @@
  * runtime object registry, and outside a workflow test that registry carries
  * only functions, tools and middleware — so an `s.api.call` in an endpoint or a
  * function deploys clean and then fails the first real request with
- * `ERROR_FATAL: Query does not exist`. `xanosdk export` refuses it for that
+ * `ERROR_FATAL: Query does not exist`. `npx @xano/sdk export` refuses it for that
  * reason. To reach one endpoint's logic from another, put the shared work in a
  * function and `s.function.run` it from both.
  *

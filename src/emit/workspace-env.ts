@@ -350,7 +350,7 @@ export function renderWorkspaceEnvExample(
 #     Those names are listed below; the values are yours to fill in.
 #   - ${backendDir}/.secrets.json — DOCUMENTATION tokens, addressed by the OBJECT
 #     that holds them (the workspace, or an API group). They have no name of
-#     their own, so they are not listed here at all. \`npx xanosdk pull\` writes that
+#     their own, so they are not listed here at all. \`npx @xano/sdk pull\` writes that
 #     file and every build reads it back; nobody edits it by hand. They are NOT
 #     backend variables: they never reach the workspace's env, and
 #     \`env("NAME")\` does not read them.
@@ -358,7 +358,7 @@ export function renderWorkspaceEnvExample(
 # To fill it in:
 #
 #   cp ${exampleFile} ${envFile}   # then edit in the values
-#   npx xanosdk env pull                        # or fetch them from a running backend
+#   npx @xano/sdk env pull                        # or fetch them from a running backend
 #
 # Every command that compiles a bundle (deploy, export, preflight) reads
 # ${envFile} by default. CI does not have it — the file is ignored — so an
@@ -380,8 +380,8 @@ export function renderWorkspaceEnvExample(
 #
 # This file is generated. Every pull, and every export, rewrites it from the
 # names the backend declares. ${envFile} is yours: neither touches it. Only
-# \`npx xanosdk env pull\` (which asks before replacing it), and \`npx xanosdk init --from\`
-# or \`npx xanosdk generate\` on a bundle that carries values, write it.
+# \`npx @xano/sdk env pull\` (which asks before replacing it), and \`npx @xano/sdk init --from\`
+# or \`npx @xano/sdk generate\` on a bundle that carries values, write it.
 `;
 
   if (names.length === 0) {
@@ -478,7 +478,7 @@ export function renderWorkspaceEnvFile(
 # at ${provenance.at}
 #
 # Every command that compiles a bundle reads this file by default. Re-running
-# \`npx xanosdk env pull\` REPLACES it wholesale.
+# \`npx @xano/sdk env pull\` REPLACES it wholesale.
 ${
   // A NAME no env var can have is said as the name's fault: blaming its value
   // ("no newlines or edge whitespace") sent the reader to a value that was fine.

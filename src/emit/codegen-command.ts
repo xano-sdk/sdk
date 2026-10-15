@@ -79,7 +79,6 @@ import {
   ephemeralNextStep,
   loginNextStep,
   planProfilePin,
-  projectCli,
   projectShellFiles,
   refuseFrontendOnlyFlags,
   resolveInitFrontend,
@@ -89,6 +88,7 @@ import {
   templateVarsFor,
   reportWorkflowPlacement,
 } from "./init-command.js";
+import { PROJECT_CLI } from "./invocation.js";
 import {
   adoptFromBundle,
   CANONICAL_PAYLOAD_KEYS,
@@ -1959,7 +1959,7 @@ function summarize(
     // An unverified tree: the check the warning above asks for is a step.
     (verified === null ? `  npm run xano:check     # confirm the tree compiles and the lock agrees\n` : ``) +
     `  npm run xano:deploy    # run it on the Xano Engine, on this machine\n` +
-    loginNextStep(pin, out) +
+    loginNextStep(pin) +
     ephemeralNextStep(scaffolded.framework !== "none");
   // Every line is indented, so `detail` leaves them where they are: nested
   // under the heading here, where plain `init` nests them too.
@@ -1980,8 +1980,8 @@ function summarize(
   const selector = refreshSelector(origin);
   const refresh =
     selector === undefined
-      ? `\`${projectCli(out)} pull <source>\` refreshes it from a live backend`
-      : `\`${projectCli(out)} pull ${shellWord(selector)}${origin.branch === undefined ? "" : ` --branch ${shellWord(origin.branch)}`}\` refreshes it from the same source`;
+      ? `\`${PROJECT_CLI} pull <source>\` refreshes it from a live backend`
+      : `\`${PROJECT_CLI} pull ${shellWord(selector)}${origin.branch === undefined ? "" : ` --branch ${shellWord(origin.branch)}`}\` refreshes it from the same source`;
   detail(
     `${s.bold(`${XANO_DIR}/`)} is your source now — commit it. ${refresh} (listing changes, ` +
       `keeping files you add). \`deploy\` REPLACES an ephemeral; \`promote\` reaches a real workspace.`,

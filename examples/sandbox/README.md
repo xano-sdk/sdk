@@ -46,9 +46,9 @@ npm test -- examples     # assert the sandbox exports as a valid workspace bundl
 ```
 
 The sandbox carries a `workflowTest()` (in `_capture.ts`). Once it is deployed, run it —
-and every saved unit test — with `xanosdk test run-all` (the backend you last deployed to;
+and every saved unit test — with `npx @xano/sdk test run-all` (the backend you last deployed to;
 `--on <backend>` names another), or deploy and run in one step with
-`xanosdk deploy ./index.ts --test`.
+`npx @xano/sdk deploy ./index.ts --test`.
 
 ## The loop, end to end
 
@@ -57,18 +57,18 @@ disposable ephemeral on Xano's cloud. Reaching anything real goes through a **re
 the stored record that this code came up and answered, cut from an ephemeral:
 
 ```bash
-xanosdk deploy ./index.ts --ephemeral --test   # stand it up on an ephemeral, run its tests
-xanosdk release create v1               # cut a release from what just ran
-xanosdk promote v1                      # land it, and read the branch back to check it arrived
-xanosdk tenant deploy acme v1           # or on a customer tenant
+npx @xano/sdk deploy ./index.ts --ephemeral --test  # stand it up on an ephemeral, run its tests
+npx @xano/sdk release create v1                     # cut a release from what just ran
+npx @xano/sdk promote v1                            # land it, and read the branch back to check it arrived
+npx @xano/sdk tenant deploy acme v1                 # or on a customer tenant
 ```
 
 `promote` names the workspace it is about to write to before it writes, and fails naming
 anything the release declared that did not land. To look at what staged:
 
 ```bash
-xanosdk workspace diff ./index.ts --branch <label>   # missing, differing, unexpected
-xanosdk workspace export --branch <label>            # or the whole bundle
+npx @xano/sdk workspace diff ./index.ts --branch <label>   # missing, differing, unexpected
+npx @xano/sdk workspace export --branch <label>            # or the whole bundle
 ```
 
 Going the other way — starting from a backend you did not author — is `pull`.
@@ -77,11 +77,11 @@ It takes the backend grammar every command shares (`release:<name>`,
 also takes a bundle path):
 
 ```bash
-xanosdk init app --from release:v1      # a whole project around a release
-xanosdk pull release:v1                 # or refresh xano/ in a project you have
-xanosdk deploy ./index.ts               # iterate on the Xano Engine
-xanosdk deploy ./index.ts --ephemeral   # stand it up where a release can be cut
-xanosdk release create v2               # cut the next one
+npx @xano/sdk init app --from release:v1      # a whole project around a release
+npx @xano/sdk pull release:v1                 # or refresh xano/ in a project you have
+npx @xano/sdk deploy ./index.ts               # iterate on the Xano Engine
+npx @xano/sdk deploy ./index.ts --ephemeral   # stand it up where a release can be cut
+npx @xano/sdk release create v2               # cut the next one
 ```
 
 `pull` **rewrites** the files it decodes, and deletes only a file a previous decode
@@ -90,7 +90,7 @@ lists the changes first and refuses uncommitted changes under `xano/` without
 `--yes`, which overwrites your edits to decoded files (and still keeps added ones).
 
 One escape hatch, deliberately less convenient than the path above:
-`xanosdk deploy ./index.ts --to workspace` merges the local build straight into a
+`npx @xano/sdk deploy ./index.ts --to workspace` merges the local build straight into a
 real destination. It keeps the checks that need a local build (`--dry-run`,
 `--prune`) and leaves nothing to roll back to.
 

@@ -2,7 +2,7 @@
  * `s.workflow_test.call({ workflowTest, datasource?, as? })` — run a workflow test.
  *
  * WORKFLOW TESTS ONLY — outside one the step fails the first real request with
- * `ERROR_FATAL: Workflow Test does not exist`, so `xanosdk export` refuses it.
+ * `ERROR_FATAL: Workflow Test does not exist`, so `npx @xano/sdk export` refuses it.
  * See `statements/api/call.ts` for why. Composing suites out of smaller tests is
  * what this statement is for.
  *

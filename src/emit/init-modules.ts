@@ -511,7 +511,7 @@ export function renderXanoIndexWithModules(
       note.push("", m.pkg, ...wrapAt(`${m.reason}.`, 72).map((line) => `  ${line}`), "");
       // Pointed at `marketplace details` rather than a README: it prints the
       // publisher's registration snippet (`--prompt` prints only the agent prompt).
-      const details = `npx xanosdk marketplace details ${m.pkg}`;
+      const details = `npx @xano/sdk marketplace details ${m.pkg}`;
       const lookup = m.readme === undefined ? `run \`${details}\`` : `see ${m.readme}`;
       if (m.register === undefined) {
         note.push(`  // ${lookup} for the export to call`);
@@ -766,7 +766,7 @@ function nearestExistingDir(dir: string): string {
 function wiringPointer(registration: ModuleRegistration): string {
   const details =
     registration.readme === undefined
-      ? `run \`npx xanosdk marketplace details ${registration.pkg} --prompt\` for its wiring`
+      ? `run \`npx @xano/sdk marketplace details ${registration.pkg} --prompt\` for its wiring`
       : `see ${registration.readme} (from the project root) for its wiring`;
   return registration.docs === undefined ? details : `${details}, or see ${registration.docs}`;
 }
@@ -790,7 +790,7 @@ export function partitionRegistrations(
       const names = missingRefs.map(([name]) => `\`${name}\``).join(", ");
       reason =
         `${registration.register}() needs ${names} from ${missing.join(", ")}, which this project does not have — ` +
-        `add it with ${missing.map((pkg) => `\`npx xanosdk marketplace install ${pkg}\``).join(", ")} and wire it as ` +
+        `add it with ${missing.map((pkg) => `\`npx @xano/sdk marketplace install ${pkg}\``).join(", ")} and wire it as ` +
         `that prints, uncommenting the ${registration.register}() call in xano/index.ts before its last step; ` +
         `or pass your own value for ${names}`;
       if (registration.optionsVerdict.kind === "accounted") options = registration.options;

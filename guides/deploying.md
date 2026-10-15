@@ -4,7 +4,7 @@ Authentication, ephemeral environments, static hosting, releasing to production,
 
 ## Signing in & deploying (in depth)
 
-**Sign in once** with `xanosdk login`. It runs the standard authorization-code + PKCE
+**Sign in once** with `npx @xano/sdk login`. It runs the standard authorization-code + PKCE
 browser flow (powered by the OpenID-certified [`openid-client`](https://github.com/panva/openid-client)):
 opens your browser, you approve, and the CLI captures the redirect on a `127.0.0.1`
 callback. On first use it dynamically registers its own OAuth client (RFC 7591) so the
@@ -15,20 +15,20 @@ read from the token's own `aud` claim.
 `login` also **pins the numeric workspace** you consented to into the credential, so every
 later command acts on exactly that workspace without looking it up again. There is **no
 `--workspace` flag** — a credential addresses exactly one instance and one workspace. Run
-`xanosdk workspace details` to see which.
+`npx @xano/sdk workspace details` to see which.
 
 The credential caches by default in a **shared** `~/.xanosdk/auth.json`, reusable
-from **any** project directory — so a single `xanosdk login` covers all your projects.
+from **any** project directory — so a single `npx @xano/sdk login` covers all your projects.
 Override the OAuth host with `--origin`/`$XANO_ORIGIN` and the loopback port with `--port`.
 
 **Named profiles.** That file holds any number of credentials, each under a name.
-`xanosdk login --profile staging` adds one without touching the others; `--profile <name>`
+`npx @xano/sdk login --profile staging` adds one without touching the others; `--profile <name>`
 (or `-p`) selects one for a single command. See [Credential profiles](#credential-profiles)
 below.
 
 **When the browser can't reach this machine** — a remote shell, a container, a
 Codespace — the `127.0.0.1` redirect lands nowhere and `login` waits five minutes for a
-callback that will never arrive. Run `xanosdk login --paste` instead. It binds nothing:
+callback that will never arrive. Run `npx @xano/sdk login --paste` instead. It binds nothing:
 it prints the authorize URL, you finish signing in in whatever browser you have, and
 your browser then fails to load the `127.0.0.1` callback — which is expected. Paste that
 URL back from the address bar (or just the `code=` value out of it) and the sign-in
@@ -54,14 +54,14 @@ already has `prod` proceeds to consent: the guard is per profile, not per file.
 `auth.json` holds a map of **named profiles** under a versioned envelope. Each profile is
 one credential — one instance, one workspace — in one of two shapes:
 
-- **`oauth`** — written by `xanosdk login`. Refreshes and rotates. Do not hand-edit.
+- **`oauth`** — written by `npx @xano/sdk login`. Refreshes and rotates. Do not hand-edit.
 - **`token`** — a meta API bearer token for the same meta APIs, for automation. No login
-  flow, no refresh, no rotation. Store one with `xanosdk profile add <name> --instance <url>
+  flow, no refresh, no rotation. Store one with `npx @xano/sdk profile add <name> --instance <url>
   --workspace-id <n>`, which prompts for the token (or reads it piped on stdin) rather than
   taking it as a flag (a secret on a command line lands in the process list and the shell
   history), and checks it against the instance before storing it. The token
-  itself stays valid until you revoke it wherever you minted it — `xanosdk logout` and
-  `xanosdk profile delete` only remove the CLI's copy.
+  itself stays valid until you revoke it wherever you minted it — `npx @xano/sdk logout` and
+  `npx @xano/sdk profile delete` only remove the CLI's copy.
 
 Both shapes work at **either** location (project-local `./.xano/auth.json` or global
 `~/.xanosdk/auth.json`) on the same file precedence ladder below.
@@ -71,15 +71,15 @@ Both shapes work at **either** location (project-local `./.xano/auth.json` or gl
 1. `--profile <name>` / `-p <name>` on the command line.
 2. `xano.profile.json` at the project root — a committed, secret-free pointer naming one
    profile, found by walking up from the working directory and stopping at the first
-   `package.json`. Write it with `xanosdk profile use <name>`. Nothing ambient outranks it:
+   `package.json`. Write it with `npx @xano/sdk profile use <name>`. Nothing ambient outranks it:
    a `$XANO_PROFILE` left in a shell rc cannot retarget a pinned project.
 3. `$XANO_PROFILE`.
-4. The credential file's own `default` key. Set it with `xanosdk profile set-default <name>`.
+4. The credential file's own `default` key. Set it with `npx @xano/sdk profile set-default <name>`.
 5. The literal name `default`.
 
-`xanosdk profile use` pins **this project**; `xanosdk profile set-default` changes **this
-machine**. `xanosdk profile list` shows every profile with the default and the active one
-marked, and `xanosdk whoami` and `xanosdk status` both report which profile is in play and
+`npx @xano/sdk profile use` pins **this project**; `npx @xano/sdk profile set-default` changes **this
+machine**. `npx @xano/sdk profile list` shows every profile with the default and the active one
+marked, and `npx @xano/sdk whoami` and `npx @xano/sdk status` both report which profile is in play and
 which rung chose it.
 
 Writes are serialised on a lock and merge one profile at a time, so signing in, signing
@@ -97,7 +97,7 @@ as a fallback**: it uses `./.xano/auth.json` when present, otherwise `~/.xanosdk
 so a `--local-auth` project keeps working without repeating the flag. `login` and `logout` do
 **not** fall back: they target the shared global cache unless you pass `--local-auth`. A `logout`
 naming a profile that only `./.xano/auth.json` holds exits 8 (not found in the shared file)
-and names `xanosdk logout --local-auth -p <name>` — it does not report the session as gone. A
+and names `npx @xano/sdk logout --local-auth -p <name>` — it does not report the session as gone. A
 logout clears stored profiles only: with the `XANO_*` credential variables still set, it
 says so, and commands keep authenticating with them. An explicit
 `--config`/`$XANO_CONFIG` wins over both default file locations; only the three-variable
@@ -131,15 +131,15 @@ Present only when they apply: `engine` (in place of `ephemeral`), `keepDataSkipp
 merge lists (see [Keeping your data between deploys](#keeping-your-data-between-deploys)),
 `static` (`url`; `canonical`, the build's identity, and `verified` when the frontend was
 confirmed live serving it; `staticEnv` — `{ injected, keys, documents, skipped?, reason? }` — when config was
-injected; or `error` with `retry`, the `xanosdk publish` that retries only the static step),
+injected; or `error` with `retry`, the `npx @xano/sdk publish` that retries only the static step),
 `microservices` (or `microservicesError`, `{ message, remedy }`, when their status could not be
 read after the deploy), `testRun` (`total` — the whole suite, `passed + failed + notRun` —
 `passed`, `failed`, `notRun`, and `tests[]` each with `kind`,
-`name`, `qualified` — the `type:object/name` form `xanosdk test run` takes (a query's object is its
+`name`, `qualified` — the `type:object/name` form `npx @xano/sdk test run` takes (a query's object is its
 lock key, `query:<group>|<verb>|<name>/<test>`), `workflow:<name>` for a workflow test — `object` for a
 unit test (a query's carries `group` and `verb`), `status`, `message` (the first failure),
 `expectations` for a unit test — every expectation in order, `{ index, status, message? }`, `index`
-from 0 — and `timing` for a workflow test — the engine reports none for a unit test; plus `error` and `retry`, the `xanosdk test run-all` to run
+from 0 — and `timing` for a workflow test — the engine reports none for a unit test; plus `error` and `retry`, the `npx @xano/sdk test run-all` to run
 again, when the suite could not be run — exit 6 — and `unreachable`, the tests it never reached
 (as `test run` takes them), when it stopped answering part-way; the same `N passed, M failed,
 K not run` line `test run-all` prints closes the run), `landingRecord` (`{ destination, file,
@@ -150,7 +150,7 @@ exists), `unconfigured`, and `passwordHashesUnverifiable` (below). The raw
 workspace blob is deliberately never dumped: it carries per-tenant secrets that must not land
 in shell history or CI logs.
 
-`xanosdk test run-all --json` (and `test run`, `test list`) writes the same per-test entries at
+`npx @xano/sdk test run-all --json` (and `test run`, `test list`) writes the same per-test entries at
 the top level, beside the backend they ran on: `kind`, `env` (the ephemeral's or tenant's handle;
 `null` for a Xano Engine or a workspace), `name` (the backend's own name whatever its kind — the
 same handle on an ephemeral or tenant, the engine's name on a Xano Engine) and `display` (its display
@@ -169,9 +169,9 @@ out and named (`--env-var GREETING`) — pass them again, or keep them in `xano/
 `xano/.secrets.json`, which a deploy reads. The same text is the `--json` error's `message`.
 
 **Where it goes** — the instance your **token is bound to** (the token's `aud`), never a
-flag. `xanosdk deploy --ephemeral` create-or-refreshes an **ephemeral**; a bare `xanosdk deploy`
+flag. `npx @xano/sdk deploy --ephemeral` create-or-refreshes an **ephemeral**; a bare `npx @xano/sdk deploy`
 runs the code on the Xano Engine on this machine instead ([below](#deploying-locally)). Reaching your real workspace is the separate release flow: cut a release from
-what ran, then `xanosdk promote <release>` lands it there as a new branch, leaving live
+what ran, then `npx @xano/sdk promote <release>` lands it there as a new branch, leaving live
 untouched until you say otherwise.
 
 **Static host** — `deploy --static <dir>` archives a directory and deploys it to a
@@ -188,13 +188,13 @@ path, a file, an empty directory, or a build whose compressed archive is over th
 cap is refused and nothing is deployed (`publish` checks the cap before it asks, too). An upload that fails
 after the backend landed leaves the backend in place and still writes the deploy's own `--json`
 summary (not a failure document), with `static` holding `error` (the reason, as printed),
-`retry` (the `xanosdk publish` that retries only the static step) and `completed`. The exit
+`retry` (the `npx @xano/sdk publish` that retries only the static step) and `completed`. The exit
 code says whether the frontend is up: `3` with `completed: "no"` when nothing was sent or the
 host refused it, `9` with `completed: "unknown"` when the upload was sent and its answer lost
 (a 5xx, a timeout, a dropped connection) — run `retry`, which settles it either way.
 
 A **replacing** deploy clears the target's static hosting — whatever the flags, the replace
-removes it — so a later plain `xanosdk deploy`, or `deploy --to … --replace` (a workspace, a
+removes it — so a later plain `npx @xano/sdk deploy`, or `deploy --to … --replace` (a workspace, a
 tenant, or an ephemeral named as one), takes a published frontend down. Before the import (and
 in a `--dry-run` plan) it reads which frontends the target is serving from the platform — one
 another project or the dashboard published included — warns naming each URL, and reports them
@@ -240,25 +240,25 @@ prebuilt `frontend/dist` can retarget any environment with no rebuild.
 > copy — `curl -s "$URL/?nocache=$(date +%s)"` — and check the fetched HTML for the injected
 > `window.XANO_HOST` line rather than retrying the same cached URL.
 
-`xanosdk status` prints the same **environment base URL** out of band, for cases where you'd
+`npx @xano/sdk status` prints the same **environment base URL** out of band, for cases where you'd
 rather bake it in at build time — along with the environment's name and expiry, without your
-having to know either. (`xanosdk whoami` prints the *instance* base URL, i.e. the account's
+having to know either. (`npx @xano/sdk whoami` prints the *instance* base URL, i.e. the account's
 origin rather than the environment.) A static failure after a committed backend deploy **does not roll
-back**: it exits `3` (`9` when the upload was sent and its answer lost) and prints the `xanosdk publish` command that retries just that
+back**: it exits `3` (`9` when the upload was sent and its answer lost) and prints the `npx @xano/sdk publish` command that retries just that
 step, without re-importing the backend.
 
-**Publishing a frontend on its own** — `xanosdk publish <dir>` uploads an already-built
+**Publishing a frontend on its own** — `npx @xano/sdk publish <dir>` uploads an already-built
 directory and nothing else: no compile, no backend import. `--to` picks the destination —
 `ephemeral[:<name>]`, `workspace`, or `tenant:<name>`; left off, the backend this project last
 deployed to — and a workspace or tenant asks before replacing what its users are served
 (`--yes` in CI). After a local deploy it publishes to that engine (`--to local`
-names it), server half included — the upload `xanosdk deploy --local --static <dir>`
+names it), server half included — the upload `npx @xano/sdk deploy --local --static <dir>`
 makes, without re-importing the backend (below). Scaffolded projects carry it as
 `npm run xano:deploy:frontend`, which rebuilds first.
 
 ```bash
-xanosdk promote v2 --set-live                     # the backend, landed and live
-xanosdk publish ./frontend/dist --to workspace --release v2 --branch <label> --yes
+npx @xano/sdk promote v2 --set-live                     # the backend, landed and live
+npx @xano/sdk publish ./frontend/dist --to workspace --release v2 --branch <label> --yes
 ```
 
 The destination's own URL is injected as `window.XANO_HOST` at publish time (under any
@@ -286,7 +286,7 @@ in `--json` `warnings` naming the build step.
 
 `deploy` reuses cached tokens and **refreshes them automatically** when the access token
 expires (Xano rotates the refresh token on every use; the new one is persisted). A rejected
-refresh (`invalid_grant`) clears the stale cache and tells you to `xanosdk login` again.
+refresh (`invalid_grant`) clears the stale cache and tells you to `npx @xano/sdk login` again.
 
 **CI & agents** run non-interactively. The credential to reach for is the **meta credential
 as three environment variables** — the `type: "token"` record above, with no file:
@@ -295,7 +295,7 @@ as three environment variables** — the `type: "token"` record above, with no f
 XANO_INSTANCE_URL=https://your-instance.xano.io \
 XANO_WORKSPACE_ID=3 \
 XANO_META_TOKEN=your-meta-api-token \
-  npx xanosdk deploy ./xano/index.ts --ephemeral
+  npx @xano/sdk deploy ./xano/index.ts --ephemeral
 ```
 
 Nothing is read from or written to disk, and nothing rotates, so the same three secrets keep
@@ -312,18 +312,18 @@ All three are required **together**. Setting some but not others is a hard error
 rest, rather than a quiet fallback to another credential — a workflow with one misspelled
 secret must not deploy against whatever happens to be on the runner.
 
-> **Automated agents:** do **not** invoke `xanosdk login` — it blocks on interactive browser
+> **Automated agents:** do **not** invoke `npx @xano/sdk login` — it blocks on interactive browser
 > consent. Use the three variables above.
 >
 > The older `$XANO_REFRESH_TOKEN` + `$XANO_CLIENT_ID` pair still works (both copied once
-> from the profile in `auth.json` after a local `xanosdk login`; the target instance is read from the refresh
+> from the profile in `auth.json` after a local `npx @xano/sdk login`; the target instance is read from the refresh
 > token's `aud` and the workspace resolved per run), but Xano **rotates refresh tokens on
 > use** — a stored one is spent by its first exchange, so a job that runs twice fails the
 > second time. Prefer the meta credential.
 
-## Checking against a live instance (xanosdk preflight)
+## Checking against a live instance (npx @xano/sdk preflight)
 
-`xanosdk preflight` proves your compiled output against a **real, running Xano
+`npx @xano/sdk preflight` proves your compiled output against a **real, running Xano
 instance** — not a static snapshot. It compiles your workspace, imports it into a
 **fresh ephemeral environment created for that run**, exports it back, and diffs it
 against what you compiled, so you catch three classes of problem a local build can't:
@@ -346,7 +346,7 @@ short expiry, so even a killed process leaves nothing permanent behind. A fresh
 environment per run is also what makes the diff trustworthy: the objects read back
 can only have come from this bundle, never from what a previous run left.
 
-**Setup** — nothing, if you have run `xanosdk login`. With no `XANO_VALIDATE_*`
+**Setup** — nothing, if you have run `npx @xano/sdk login`. With no `XANO_VALIDATE_*`
 variable set, `preflight` uses the credential the rest of the CLI already acts on
 and creates its ephemeral under the workspace that credential pins.
 
@@ -363,11 +363,11 @@ XANO_VALIDATE_TOKEN=your-meta-bearer-token
 ```
 
 ```bash
-xanosdk preflight ./xano/index.ts                      # import + round-trip diff, reports per object (every authored kind)
-xanosdk preflight ./xano/index.ts --runtime            # + run each deployed function
-xanosdk preflight ./xano/index.ts --capture            # + write fetched JSON to ./validate-out (fixture candidates)
-xanosdk preflight ./xano/index.ts --instance http://localhost:8080   # override the target for one run
-xanosdk preflight --bundle ws.json                     # check an already-exported bundle
+npx @xano/sdk preflight ./xano/index.ts                      # import + round-trip diff, reports per object (every authored kind)
+npx @xano/sdk preflight ./xano/index.ts --runtime            # + run each deployed function
+npx @xano/sdk preflight ./xano/index.ts --capture            # + write fetched JSON to ./validate-out (fixture candidates)
+npx @xano/sdk preflight ./xano/index.ts --instance http://localhost:8080   # override the target for one run
+npx @xano/sdk preflight --bundle ws.json                     # check an already-exported bundle
 ```
 
 Two sources, and the environment wins. Set any `XANO_VALIDATE_*` variable (or
@@ -395,7 +395,7 @@ const HOST = (typeof window !== "undefined" && window.XANO_HOST) || import.meta.
 ```
 
 `window.XANO_HOST` is the **environment** URL your deployed APIs answer at (the same value
-`xanosdk status` prints as the environment's URL); it is *not* `xanosdk whoami`, which prints
+`npx @xano/sdk status` prints as the environment's URL); it is *not* `npx @xano/sdk whoami`, which prints
 your account's instance origin. Because injection happens at deploy time, a prebuilt
 `frontend/dist` retargets any environment with **no rebuild** — ideal for headless agents.
 Add your own public config (base URLs, *publishable* keys) with `--static-env KEY=VALUE`
@@ -436,16 +436,16 @@ retrying the bare URL.
 
 | Command | Where it goes |
 |---|---|
-| `xanosdk deploy` | The **Xano Engine** on this machine — the default, with no flag and no Xano account needed ([below](#deploying-locally)). `--local` spells it out. |
-| `xanosdk deploy --ephemeral` | A disposable **ephemeral** environment on Xano's cloud — create-or-refreshed each run, auto-expiring, with its own URL. |
-| `xanosdk promote <release>` | Your **main Xano instance** workspace — the production target. Lands a release on a branch named for it (`--set-live` serves it). Its table changes reach live as it lands — see [what a landing does to tables](#what-a-landing-does-to-tables). |
-| `xanosdk tenant deploy <tenant> <release>` | A **customer tenant** — the same release, landed on someone else's deployment. It **replaces** what the tenant serves: anything the release does not carry is removed. Static hosting is kept. |
-| `xanosdk deploy --to <dest>` | The **escape hatch**: merges a local build straight into `workspace` or `tenant:<name>`, skipping the release record. |
-| `xanosdk test` | Nothing — it only reads. Runs the tests an already-deployed backend carries; `--on` picks which one, `local` and `workspace` included. |
+| `npx @xano/sdk deploy` | The **Xano Engine** on this machine — the default, with no flag and no Xano account needed ([below](#deploying-locally)). `--local` spells it out. |
+| `npx @xano/sdk deploy --ephemeral` | A disposable **ephemeral** environment on Xano's cloud — create-or-refreshed each run, auto-expiring, with its own URL. |
+| `npx @xano/sdk promote <release>` | Your **main Xano instance** workspace — the production target. Lands a release on a branch named for it (`--set-live` serves it). Its table changes reach live as it lands — see [what a landing does to tables](#what-a-landing-does-to-tables). |
+| `npx @xano/sdk tenant deploy <tenant> <release>` | A **customer tenant** — the same release, landed on someone else's deployment. It **replaces** what the tenant serves: anything the release does not carry is removed. Static hosting is kept. |
+| `npx @xano/sdk deploy --to <dest>` | The **escape hatch**: merges a local build straight into `workspace` or `tenant:<name>`, skipping the release record. |
+| `npx @xano/sdk test` | Nothing — it only reads. Runs the tests an already-deployed backend carries; `--on` picks which one, `local` and `workspace` included. |
 
 Not every instance has ephemeral environments enabled. Where they are off, `deploy --ephemeral`
-says so and names who can turn them on. A bare `deploy` (the Xano Engine), `xanosdk export` and
-`xanosdk preflight` still work meanwhile.
+says so and names who can turn them on. A bare `deploy` (the Xano Engine), `npx @xano/sdk export` and
+`npx @xano/sdk preflight` still work meanwhile.
 
 Every `deploy` is a **full replace** of the disposable environment — always fresh — unless
 you pass `--keep-data`. Landing somewhere real is the opposite by design: it changes what
@@ -461,7 +461,7 @@ object in `details.outOfScope`, and the rerun with `--yes` printed).
 
 ### Keeping your data between deploys
 
-`xanosdk deploy --keep-data` redeploys to your ephemeral or Xano Engine by **merging** into
+`npx @xano/sdk deploy --keep-data` redeploys to your ephemeral or Xano Engine by **merging** into
 what an earlier deploy put there, instead of replacing it. Code and schema changes land,
 objects removed from the project are deleted, and the rows already in the tables stay. Seed
 rows are not written again.
@@ -517,7 +517,7 @@ Before it writes, a merge prints what it will cost, without prompting:
 - every index it adds or drops;
 - every new table whose seed rows it does not write;
 - every env var whose project value differs from the live one — a merge keeps the live
-  value (`xanosdk env set <NAME> <value>` changes it). Only names are printed, never values;
+  value (`npx @xano/sdk env set <NAME> <value>` changes it). Only names are printed, never values;
 - every other object it deletes, named `<kind>:<name>` (`function:old_helper`,
   `query:GET ping (apiGroup shop)`).
 
@@ -530,7 +530,7 @@ and `omittedInsertsFail` / `setInsertsFail` when inserts fail; see below),
 `narrowedEnums` (`{ table, column, removed }`), `retargetedRefs` (`{ table, column, from, to }`),
 `indexChanges` (`{ table, index, action, unique }`), `notNullTightened` (`{ table, column, type }`),
 `removed`, `unseededTables` (new tables whose seed rows the merge did not
-write), `renamedTables` (each `{ from, to }`: renamed through `xanosdk lock rename`, rows kept),
+write), `renamedTables` (each `{ from, to }`: renamed through `npx @xano/sdk lock rename`, rows kept),
 `unchangedEnv` and `canonicalChanges` (each `{ kind, name, from, to }`: a public URL slug a
 changed `canonical` moved — every endpoint under `from` stops answering). A realtime server's
 moved slug, or a channel renamed in place, also leaves its `conversation` transcript and
@@ -539,7 +539,7 @@ the name back restores them. Columns are named
 `table.column` everywhere.
 
 The limits, in one place: rows survive only in tables and columns that keep their identity
-(a table renamed through `xanosdk lock rename` keeps its rows; an unrecorded rename is refused,
+(a table renamed through `npx @xano/sdk lock rename` keeps its rows; an unrecorded rename is refused,
 below); changed env values and a new table's seeds need `--reset`;
 a Xano Engine's rows last as long as its process (an engine update restarts it empty, and the
 next run seeds); and a test whose `datasource` is `"live"`
@@ -551,8 +551,8 @@ the environment keeps its data. Each refusal is exit 2 and names its remedy:
 - **A rename the lock was not told about** (`SDK_IDENTITY_CONFLICT`, `details.refused:
   "renamePending"`): the merge would drop a table `xano.lock` still pins, with its rows, while
   the project adds a new one. Each is in `details.renames[]` as `{ table, guid, candidates,
-  rename, prune }` — `rename` is the `xanosdk lock rename …` to run if it was renamed (the merge
-  then renames it and keeps its rows), `prune` the `xanosdk lock prune …` if it was deleted.
+  rename, prune }` — `rename` is the `npx @xano/sdk lock rename …` to run if it was renamed (the merge
+  then renames it and keeps its rows), `prune` the `npx @xano/sdk lock prune …` if it was deleted.
   Run one, then deploy again. When the new table's def pins its own `guid:`, `setGuid: { table,
   guid, pins }` replaces `rename`: set that def's `guid:` to `guid` — a def's guid replaces any
   lock entry, so a `lock rename` would not keep the rows. The lock marks such an entry
@@ -573,7 +573,7 @@ the environment keeps its data. Each refusal is exit 2 and names its remedy:
   a `canonical` written in code is served as declared or the merge is refused. The usual cause
   is an api group (toolset, realtime server) renamed while keeping its `canonical`: a merge
   creates the renamed object beside the old one, which still holds the slug. The entry carries
-  `heldBy` and `rename` — the `xanosdk lock rename …` that makes the merge rename it in place,
+  `heldBy` and `rename` — the `npx @xano/sdk lock rename …` that makes the merge rename it in place,
   keeping its URL. Otherwise pick another `canonical`, or `--reset`.
 - **A unique index the rows already there break** (`SDK_IMPORT_REFUSED`, `details.refused:
   "uniqueViolation"`, the indexes the merge adds in `details.indexes[]` as `{ table, index }`,
@@ -613,7 +613,7 @@ with `--to` (`--seed`, `--prune`, `--dry-run`, …) stay refused alongside it.
 
 ### Deploying locally
 
-A bare `xanosdk deploy` deploys to an engine running on this machine — no network round-trip
+A bare `npx @xano/sdk deploy` deploys to an engine running on this machine — no network round-trip
 per deploy. `--local` is that default spelled out, needed only to name an engine:
 `--local=<version|url|path>` runs that one instead of the pinned version. It needs nothing
 configured:
@@ -630,7 +630,7 @@ configured:
   `XANOSDK_NO_UPDATE_CHECK=1`). In an interactive terminal the deploy asks whether to update,
   defaulting to no — a version you declined is only noted afterwards, not asked again. In CI,
   piped output or `--json` it prints a one-line notice and keeps the pin. The pin never moves
-  without a yes or an explicit `xanosdk local update`.
+  without a yes or an explicit `npx @xano/sdk local update`.
 - **A running engine on a different version** than the one the project now resolves to — after
   an update, or after a teammate moved the pin — is stopped and replaced, and the deploy says
   so.
@@ -644,18 +644,18 @@ An engine update restarts the engine, and a restarted engine starts **empty**: t
 rather than merging, so rows entered through your app do not survive the upgrade.
 
 **Operating on it.** After a local deploy, the engine is the backend this project
-tracks, so bare `xanosdk test run-all`, `env set`, `env pull`, `tables`, `impersonate` and
+tracks, so bare `npx @xano/sdk test run-all`, `env set`, `env pull`, `tables`, `impersonate` and
 `status` reach it — none of them needs a Xano account. Name it explicitly as `local`,
-or `local:<name>` for another one from `xanosdk local list` (the full grammar is in
+or `local:<name>` for another one from `npx @xano/sdk local list` (the full grammar is in
 [the CLI guide](cli.md#naming-a-backend)). `publish` puts a built frontend on it without
 re-importing the backend. One command cannot serve it and refuses it by name: `release create`
 (the cut runs on the instance — pass `--from ephemeral`).
 
 | Command | What it does |
 |---|---|
-| `xanosdk local update` | Moves the pin to the latest engine (`--version <v>`: that one, downgrades included), downloads it, and restarts the project's running engine on it. Commit `package.json`. |
-| `xanosdk local cache list` | Each cached engine version, its size on disk, and the engines running on it. |
-| `xanosdk local cache clear` | Removes every cached engine (`--version <v>`: just that one). An engine running on a removed version is stopped first; the next deploy fetches it again. |
+| `npx @xano/sdk local update` | Moves the pin to the latest engine (`--version <v>`: that one, downgrades included), downloads it, and restarts the project's running engine on it. Commit `package.json`. |
+| `npx @xano/sdk local cache list` | Each cached engine version, its size on disk, and the engines running on it. |
+| `npx @xano/sdk local cache clear` | Removes every cached engine (`--version <v>`: just that one). An engine running on a removed version is stopped first; the next deploy fetches it again. |
 
 #### Connecting a coding agent
 
@@ -663,9 +663,9 @@ The Xano Engine serves an MCP server for coding agents, and a local deploy print
 for looking at the deployed backend (objects, table schemas, rows, run history), seeding and
 editing rows, and running functions, tasks, triggers, endpoints and tests by hand, each
 answering its result and logs. It never changes a primitive: tables, endpoints, functions and
-every other object change in `xano/` and ship with `xanosdk deploy`.
+every other object change in `xano/` and ship with `npx @xano/sdk deploy`.
 
-`xanosdk init` connects Claude Code (`.mcp.json`) and Cursor (`.cursor/mcp.json`) to it with one
+`npx @xano/sdk init` connects Claude Code (`.mcp.json`) and Cursor (`.cursor/mcp.json`) to it with one
 server, `xano-local`, that launches a bridge. This is the Claude Code `.mcp.json` entry; Cursor's
 appends `--project ${workspaceFolder}`, since Cursor does not promise to launch it inside the project:
 
@@ -679,29 +679,29 @@ before `npm install`). The config holds no url and no token. The engine may come
 always mints a new bearer, so the bridge looks both up when it needs them, and again when the
 engine stops answering or refuses the bearer. Before the first deploy the server connects and
 lists no tools; once an engine is up it tells the agent its tools changed. A call cut off after
-it reached the engine is reported as unknown, never sent twice. `xanosdk local mcp` prints the
+it reached the engine is reported as unknown, never sent twice. `npx @xano/sdk local mcp` prints the
 details and each agent's config line, and `init` in an existing project adds the server beside
 the ones a config already declares. An engine too old to serve MCP says so on deploy, and
-`xanosdk local update` moves the project to one that does. Claude Code asks once before it
+`npx @xano/sdk local update` moves the project to one that does. Claude Code asks once before it
 starts a project's server; a Cursor version that does not pick up the tool change needs the
 `xano-local` server refreshed in its MCP settings after the first deploy.
 
 #### A frontend on the Xano Engine, and server rendering
 
-`xanosdk deploy <entry> --local --static <dir>` publishes a built frontend to the
+`npx @xano/sdk deploy <entry> --local --static <dir>` publishes a built frontend to the
 engine's own static host after the import, as on an ephemeral, and reports it as `static.url`:
 `http://<prefix>.localhost:<port>`. Chrome, Firefox and Safari 26 resolve `*.localhost` to this
 machine by themselves (Safari on macOS 15 and earlier does not); a tool that does not resolve it
 can call the engine's own URL with a `Host: <prefix>.localhost:<port>` header. The engine needs a release
 that hosts static sites: an older one answers the upload with a 501, which the deploy reports
-without failing the backend (exit `3`), and `xanosdk local update` moves the pin on.
+without failing the backend (exit `3`), and `npx @xano/sdk local update` moves the pin on.
 
 The engine hosts built output only, and refuses a build of more than 20,000 files or 256 MB unpacked.
 The deploy checks both before the import, so an oversize directory stops the run with nothing
 written. A symbolic link in the directory is not uploaded.
 
 A SvelteKit app can also render on the server there. Build it with the SDK's adapter (it needs
-`esbuild` in the app: `npm i -D esbuild`). In a project `xanosdk init` scaffolded, SvelteKit's
+`esbuild` in the app: `npm i -D esbuild`). In a project `npx @xano/sdk init` scaffolded, SvelteKit's
 config is the object passed to `sveltekit()` in `vite.config.ts` (a `svelte.config.js` is ignored
 there), and it already builds with this adapter: stop prerendering the routes that should render
 per request (the scaffold prerenders every route from `frontend/src/routes/+layout.ts`):
@@ -763,14 +763,14 @@ its unpacked runtime files, its logs, and the records of running engines — bes
 fails names it.
 
 Expect it to reach roughly 600 MB after the first deploy, and to grow by a similar amount for
-each engine version you run, since every version unpacks its own copy. `xanosdk local cache
-list` shows its size, and `xanosdk local cache clear` (with no `--version`) removes it with the
+each engine version you run, since every version unpacks its own copy. `npx @xano/sdk local cache
+list` shows its size, and `npx @xano/sdk local cache clear` (with no `--version`) removes it with the
 engines once none is running — it names any engine still up; stop it and clear again. The next
 deploy recreates what it needs.
 
 Versions before this layout unpacked the same runtime into your own per-user cache directory.
 Nothing runs from that copy now; `cache list` shows it when it is there, and
-`xanosdk local cache clear --legacy-runtime` removes it after asking (`--yes` without a
+`npx @xano/sdk local cache clear --legacy-runtime` removes it after asking (`--yes` without a
 terminal).
 
 #### Running a different engine without moving the pin
@@ -806,21 +806,21 @@ unset XANOSDK_ENGINE_OVERRIDE        # next deploy is back on the pinned version
 `XANOSDK_ENGINE_RELEASES_URL` points version lookups at a different engine release service. Its
 engines are downloaded fresh on every deploy and kept apart from the version cache, and the
 deploy runs its latest without reading or writing the pin or checking for updates;
-`xanosdk local update` refuses while it is set.
+`npx @xano/sdk local update` refuses while it is set.
 
 ### The release flow
 
 This is the path to a real destination. Each step leaves something the next one can name:
 
 ```bash
-xanosdk deploy ./xano/index.ts --ephemeral --test   # 1. stand it up on an ephemeral, run its tests
-xanosdk release create v1               # 2. cut a release from what just ran (after a local deploy: --from ephemeral)
-xanosdk promote v1                      # 3. land it in your workspace, on a branch named for it
-xanosdk tenant deploy acme v1           #    …or on a customer tenant
+npx @xano/sdk deploy ./xano/index.ts --ephemeral --test  # 1. stand it up on an ephemeral, run its tests
+npx @xano/sdk release create v1                          # 2. cut a release from what just ran (after a local deploy: --from ephemeral)
+npx @xano/sdk promote v1                                 # 3. land it in your workspace, on a branch named for it
+npx @xano/sdk tenant deploy acme v1                      #    …or on a customer tenant
 ```
 
 Step 2 is what makes the rest re-runnable. A release is a stored record that this code came
-up and answered, so `promote v1` a week later lands the same bytes — and `xanosdk release
+up and answered, so `promote v1` a week later lands the same bytes — and `npx @xano/sdk release
 list` says what you have. Cut a release per merge, per tag, or per deploy you want to keep;
 an existing name is refused rather than replaced, because a tenant may be running it.
 
@@ -945,8 +945,8 @@ it on failure as well as success, once it knows what it was about to write. Ever
     { "name": "land", "completed": "unknown" },
     { "name": "verify", "completed": "skipped" }
   ],
-  "resolveWith": "xanosdk workspace branch list --json",
-  "resolveSteps": ["If \"v1-…\" is absent, nothing landed: re-run as `xanosdk promote v1 --branch v1-… --yes`.", "…"],
+  "resolveWith": "npx @xano/sdk workspace branch list --json",
+  "resolveSteps": ["If \"v1-…\" is absent, nothing landed: re-run as `npx @xano/sdk promote v1 --branch v1-… --yes`.", "…"],
   "startedAt": "2026-09-22T14:00:00.000Z",
   "resolveNotBefore": "2026-09-22T14:10:00.000Z",
   "error": { "code": "SDK_ERROR", "message": "…", "exitCode": 9 }   // only when the run failed
@@ -1053,12 +1053,12 @@ extra flags is not a release "without tables" — it has all of them.
 What it does not carry, unless you ask for it, is any table's **rows**:
 
 ```bash
-xanosdk tables                              # id, guid, and name — of what this project deployed to
-xanosdk tables ephemeral:e4f2-9ab1          # …or a named env (its name, not its display name)
-xanosdk tables tenant:acme                  # …or a tenant
-xanosdk tables workspace                    # …or your workspace
-xanosdk release create v1 --seed            # every table's rows ride along
-xanosdk release create v1 --seed=<guid>,<guid>   # only those two tables' rows
+npx @xano/sdk tables                              # id, guid, and name — of what this project deployed to
+npx @xano/sdk tables ephemeral:e4f2-9ab1          # …or a named env (its name, not its display name)
+npx @xano/sdk tables tenant:acme                  # …or a tenant
+npx @xano/sdk tables workspace                    # …or your workspace
+npx @xano/sdk release create v1 --seed            # every table's rows ride along
+npx @xano/sdk release create v1 --seed=<guid>,<guid>   # only those two tables' rows
 ```
 
 Rows are opt-in because a release is durable and can be landed on another environment; data
@@ -1080,7 +1080,7 @@ pointer without the file — on the backend it lands on, the row's file would be
 icon would answer 404. So `release create` refuses (`SDK_RELEASE_FILES_NOT_CARRIED`, exit 2) a
 cut whose source serves `hostedFile()` icons, or whose `--seed` selects a table with a file
 column while the source holds files. Land a project like that by deploying it directly, which
-ships its files: `xanosdk deploy --to tenant:<name> --seed`.
+ships its files: `npx @xano/sdk deploy --to tenant:<name> --seed`.
 
 List from **the source you are cutting from**, not from your workspace. A table this project
 deployed carries the guid `xano.lock` pins for it wherever it landed, but one created anywhere
@@ -1112,7 +1112,7 @@ list of them could not be read back reliably.
 >
 > What changes one is a **rename** — the name is what the guid derives from. A 32-hex guid that
 > no longer matches usually means the table was renamed or removed in code since it was noted;
-> `xanosdk lock rename` carries the identity across a rename you meant. A guid in the engine's own
+> `npx @xano/sdk lock rename` carries the identity across a rename you meant. A guid in the engine's own
 > shape (about 27 base64url characters) belongs to a table this project did not deploy, and does
 > not travel between backends.
 
@@ -1121,7 +1121,7 @@ source's real tables if one does not match, and names the listing verb for that 
 
 ### The alternative: merging a local build
 
-`xanosdk deploy <entry> --to workspace` (or `--to tenant:<name>`) skips the release record and
+`npx @xano/sdk deploy <entry> --to workspace` (or `--to tenant:<name>`) skips the release record and
 merges the build on your disk straight into the destination. Reach for it when you want the
 pre-flight the release path does not have — a plan preview, a prune scope, loss warnings —
 or when you are deleting objects, which a release does not do.
@@ -1180,11 +1180,11 @@ replace deletes them like any other.
 
 `--yes` does not cover this; it waives the confirmation, not the loss. To go
 ahead, pass `--allow-branch-deletion`. To keep the work first, export each branch
-on its own — a bare `xanosdk workspace export` reads the **live** branch, which is
+on its own — a bare `npx @xano/sdk workspace export` reads the **live** branch, which is
 the one a replace restores anyway:
 
 ```sh
-xanosdk workspace export --branch branch2
+npx @xano/sdk workspace export --branch branch2
 ```
 
 Or drop `--replace`: the default merge leaves other branches untouched. Tenants
@@ -1199,7 +1199,7 @@ read, which is not the same as nothing to lose.
 ### Where a release lives
 
 A release is always a record **in your workspace**, whatever it was cut from —
-that is what `xanosdk release list`, `promote`, and `tenant deploy` all read.
+that is what `npx @xano/sdk release list`, `promote`, and `tenant deploy` all read.
 
 Cutting from an environment is one call. The platform reads that environment's
 live state and writes the record here — **nothing is written to the
@@ -1208,9 +1208,9 @@ sandbox you cut from is left exactly as it was.
 
 Only a throwaway environment may be a source. `--from tenant:<name>` is accepted
 for an ephemeral or a sandbox, and refused for a `standard` or `run` tenant: that
-is a live deployment. `xanosdk tenant get <name>` names the last release landed
+is a live deployment. `npx @xano/sdk tenant get <name>` names the last release landed
 there, which lands anywhere as it is — but a `deploy --to` merge since may have
-changed what the tenant runs. To start from what it runs now, `xanosdk pull` it,
+changed what the tenant runs. To start from what it runs now, `npx @xano/sdk pull` it,
 deploy that to an ephemeral, and cut from there.
 
 Cutting `--from workspace` packages a branch directly — whatever the workspace
@@ -1224,18 +1224,18 @@ contents are not what its name claims.
 
 ### Moving a release to another workspace or instance
 
-`xanosdk release transfer <name> --to-profile <profile>` copies a stored release into the
+`npx @xano/sdk release transfer <name> --to-profile <profile>` copies a stored release into the
 workspace a stored credential profile is bound to — another workspace, or another
 instance. It moves the archive and nothing else: no compile, no branch, nothing lands.
 Run `promote` on the destination afterwards, exactly as you would at the source.
 
 ```bash
-xanosdk release transfer v1 --to-profile prod --dry-run   # is it already there?
-xanosdk release transfer v1 --to-profile prod --yes       # copy it
-xanosdk promote v1 --profile prod                         # land it there
+npx @xano/sdk release transfer v1 --to-profile prod --dry-run   # is it already there?
+npx @xano/sdk release transfer v1 --to-profile prod --yes       # copy it
+npx @xano/sdk promote v1 --profile prod                         # land it there
 ```
 
-`--to-profile` names a profile from `xanosdk profile list`; the run's own credential is the
+`--to-profile` names a profile from `npx @xano/sdk profile list`; the run's own credential is the
 source. A profile bound to the same instance and workspace is refused.
 
 A transfer decides "already there" by content, never by name or size: the sha256 of the
@@ -1257,15 +1257,15 @@ removes it.
 
 ### Pulling a backend into a project
 
-`xanosdk pull <source>` refreshes `xano/` in a project that already has a frontend, a lockfile,
-and a git history — where `xanosdk init --from <source>` writes a whole new project instead. It
+`npx @xano/sdk pull <source>` refreshes `xano/` in a project that already has a frontend, a lockfile,
+and a git history — where `npx @xano/sdk init --from <source>` writes a whole new project instead. It
 takes the same source vocabulary everything else does: `release:<name>`, `ephemeral:<name>`,
 `tenant:<name>`, `workspace`, or a bundle path.
 
 ```bash
-xanosdk pull release:v1        # refresh xano/ from a release (keeps files you added)
-xanosdk pull workspace         # …or from the live workspace
-xanosdk pull release:v1 --yes    # skip the confirmation and the dirty-tree refusal (CI)
+npx @xano/sdk pull release:v1        # refresh xano/ from a release (keeps files you added)
+npx @xano/sdk pull workspace         # …or from the live workspace
+npx @xano/sdk pull release:v1 --yes    # skip the confirmation and the dirty-tree refusal (CI)
 ```
 
 `pull` **replaces** and cannot merge: a file the previous decode wrote that this one does not
@@ -1287,7 +1287,7 @@ commands that record one are `deploy --to workspace`, a verified `promote`, `pul
 and `init --from workspace`. Commit it with the rest of the lock.
 
 ```bash
-xanosdk workspace diff ./xano/index.ts --json
+npx @xano/sdk workspace diff ./xano/index.ts --json
 ```
 
 ```jsonc
@@ -1357,9 +1357,9 @@ serves the branch until you promote it.
 `promote` lands a release on a branch and takes the same flag:
 
 ```bash
-xanosdk promote v1 --branch staging          # land the release there, live untouched
-xanosdk workspace branch list                # see what exists, and what is live
-xanosdk workspace branch set-live staging    # promote when you are happy
+npx @xano/sdk promote v1 --branch staging          # land the release there, live untouched
+npx @xano/sdk workspace branch list                # see what exists, and what is live
+npx @xano/sdk workspace branch set-live staging    # promote when you are happy
 ```
 
 A promote **always** lands on a branch, named or not: without `--branch` the label is derived
@@ -1371,17 +1371,17 @@ deleted afterwards, so the CLI names it rather than letting that happen.
 stage first and cut over immediately, or on its own as the one-shot to production:
 
 ```bash
-xanosdk promote v1 --set-live                # land on a derived branch and serve it
+npx @xano/sdk promote v1 --set-live                # land on a derived branch and serve it
 ```
 
 The merge path takes it too, when you want the preview a release cannot run:
 
 ```bash
-xanosdk deploy ./xano/index.ts --to workspace --branch staging --dry-run   # preview against the branch
-xanosdk deploy ./xano/index.ts --to workspace --branch staging             # land it, live untouched
+npx @xano/sdk deploy ./xano/index.ts --to workspace --branch staging --dry-run   # preview against the branch
+npx @xano/sdk deploy ./xano/index.ts --to workspace --branch staging             # land it, live untouched
 ```
 
-There, `--backup-branch` snapshots live first, so the way back is `xanosdk workspace branch
+There, `--backup-branch` snapshots live first, so the way back is `npx @xano/sdk workspace branch
 set-live <backup-label>`. That restores **logic only**: tables are shared by every branch, so a
 column or table the deploy dropped stays dropped, with its data, after the switch back. The
 data-safe path is before landing: read `droppedColumns` in the `--dry-run` plan, and keep the
@@ -1410,9 +1410,9 @@ are applied — even while the logic that reads them is staged on a branch. No o
 a half-data, half-logic change atomic; one order is simply less bad than the other:
 
 ```bash
-xanosdk workspace reset-tables ./index.ts --table <guid>          # dry run, per-table counts
-xanosdk workspace reset-tables ./index.ts --table <guid> --write  # then apply
-xanosdk promote v2                                                # then the logic
+npx @xano/sdk workspace reset-tables ./index.ts --table <guid>          # dry run, per-table counts
+npx @xano/sdk workspace reset-tables ./index.ts --table <guid> --write  # then apply
+npx @xano/sdk promote v2                                                # then the logic
 ```
 
 Rows first, then logic: new rows under old logic break only a feature you are removing, while
@@ -1466,7 +1466,7 @@ no longer defines is work to do, so that is not a no-op either.
 
 On the merge path, anything destructive is **previewed first** — the CLI fetches the plan,
 prints what would change, and asks (an ephemeral never does). `--yes` skips the prompt for CI but never skips the
-preview. Start with `xanosdk deploy ./xano/index.ts --to workspace --dry-run` to see the plan
+preview. Start with `npx @xano/sdk deploy ./xano/index.ts --to workspace --dry-run` to see the plan
 without committing to it. (`promote` runs no preview — the platform lands the release — which
 is the trade the release flow makes and says so before writing.)
 
@@ -1519,12 +1519,12 @@ by hand, or defined again, deployed, and then removed. A prune with no lock at a
 either, so it is the same refusal — `SDK_PRUNE_OUT_OF_SCOPE`, exit `2`, the refusal document
 under `--json` — saying there is no lock; reaching that usually means `--no-lock` suppressed
 it, and the remedy is the same one landing without `--prune` (and without `--no-lock`), then
-committing the lock. A lock alone does not unlock a prune: `xanosdk export` writes one with no
+committing the lock. A lock alone does not unlock a prune: `npx @xano/sdk export` writes one with no
 landing record. Deploying a pre-exported `--bundle` carries no entry file to find a lock beside,
 so name it with `--lock=<path>` — without one that is a usage error (exit `1`). None of
 that applies to an ephemeral: its record is `.xano/ephemeral.json` in the project the run is in —
 the directory you deploy from when it is a project (it has `.xano/` or its own `xano/` entry),
-otherwise the entry's (`suites/alpha/.xano/` for `xanosdk deploy suites/alpha/xano/index.ts` typed
+otherwise the entry's (`suites/alpha/.xano/` for `npx @xano/sdk deploy suites/alpha/xano/index.ts` typed
 from a repository root holding no project) — written lock or not, so a prune there needs no lock,
 and one refused there names that file and asks for a landing of that entry, with nothing to
 commit. The credential in `.xano/auth.json` is read from the same project. Commands that default
@@ -1569,7 +1569,7 @@ object this project would create under a name the workspace already holds with a
 identity is refused: the import would not update it, it would create a **second** object beside
 it under a suffixed name and report success — with an auth table, that binds every endpoint to
 one table while tokens are minted against the other. Three ways forward, all named in the
-message: adopt the objects that are already there with `xanosdk lock import` and commit the lock,
+message: adopt the objects that are already there with `npx @xano/sdk lock import` and commit the lock,
 rename yours, or release into a workspace that does not hold them. A workspace that could not be
 read refuses too — a failed read is not evidence that there is no collision.
 
@@ -1627,7 +1627,7 @@ and `XANO_META_TOKEN`, [above](#signing-in--deploying-in-depth) — no browser, 
 nothing that rotates:
 
 ```bash
-XANO_INSTANCE_URL=… XANO_WORKSPACE_ID=… XANO_META_TOKEN=… npx xanosdk deploy ./xano/index.ts --ephemeral
+XANO_INSTANCE_URL=… XANO_WORKSPACE_ID=… XANO_META_TOKEN=… npx @xano/sdk deploy ./xano/index.ts --ephemeral
 ```
 
 > ⚠️ A deploy without `--keep-data` is a full replace of the target environment, including

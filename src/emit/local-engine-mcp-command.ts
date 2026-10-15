@@ -13,8 +13,7 @@
 import { resolve } from "node:path";
 import type { ParsedArgs } from "./cli.js";
 import { isMachineOutput, writeJson } from "./output.js";
-import { MCP_CONFIGS, MCP_SERVER_NAME, mcpServerCommand, projectFileCli } from "./invocation.js";
-import { detectPackageManager } from "./package-manager.js";
+import { MCP_CONFIGS, MCP_SERVER_NAME, mcpServerCommand } from "./invocation.js";
 import { info, printHuman } from "./ui.js";
 import { resolveLiveEngine, type LocalEngineCommandOptions } from "./local-engine-command.js";
 
@@ -30,9 +29,7 @@ export async function runMcp(args: ParsedArgs, opts: LocalEngineCommandOptions):
   if (args.stdio) return runMcpStdio(args, opts);
   if (args.project !== undefined) process.chdir(resolve(args.project));
   const engine = await resolveLiveEngine(args.positionals[0], opts, "connect an agent to");
-  const dir = process.cwd();
-  const manager = detectPackageManager(dir, opts.env ?? process.env);
-  const server = mcpServerCommand(dir, manager);
+  const server = mcpServerCommand();
   if (engine.mcpUrl === undefined) {
     info(`Xano Engine ${engine.name} serves no MCP server for coding agents; \`xanosdk local update\` moves the project to one that does.`);
   }
@@ -52,7 +49,7 @@ export async function runMcp(args: ParsedArgs, opts: LocalEngineCommandOptions):
   const labels = MCP_CONFIGS.map((c) => `${c.path} (${c.agent})`);
   const width = Math.max(...labels.map((l) => l.length));
   const configs = MCP_CONFIGS.map((c, i) => {
-    const block = mcpServerCommand(dir, manager, c.workspaceFolder === undefined ? {} : { workspaceFolder: c.workspaceFolder });
+    const block = mcpServerCommand(c.workspaceFolder === undefined ? {} : { workspaceFolder: c.workspaceFolder });
     return `  ${labels[i]!.padEnd(width)}  ${JSON.stringify({ mcpServers: { [MCP_SERVER_NAME]: block } })}`;
   });
   printHuman(
@@ -121,9 +118,6 @@ async function runMcpStdio(args: ParsedArgs, opts: LocalEngineCommandOptions): P
         );
       },
       registerSecret,
-      // Spelled as the project's own files spell it: the reader is an agent
-      // working in the project, whatever launched this process.
-      cli: projectFileCli(cwd, detectPackageManager(cwd, env)),
     });
   } catch (err) {
     log(`xano-local MCP bridge stopped: ${(err as Error).message}`);

@@ -210,7 +210,7 @@ export const onChatConnect = realtimeServerTrigger({
  * said before I arrived", `replay` is the per-client "what I missed while
  * disconnected".
  *
- * A canonical is minted and frozen by `xanosdk export <entry>`, so these throw
+ * A canonical is minted and frozen by `npx @xano/sdk export <entry>`, so these throw
  * (rather than guess) until one is pinned in code or in `xano.lock`.
  */
 

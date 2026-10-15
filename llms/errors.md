@@ -37,7 +37,7 @@
 - `ERR_PACKAGE_PATH_NOT_EXPORTED` — `tsx -e "import …"`, or running from outside the project root; run a real file with `tsx <file.ts>` from the root. `llms/client.md`.
 - `Missing statement: mvp:placeholder` on import — an unconfigured slot in a pulled tree; replace it with the statement it stands in for. `llms/legacy.md`.
 - A CLI command fails under `--json` or piped (unless stdout carries data): stdout is `{ ok: false, error: { code, message, exitCode, details?, suggestion? } }`, as does a failed release write. Codes: `SDK_SEED_IN_STATIC` (`details.leaks[]` → `publicSeed`), `SDK_EXPORT_INVALID` (`details.diagnostics[]`, `--strict` too), `SDK_DRIFT`, `SDK_BRANCH_TAKEN`, `SDK_BRANCH_LIVE`, `SDK_RELEASE_NAME_TAKEN`, `SDK_RELEASE_FILES_NOT_CARRIED`, `SDK_LIVE_BRANCH_MISMATCH` (`details.conflictsWith`), `SDK_IDENTITY_CONFLICT`, `SDK_KIND_CONFLICT`, `SDK_PRUNE_OUT_OF_SCOPE`, `SDK_IMPORT_REFUSED`, `SDK_SHARED_SCHEMA_CHANGE`, `SDK_CONSTRAINT_VIOLATION`, `SDK_CREDENTIAL_REJECTED` (`details`: `{ profile, credentialType, instance, workspaceId, signIn }`; ids null on a refused env refresh), `SDK_WORKSPACE_CHANGED` (deploy over objects edited in Xano since the last sync; `details.objects`; pull first or `--overwrite`), `SDK_USAGE` (`details.reason: "needs-confirmation"`: run its `Re-run as`), `SDK_ERROR`. Landing refusal `details.refused`: identityConflict, renamePending, kindConflict, uniqueViolation, tableTrigger, importInProgress, importRefused, pruneOutOfScope. `warnings[]` / `details.warnings` / `accepted[]` entries: `{ code, message, subject? }` (`subject`: the def's `{ kind, name }`). Backend documents add `selector` and `workspaceId`.
-- A CLI command reports `could not reach <url>: fetch failed (<code>)` — blocked egress, not a bad credential; fix it before `xanosdk login`, which rotates a single-use refresh token.
+- A CLI command reports `could not reach <url>: fetch failed (<code>)` — blocked egress, not a bad credential; fix it before `npx @xano/sdk login`, which rotates a single-use refresh token.
 
 ### CLI exit codes
 
@@ -52,7 +52,7 @@ A failure document's `exitCode` matches.
 | 4 | `deploy --require-microservices`: a microservice was not ready in time. The backend landed. | Check the microservice. |
 | 5 | `test` / `deploy --test`: the suite ran and a test failed. A deploy is not retracted. | Fix the test or the code. |
 | 6 | `test`, `deploy --test`: the suite could not be reached. | Check the backend; rerun. |
-| 7 | `upgrade --check`: an upgrade is available. | `xanosdk upgrade`. |
+| 7 | `upgrade --check`: an upgrade is available. | `npx @xano/sdk upgrade`. |
 | 8 | A named backend could not be addressed (or a named release, profile, branch, test, module, lock entry, `--seed` guid or Xano Engine version is missing): gone, expired, unreachable, a stopped Xano Engine, or a busy import. | Retry, or redeploy. |
 | 9 | A write whose outcome is unknown, Ctrl-C during a write included. | Read the target's state before retrying. |
 | 130 | Ctrl-C outside a write or install. | — |

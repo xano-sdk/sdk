@@ -1,6 +1,6 @@
 # The scaffolded project
 
-What `xanosdk init` writes, the two frontend presets, a project with no frontend, adding the backend to an existing app, theming, add-ons, and the SvelteKit prerendering rules.
+What `npx @xano/sdk init` writes, the two frontend presets, a project with no frontend, adding the backend to an existing app, theming, add-ons, and the SvelteKit prerendering rules.
 
 ## init flags and add-ons
 
@@ -34,10 +34,10 @@ A scaffold ships `@xano/sdk` and nothing else from the `@xano-sdk` scope. Add-on
 install on demand:
 
 ```bash
-xanosdk marketplace list                      # every published add-on
-xanosdk marketplace search auth               # …or narrow by keyword
-xanosdk marketplace details @xano-sdk/auth      # what it installs + how to register it
-xanosdk marketplace install @xano-sdk/auth      # add it to the project you're in
+npx @xano/sdk marketplace list                      # every published add-on
+npx @xano/sdk marketplace search auth               # …or narrow by keyword
+npx @xano/sdk marketplace details @xano-sdk/auth      # what it installs + how to register it
+npx @xano/sdk marketplace install @xano-sdk/auth      # add it to the project you're in
 ```
 
 The three read verbs hit a public catalogue, so they work before you log in.
@@ -49,7 +49,7 @@ verbs, what each one does to a project, and how an add-on is configured.
 add-ons already wired:
 
 ```bash
-xanosdk init my-app --framework react --marketplace @xano-sdk/auth,@xano-sdk/vector
+npx @xano/sdk init my-app --framework react --marketplace @xano-sdk/auth,@xano-sdk/vector
 ```
 
 That installs each package **and** writes its registration into `xano/index.ts`.
@@ -67,7 +67,7 @@ have the value. A scaffold that compiles with an add-on switched off beats one
 that does not compile at all.
 
 Each `--marketplace` name is resolved through the marketplace first, exactly as
-`xanosdk marketplace install` resolves it: a module's package or its slug
+`npx @xano/sdk marketplace install` resolves it: a module's package or its slug
 (`--marketplace auth` installs `@xano-sdk/auth`, never npm's unrelated `auth`). A
 name the marketplace does not list stops `init` with **exit 8** before it writes
 anything. So does a package name the npm registry does not have — the same rule
@@ -188,11 +188,11 @@ The workflow installs with the project's package manager (npm, pnpm, yarn or bun
 and pull request. In a monorepo workspace member it installs at the workspace root and checks
 in the member's directory; move the file to the repository root's `.github/workflows/`, the
 only place GitHub reads it. That script runs three steps in order:
-`xanosdk routes ./xano/index.ts --emit xano/routes.gen.ts --strict`, which fails when the
+`npx @xano/sdk routes ./xano/index.ts --emit xano/routes.gen.ts --strict`, which fails when the
 committed route manifest the frontend takes its paths from is stale or missing; the project's
 typecheck (`tsc` on React, `svelte-kit sync && svelte-check` on Svelte, `tsc -p xano` with no
 frontend, each followed by `tsc -p xano/lambdas`); and
-`xanosdk export ./xano/index.ts --check --strict`: every check an export runs (a build warning fails it), under
+`npx @xano/sdk export ./xano/index.ts --check --strict`: every check an export runs (a build warning fails it), under
 `--frozen-lock`, writing nothing — no bundle, no lock. Because nothing is written, it
 reads no `xano/.env` or `xano/.secrets.json`, so the workflow needs no repository
 secrets, even for an API group whose docs are token-gated. It fails instead of
@@ -227,17 +227,17 @@ project's `package.json` under `"xanosdk"`, keyed by package name, so a choice m
 once survives to every later run.
 
 Those questions are asked wherever the project is reconciled — at `init`, and in a
-project that already exists. **`xanosdk marketplace install <package>` is not just
+project that already exists. **`npx @xano/sdk marketplace install <package>` is not just
 `npm install`:** it runs the module's questionnaire and writes both its settings and
 the `.gitattributes` lines it contributes. A module that arrived any other way — a
 plain `npm install`, a merged pull request, a `git pull` that changed
-`package.json` — is configured by running `xanosdk marketplace install` on it; until
+`package.json` — is configured by running `npx @xano/sdk marketplace install` on it; until
 then `export` and `deploy` report it as installed but never configured, and it runs
 on its own defaults.
 
-**`xanosdk marketplace reinstall <package>`** re-asks the questions, offering this
+**`npx @xano/sdk marketplace reinstall <package>`** re-asks the questions, offering this
 project's current settings as the defaults, and switches a module back on if it was
-turned off. **`xanosdk marketplace remove <package>`** uninstalls it and drops its
+turned off. **`npx @xano/sdk marketplace remove <package>`** uninstalls it and drops its
 settings and its contributed lines together. A plain `npm uninstall` leaves the
 `"xanosdk"` block behind, and a package that block names but that is no longer
 installed fails every `--frozen-lock` run until you run `reinstall` or `remove`.
@@ -259,14 +259,14 @@ Writing one is [The module contract](module-contract.md): the manifest fields, t
 command line:
 
 ```bash
-xanosdk init my-app --web
+npx @xano/sdk init my-app --web
 ```
 
 It is a launcher, not a second scaffolder: a configurator is downloaded on
 demand, serves a local page, and finishes by running `init` with the flags your
 choices imply — printing the equivalent command so the project stays
 reproducible from a script. Everything after `--web` is passed to it untouched,
-including `--help`, which is why that one form reaches the network. `xanosdk help
+including `--help`, which is why that one form reaches the network. `npx @xano/sdk help
 init` stays offline, like `init` itself.
 
 Because the configurator is fetched at run time, `--web` needs the npm registry
@@ -279,7 +279,7 @@ into `xano/index.ts` by hand after `npm install`.
 
 To point `npm run dev` at a real backend, copy `.env.example` to `.env.local` — both
 live at the **project root**, next to `vite.config.ts` — and set `VITE_XANO_HOST` to a
-deployed URL. Deployed builds don't need it: `xanosdk deploy <entry> --static <dir>` injects the
+deployed URL. Deployed builds don't need it: `npx @xano/sdk deploy <entry> --static <dir>` injects the
 backend URL as `window.XANO_HOST`, which takes precedence.
 
 The frontend ships `Button` and `Card` already vendored, plus a pre-configured
@@ -301,9 +301,9 @@ and there is no `tailwind.config.js`. That one stylesheet backs both frameworks.
 `init` renders it from a theme you choose, using shadcn's own two-part model:
 
 ```bash
-xanosdk init my-app --theme zinc-blue     # a base color, plus an accent over it
-xanosdk init my-app --theme stone         # a base color alone
-xanosdk init my-app --theme zinc --radius 0
+npx @xano/sdk init my-app --theme zinc-blue     # a base color, plus an accent over it
+npx @xano/sdk init my-app --theme stone         # a base color alone
+npx @xano/sdk init my-app --theme zinc --radius 0
 ```
 
 Base colors — the full token set: `neutral` (default), `stone`, `zinc`, `mauve`,
@@ -317,8 +317,8 @@ the chart ramp, and the sidebar primary: `amber`, `blue`, `cyan`, `emerald`,
 generator's, or your team's:
 
 ```bash
-xanosdk init my-app --theme https://ui.shadcn.com/r/themes/slate.json
-xanosdk init my-app --theme ./brand-theme.json
+npx @xano/sdk init my-app --theme https://ui.shadcn.com/r/themes/slate.json
+npx @xano/sdk init my-app --theme ./brand-theme.json
 ```
 
 `--radius <len>` overrides the corner radius (a bare number is rem). Everything
@@ -349,7 +349,7 @@ on every page load of your app, a failure behind a firewall, and a privacy
 question someone inherits later.
 
 ```bash
-xanosdk init my-app --font geist --font-heading instrument-serif --icons tabler
+npx @xano/sdk init my-app --font geist --font-heading instrument-serif --icons tabler
 ```
 
 - `--font <id>` — body text (Tailwind's `--font-sans`, which v4 also uses as the

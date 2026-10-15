@@ -49,7 +49,7 @@ import type { ParsedArgs, RouteManifestRefresh } from "./cli.js";
 import { backendDirIn } from "./backend-dir.js";
 import { isProjectDir } from "./xanosdk-project.js";
 import { relForwardSlash } from "../util/rel-path.js";
-import { installedCliAt, spellProjectCli } from "./invocation.js";
+import { PROJECT_CLI } from "./invocation.js";
 import { callsImportedAtTop, registerState, registerWrappers, withoutComments } from "./register-calls.js";
 import { missingArgument, unknownFlag, UsageError } from "./errors.js";
 import { indentBlock } from "./help.js";
@@ -1515,7 +1515,7 @@ async function reportNextStep(dir: string, spec: string): Promise<void> {
   }
   const manifest = readProjectManifest(dir);
   const present = new Set(manifest === null ? [] : declaredDependencies(manifest));
-  const cli = `${inProject(dir)}${installedCliAt(dir)}`;
+  const cli = `${inProject(dir)}${PROJECT_CLI}`;
   // Options from a package the project lacks: that package first, then the
   // call below compiles. Anything else unwritable is the module's to explain.
   const missing = [
@@ -1527,7 +1527,7 @@ async function reportNextStep(dir: string, spec: string): Promise<void> {
   ];
   const { unwired } = partitionRegistrations([registration], present);
   if (unwired.length > 0 && (missing.length === 0 || unwired[0]!.options === undefined)) {
-    detail(`Not registered yet — import it in your backend (\`xano/index.ts\`) and register it onto your workspace; ${spellProjectCli(unwired[0]!.reason, installedCliAt(dir)).replace(/`npx /g, `\`${inProject(dir)}npx `)}.`);
+    detail(`Not registered yet — import it in your backend (\`xano/index.ts\`) and register it onto your workspace; ${unwired[0]!.reason.replace(/`npx /g, `\`${inProject(dir)}npx `)}.`);
     return;
   }
   const first =

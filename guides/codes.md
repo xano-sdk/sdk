@@ -107,7 +107,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `local.runtime-kept` | Kept the unpacked runtime (…): … still running on it. |
 | `local.stale` | … is running …, but the engine cached here is …. |
 | `local.stop-failed` | … was listed as running but did not stop…. |
-| `local.version-invalid` | … This deploy runs the latest Xano Engine and the field is left as written — set it to a version like "v0.1.5", or run `xanosdk local update` to pin one. |
+| `local.version-invalid` | … This deploy runs the latest Xano Engine and the field is left as written — set it to a version like "v0.1.5", or run `npx @xano/sdk local update` to pin one. |
 | `lock.ceded-canonical` | A lock entry kept its guid but ceded its canonical to a live object; a rename moves the entry so the object keeps its URL. |
 | `lock.created-in-ci` | This lock was created in CI, which means the repository does not have one. |
 | `lock.dropped-entry` | A stale lock entry was dropped because its identity reappeared under a live name (a reverted or identity-keeping rename). |
@@ -125,7 +125,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `lock.rename-unchecked` | Could not evaluate … to check this rename, so nothing confirms "…" was renamed in code. |
 | `lock.repinned-table` | A table's def pins a new guid; xano.lock keeps the old one as `replaced`, so a keep-data deploy into an environment still holding it refuses rather than dropping its rows. |
 | `lock.repointed` | None of xano.lock's entries appear in …, so this tree now points at a different backend. |
-| `lock.root-shadowed` | A xano.lock also sits at the project root, but `xanosdk export` reads … (beside …), so …. |
+| `lock.root-shadowed` | A xano.lock also sits at the project root, but `npx @xano/sdk export` reads … (beside …), so …. |
 | `lock.write-failed` | Could not record the source's identities in xano.lock (…). |
 | `login.client-reregistered` | The registered client was rejected — re-registering and retrying once. |
 | `login.no-refresh-token` | No refresh token was issued (offline_access not granted); push will require re-login once the access token expires. |
@@ -201,7 +201,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `promote.seed-rows` | "…" carries rows for … table… (…), and they are not written: a promote lands logic on a branch, and tables are shared by every branch. |
 | `promote.server-release` | `promote` lands a release the server holds, so the local pre-flight did not run; what it checked instead is listed. |
 | `promote.suffixed-rename` | … look… like a suffixed rename of a declared name — check it is the object you meant. |
-| `promote.unverified` | Contents NOT verified — the release landed, but verification could not run (…) — check what landed with `xanosdk workspace export --branch … --path -…` |
+| `promote.unverified` | Contents NOT verified — the release landed, but verification could not run (…) — check what landed with `npx @xano/sdk workspace export --branch … --path -…` |
 | `publish.unbuilt-source` | The directory being published looks like frontend source, not a build output. |
 | `pull.env-check-failed` | Could not check …/… for missing values (…). |
 | `pull.kept-duplicates` | … kept file… objects the decoded tree declares too. |

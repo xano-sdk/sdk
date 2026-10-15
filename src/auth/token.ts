@@ -26,6 +26,7 @@ import {
   decodeAudience,
   type RawTokens,
 } from "./oauth.js";
+import { AGENT_SIGNUP_URL } from "./agent-signup.js";
 import {
   readCredential,
   readCredentialFile,
@@ -1115,10 +1116,18 @@ export class NotSignedInError extends Error {
    */
   readonly storedProfiles: readonly string[];
 
-  constructor(message: string, missingProfile?: ProfileSelection, storedProfiles: readonly string[] = []) {
+  /**
+   * No credential file and no credential variable: nothing has ever signed in
+   * on this machine, so the human is likely new to Xano and agentic signup
+   * leads the remedy. `status` reports it as `suggest: "signup"`.
+   */
+  readonly firstRun: boolean;
+
+  constructor(message: string, missingProfile?: ProfileSelection, storedProfiles: readonly string[] = [], firstRun = false) {
     super(message);
     if (missingProfile !== undefined) this.missingProfile = missingProfile;
     this.storedProfiles = storedProfiles;
+    this.firstRun = firstRun;
   }
 }
 
@@ -1249,11 +1258,31 @@ export function notSignedIn(
     );
   }
   if (available.length === 0) {
+    // Whether the human has an account is the question the fix turns on, and
+    // nothing here answers it: an agent that guessed "yes" from context told a
+    // new user to sign in to an account that did not exist. So the remedy asks.
+    // On a machine nothing has ever signed in on, the likelier answer is "no",
+    // and signup leads.
+    // On disk, not `file === null`: `profile show` passes an empty envelope for
+    // a missing file, and must say what `whoami` says.
+    const firstRun = !existsSync(path) && !hasCredentialEnv();
+    const login = `\`${loginCommand(DEFAULT_PROFILE, target)}\``;
+    const signup = `ask for their email and get them a free account; they confirm from an emailed link: ${AGENT_SIGNUP_URL}`;
+    const decision = firstRun
+      ? `Nothing has signed in on this machine, so your human is likely new to Xano. Offer a free account: ask for ` +
+        `their email and sign them up; they confirm from an emailed link: ${AGENT_SIGNUP_URL}\n` +
+        `If they say they already have a Xano account, they run ${login} instead.`
+      : `Ask your human whether they already have a Xano account. Don't guess from context.\n` +
+        `- Yes: they run ${login}.\n` +
+        `- No: ${signup}`;
     return new NotSignedInError(
-      `Not signed in (no credential at ${path}). ` +
-        `Run \`${loginCommand(DEFAULT_PROFILE, target)}\` to sign in, or store a meta API token with ` +
-        `\`xanosdk profile add <name>${credentialFileFlag(path)} --instance <url> --workspace-id <id>\`. ` +
-        `For CI, set XANO_INSTANCE_URL, XANO_WORKSPACE_ID and XANO_META_TOKEN together.`,
+      `Not signed in (no credential at ${path}). ${decision}\n` +
+        `Other ways in: store a meta API token with ` +
+        `\`xanosdk profile add <name>${credentialFileFlag(path)} --instance <url> --workspace-id <id>\`, or for CI ` +
+        `set XANO_INSTANCE_URL, XANO_WORKSPACE_ID and XANO_META_TOKEN together.`,
+      undefined,
+      [],
+      firstRun,
     );
   }
   const have = `Stored profiles: ${quotedNames(available)}.`;
@@ -1320,6 +1349,13 @@ export function notSignedIn(
   // The `--json` failure document's `suggestion`, as a usage failure's.
   if (near !== undefined) Object.defineProperty(err, "suggestion", { value: near, enumerable: true });
   return err;
+}
+
+/** Any Xano credential variable set, even one of a pair or triple. */
+function hasCredentialEnv(): boolean {
+  return ["XANO_INSTANCE_URL", "XANO_WORKSPACE_ID", "XANO_META_TOKEN", "XANO_REFRESH_TOKEN", "XANO_CLIENT_ID"].some(
+    (name) => readEnvVar(name) !== undefined,
+  );
 }
 
 /**

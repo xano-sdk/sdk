@@ -14,7 +14,7 @@ body:
       label: What you ran
       description: The `xanosdk` command (or the code) that triggered it.
       render: shell
-      placeholder: npx xanosdk deploy xano/index.ts
+      placeholder: npx @xano/sdk deploy xano/index.ts
     validations:
       required: true
 

@@ -11,7 +11,7 @@ Importing a def into a browser bundle or a Node script — for `getPath()`, `get
   ⚠ A FLOOR — **~267 kB minified (~65 kB gzipped)** for the FIRST def; splitting modules
   never removes it. The floor is the RUNTIME, not the def: a second or much richer def
   adds ~2 kB, so trimming a def does not shrink it.
-  Fix: `xanosdk routes <entry> --emit xano/routes.gen.ts` (`paths` is an accepted alias) — verbs, paths, and sockets as
+  Fix: `npx @xano/sdk routes <entry> --emit xano/routes.gen.ts` (`paths` is an accepted alias) — verbs, paths, and sockets as
   plain data importing NOTHING, still compile-checked: `routePath("GET blog/{slug}", { slug })`
   `channelPath("rooms/{room_id}", { room_id })`, `socketUrl("chat", baseUrl)` (tenant base
   URLs lifted to `wss://h/ws/<tenant>:<canonical>`), `mcpUrl("notes_mcp", baseUrl)` (an MCP
@@ -23,7 +23,7 @@ Importing a def into a browser bundle or a Node script — for `getPath()`, `get
   keep `InferInput` in code that already imports defs. They match `InferInput`, except a
   `dbLink` input appears as the linked table's columns (what the server accepts). Responses
   are not in the file: `InferResponse` on an `import type` of the def.
-  Runtime validation: `xanosdk marketplace install zod` adds `@xano-sdk/zod`, which writes
+  Runtime validation: `npx @xano/sdk marketplace install zod` adds `@xano-sdk/zod`, which writes
   `ROUTE_SCHEMAS`/`CHANNEL_SCHEMAS`/`MESSAGE_SCHEMAS` into the file under the same keys, each
   checked against its type at typecheck; the file then imports `zod`, never `@xano/sdk`.
 - **Verifying a def outside a bundler.** Inside a bundler (Vite/webpack) importing a
@@ -34,7 +34,7 @@ Importing a def into a browser bundle or a Node script — for `getPath()`, `get
   xanosdk CLI's own loader resolves). Running from outside the project root also breaks
   the `@xano/sdk` specifier resolution.
 
-**Reading the injected backend URL.** `xanosdk deploy <entry> --static <dir>` writes the deployed env's URL
+**Reading the injected backend URL.** `npx @xano/sdk deploy <entry> --static <dir>` writes the deployed env's URL
 into every html document: a prerendered build serves a different one per
 route, and a route without the global renders fine while every call goes to the wrong
 origin. Read it at runtime with a build-time fallback:
@@ -49,7 +49,7 @@ host falls back to '', and every call 404s off the dev server.
 ⚠ It is INJECTED in bracket form — `window["XANO_HOST"]="…"` — so verifying a deploy
 by grepping `window.XANO_HOST` matches nothing and reads as a failed inject. Grep the
 bare `XANO_HOST` token.
-**Frontend without the backend.** `xanosdk publish <dir> [--to <backend>]` uploads an
+**Frontend without the backend.** `npx @xano/sdk publish <dir> [--to <backend>]` uploads an
 already-built directory and nothing else — no compile, no import (scaffold script
 `npm run xano:deploy:frontend`). A Xano Engine (`--to local`, or bare after a local
 deploy) serves it, server half included, at `http://<prefix>.localhost:<port>`.
