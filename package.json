@@ -1,6 +1,6 @@
 {
   "name": "@xano/sdk",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "The official TypeScript SDK for Xano, one platform to build, run and govern AI-built software. Your coding agent writes the backend in TypeScript, you run it on the Xano Engine on your machine, then deploy it to Xano.",
   "keywords": [
     "xanosdk",

@@ -81,7 +81,7 @@ export function applySpecOverrides(spec: StatementSpec): void {
     findInput(spec, stored, "CLASS_OPTIONAL").optional = true;
   }
   for (const stored of CLASS_REQUIRED[spec.name] ?? []) {
-    const rule = findInput(spec, stored, "CLASS_REQUIRED");
+    const rule = findStored(spec, stored, "CLASS_REQUIRED");
     rule.optional = false;
     // A required field may not keep a DEFAULT, and this line is the whole
     // correction for the search family. `scripts/codegen.ts` computes authoring
@@ -178,6 +178,32 @@ function findInput(spec: StatementSpec, stored: string, table: string): FieldRul
 }
 
 /**
+ * The rule that writes a STORED key, on any route: an `input[]` name, or a
+ * context `path`, or `value` for a value spread flat into the context. Like {@link findInput}, keyed on what the engine reads, so a
+ * rule that authors one name and stores another (`array.find` authors `expr`
+ * and stores `array`) is matched by the stored one.
+ */
+function findStored(spec: StatementSpec, stored: string, table: string): FieldRule {
+  const rule = spec.rules.find((r) =>
+    r.route.kind === "input"
+      ? r.route.name === stored
+      : r.route.kind === "context-spread"
+        ? stored === "value"
+        : "path" in r.route
+          ? r.route.path === stored
+          : false,
+  );
+  if (!rule) {
+    throw new Error(
+      `${table}["${spec.name}"] names "${stored}", which the spec has no input or context rule for. ` +
+        `Either the upstream schema renamed it, or the entry is a typo — fix the table, ` +
+        `never the generated catalog.`,
+    );
+  }
+  return rule;
+}
+
+/**
  * Statements that BIND a result the upstream schema gives them no way to name.
  *
  * `as` is a member of every stored stack item, not an argument of a particular
@@ -256,6 +282,12 @@ const UNDECLARED_CONTEXT: Readonly<Record<string, FieldRule>> = {
 const UNDECLARED_INPUT: Readonly<Record<string, string>> = {
   "mvp:set_data_source": "workspace_id",
   "mvp:create_attachment": "type",
+  // Added to the engine's declared schema on 2026-10-09 (`terminate?=false:
+  // bool`), after the XanoScript schema was written. Live: on a timeout, `true`
+  // signals every still-outstanding async function to stop before the
+  // "Async timeout" throw; false or absent writes nothing. Appended last, which
+  // is where the class declares it.
+  "mvp:async_function_await": "terminate",
 };
 
 /**
@@ -538,6 +570,75 @@ const CLASS_REQUIRED: Readonly<Record<string, readonly string[]>> = {
   "mvp:amazon_opensearch_query": ["key_id", "access_key", "region", "base_url", "index", "payload"],
   "mvp:elasticsearch_query": ["key_id", "access_key", "base_url", "index", "payload"],
   "mvp:amazon_opensearch_document": ["key_id", "access_key", "region", "index", "doc_id", "doc"],
+  // ## Context-routed, 2026-10-17
+  //
+  // The first CONTEXT corrections: `spec-drift` compared context routes for
+  // the first time that day. Each one meets the same bar as the input ones above:
+  //  1. Class: declared bare, and read without a fallback.
+  //  2. Engine history: introduced bare and never loosened (`name` since 2020,
+  //     `precondition.expr` since 2020, the array/object fields since their
+  //     classes existed; a 2026 refactor into shared base classes moved them
+  //     verbatim).
+  //  3. Stored bytes: a 187-workspace sweep found NO real instance omitting any
+  //     of them. Every omission came from editor placeholders: one dev workspace
+  //     storing these statements with `context: {}`, and two all-empty stubs.
+  // And measured live (`scripts/probe-absent-context-field.ts`): absent `name`
+  // is `500 Missing var entry`, absent `array`/`left`/`right`/`collection` is
+  // `500 Unable to locate input`, absent condition is `500 Missing conditional
+  // statements`, and absent `object` returns `[]` at HTTP 200, a silent wrong
+  // answer.
+  //
+  // The update-var family: the variable to update.
+  ...Object.fromEntries(
+    [
+      "math_add", "math_sub", "math_mul", "math_div", "math_mod",
+      "text_append", "text_prepend", "text_trim", "text_ltrim", "text_rtrim",
+      "text_contains", "text_icontains", "text_starts_with", "text_istarts_with",
+      "text_ends_with", "text_iends_with",
+      "array_push", "array_pop", "array_shift", "array_unshift", "array_merge",
+      "bitwise_and", "bitwise_or", "bitwise_xor",
+    ].map((n) => [`mvp:${n}`, ["name"]]),
+  ),
+  // The array predicates: the list (authored `expr`) and the condition (authored `if`).
+  ...Object.fromEntries(
+    ["array_find", "array_filter", "array_every", "array_has", "array_partition", "array_find_index", "array_filter_count"].map(
+      (n) => [`mvp:${n}`, ["array", "expr"]],
+    ),
+  ),
+  // `value` too: every sibling update-var spec already requires it, and this one
+  // alone did not. Absent is `500 Variable is not an array.` (live).
+  "mvp:array_merge": ["name", "value"],
+  "mvp:array_difference": ["left", "right"],
+  "mvp:array_intersection": ["left", "right"],
+  "mvp:array_group_by": ["collection"],
+  "mvp:object_keys": ["object"],
+  "mvp:object_values": ["object"],
+  "mvp:object_entries": ["object"],
+  "mvp:precondition": ["expr"],
+  // ## The `test_expect_*` operands, 2026-10-17
+  //
+  // The class builds its schema in a loop (`value1` … `valueN`), which
+  // `spec-drift` could not read until that day. The corpus is DARK on the family
+  // (no stored instance in 187 workspaces), so this rests on the class and the
+  // runtime. Live (`scripts/probe-absent-expect-operand.ts`): an absent operand
+  // is SUBSTITUTED with `0`, the declared `tag?=const:int` default, and the
+  // assertion runs against it. 4 of 6 deliberately FAILING assertions then
+  // PASSED (`to_be_null`, `to_equal` either side, `to_be_greater_than`). An
+  // assertion that passes on an operand nobody wrote is the worst answer a
+  // test can give.
+  ...Object.fromEntries(
+    [
+      ["to_be_defined", 1], ["to_be_empty", 1], ["to_be_false", 1], ["to_be_true", 1],
+      ["to_be_null", 1], ["to_not_be_null", 1], ["to_not_be_defined", 1],
+      ["to_be_in_the_future", 1], ["to_be_in_the_past", 1],
+      ["to_equal", 2], ["to_not_equal", 2], ["to_be_greater_than", 2], ["to_be_less_than", 2],
+      ["to_contain", 2], ["to_start_with", 2], ["to_end_with", 2], ["to_match", 2],
+      ["to_be_within", 3],
+    ].map(([n, count]) => [
+      `mvp:test_expect_${n}`,
+      Array.from({ length: count as number }, (_, i) => `value${i + 1}`),
+    ]),
+  ),
 };
 
 /**
@@ -637,6 +738,24 @@ function reshapeInputs(spec: StatementSpec, wanted: readonly string[]): void {
 }
 
 /**
+ * Fields an engine class DECLARES that its runtime never reads, adjudicated.
+ *
+ * The opposite direction from {@link UNREAD_INPUT}: there the schema YAML
+ * declares a field the class ignores; here the class declares one itself and
+ * then ignores it. Audit metadata only. The catalog leaves these out on
+ * purpose, and `scripts/spec-drift.ts` prints the reason instead of asking.
+ */
+export const CLASS_UNREAD: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "mvp:test_expect_to_be_true": {
+    value2:
+      "the class sizes its loop-built schema at 2 operands, but the assertion reads " +
+      "only the first (`$vars[0] === true`). Every sibling single-operand assertion " +
+      "(`to_be_false`, `to_be_null`, ...) is sized at 1. A copied count, not a " +
+      "second operand",
+  },
+};
+
+/**
  * Fields an engine class declares BARE that are not requirements, adjudicated.
  *
  * Audit metadata, not a correction — nothing here changes a generated spec. The
@@ -691,6 +810,53 @@ export const ADJUDICATED_OPTIONAL: Readonly<
     sort: "a bare LIST (`sort[]`) — absent means unsorted",
     included_fields: "a bare LIST (`included_fields[]`) — absent means all fields",
     from: "the same `size?=null` / `from` paging pair as the Elasticsearch surface",
+  },
+  // Context-routed, 2026-10-17: the half of that day's findings that did NOT
+  // meet the bar (see the context block of CLASS_REQUIRED).
+  ...Object.fromEntries(
+    ["array_difference", "array_intersection", "array_group_by"].map((n) => [
+      `mvp:${n}`,
+      {
+        transform_value:
+          "every member of the declared block carries a default (`value?=\"$this\"`, " +
+          "`tag?=var`), so absent is the identity transform: the same reading the " +
+          "hand-authored `array_map` / `array_union` audit records",
+      },
+    ]),
+  ),
+  "mvp:precondition": {
+    error:
+      "an empty or absent error falls back to the fixed message \"Precondition failed.\" " +
+      "(live: `scripts/probe-absent-context-field.ts`). 12 of 1093 real instances omit " +
+      "it and 22 store it empty",
+    payload:
+      "read only once the condition has failed, and absent attaches no payload. 1068 of " +
+      "1093 real instances omit it",
+  },
+  "mvp:throw_error": {
+    name: "read as `?? \"\"`: the error code is optional. 2 of 9 real instances store it empty",
+  },
+  ...Object.fromEntries(
+    ["create_image", "create_audio", "create_video", "create_attachment"].map((n) => [
+      `mvp:${n}`,
+      {
+        filename:
+          "read inside a try/catch, and an empty name falls back to the uploaded file's own. " +
+          "49 of 53 real `create_image` instances omit it",
+      },
+    ]),
+  ),
+  ...Object.fromEntries(
+    ["zip_add_file_resource", "zip_delete_file_resource", "zip_extract_file_resource", "zip_view_contents"].map((n) => [
+      `mvp:${n}`,
+      { password: "passed through a default-password helper: absent means an unencrypted archive" },
+    ]),
+  ),
+  "mvp:zip_add_file_resource": {
+    password: "passed through a default-password helper: absent means an unencrypted archive",
+    password_encryption:
+      "passed through the matching default helper, and only meaningful beside a password. " +
+      "Both are already filled empty when absent (READ_UNCONDITIONALLY)",
   },
 };
 

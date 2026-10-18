@@ -1,13 +1,12 @@
 /**
- * `s.array.partition` — codegen'd declarative statement.
- * Generated from GENERATED_SPECS; edit freely to make it more illustrative.
+ * `s.array.partition` — splits the list into matching and non-matching items.
  */
-import { defineFunction, ref, s } from "@xano/sdk";
+import { c, defineFunction, expr, ref, s } from "@xano/sdk";
 
 export const arrayPartition = defineFunction({
   name: "ex_array_partition",
   stack: [
-    s.array.partition({ as: "result" }),
+    s.array.partition({ as: "result", expr: c.array([1, 2, 3, 4]), if: expr(c.expression("$this"), ">", c.int(2)) }),
   ],
   response: ref("result"),
 });

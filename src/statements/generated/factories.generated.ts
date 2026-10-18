@@ -42,38 +42,38 @@ export const generated = {
   },
   array: {
     difference: /** `mvp:array_difference` — fields: as, expr, value, by */
-(a: { as?: string; expr?: Value; value?: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_difference", a),
+(a: { as?: string; expr: Value; value: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:array_difference", a),
     every: /** `mvp:array_every` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_every", a),
+(a: { expr: Value; as?: string; if: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:array_every", a),
     filter: /** `mvp:array_filter` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_filter", a),
+(a: { expr: Value; as?: string; if: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:array_filter", a),
     filter_count: /** `mvp:array_filter_count` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_filter_count", a),
+(a: { expr: Value; as?: string; if: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:array_filter_count", a),
     find: /** `mvp:array_find` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_find", a),
+(a: { expr: Value; as?: string; if: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:array_find", a),
     find_index: /** `mvp:array_find_index` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_find_index", a),
+(a: { expr: Value; as?: string; if: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:array_find_index", a),
     group_by: /** `mvp:array_group_by` — fields: as, expr, by */
-(a: { as?: string; expr?: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_group_by", a),
+(a: { as?: string; expr: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:array_group_by", a),
     has: /** `mvp:array_has` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_has", a),
+(a: { expr: Value; as?: string; if: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:array_has", a),
     intersection: /** `mvp:array_intersection` — fields: as, expr, value, by */
-(a: { as?: string; expr?: Value; value?: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_intersection", a),
+(a: { as?: string; expr: Value; value: Value; by?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:array_intersection", a),
     merge: /** `mvp:array_merge` — fields: name, value */
-(a: { name?: string; value?: Value; disabled?: boolean; description?: string; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_merge", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:array_merge", a),
     partition: /** `mvp:array_partition` — fields: expr, as, if */
-(a: { expr?: Value; as?: string; if?: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_partition", a),
+(a: { expr: Value; as?: string; if: Condition; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:array_partition", a),
     pop: /** `mvp:array_pop` — fields: name, as */
-(a: { name?: string; as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:array_pop", a),
+(a: { name: string; as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:array_pop", a),
     push: /** `mvp:array_push` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string; output?: OutputAuthored }): Statement => fromSpec("mvp:array_push", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:array_push", a),
     shift: /** `mvp:array_shift` — fields: name, as */
-(a: { name?: string; as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:array_shift", a),
+(a: { name: string; as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:array_shift", a),
     unshift: /** `mvp:array_unshift` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:array_unshift", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:array_unshift", a),
   },
-  await: /** `mvp:async_function_await` — fields: as, ids, timeout */
-(a: { as?: string; ids?: Value; timeout?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:async_function_await", a),
+  await: /** `mvp:async_function_await` — fields: as, ids, timeout, terminate */
+(a: { as?: string; ids?: Value; timeout?: Value; terminate?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:async_function_await", a),
   cloud: {
     algolia: {
       request: /** `mvp:algolia_request` — fields: as, application_id, api_key, url, method, payload */
@@ -166,63 +166,63 @@ export const generated = {
   },
   expect: {
     to_be_defined: /** `mvp:test_expect_to_be_defined` — fields: expr */
-(a: { expr?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_be_defined", a),
+(a: { expr: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_be_defined", a),
     to_be_empty: /** `mvp:test_expect_to_be_empty` — fields: expr */
-(a: { expr?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_be_empty", a),
+(a: { expr: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_be_empty", a),
     to_be_false: /** `mvp:test_expect_to_be_false` — fields: expr */
-(a: { expr?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_be_false", a),
+(a: { expr: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_be_false", a),
     to_be_greater_than: /** `mvp:test_expect_to_be_greater_than` — fields: expr, value */
-(a: { expr?: Value; value?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_be_greater_than", a),
+(a: { expr: Value; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_be_greater_than", a),
     to_be_in_the_future: /** `mvp:test_expect_to_be_in_the_future` — fields: expr */
-(a: { expr?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_be_in_the_future", a),
+(a: { expr: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_be_in_the_future", a),
     to_be_in_the_past: /** `mvp:test_expect_to_be_in_the_past` — fields: expr */
-(a: { expr?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_be_in_the_past", a),
+(a: { expr: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_be_in_the_past", a),
     to_be_less_than: /** `mvp:test_expect_to_be_less_than` — fields: expr, value */
-(a: { expr?: Value; value?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_be_less_than", a),
+(a: { expr: Value; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_be_less_than", a),
     to_be_null: /** `mvp:test_expect_to_be_null` — fields: expr */
-(a: { expr?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_be_null", a),
+(a: { expr: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_be_null", a),
     to_be_true: /** `mvp:test_expect_to_be_true` — fields: expr */
-(a: { expr?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_be_true", a),
+(a: { expr: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_be_true", a),
     to_be_within: /** `mvp:test_expect_to_be_within` — fields: expr, min, max */
-(a: { expr?: Value; min?: Value; max?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_be_within", a),
+(a: { expr: Value; min: Value; max: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_be_within", a),
     to_contain: /** `mvp:test_expect_to_contain` — fields: expr, value */
-(a: { expr?: Value; value?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_contain", a),
+(a: { expr: Value; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_contain", a),
     to_end_with: /** `mvp:test_expect_to_end_with` — fields: expr, value */
-(a: { expr?: Value; value?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_end_with", a),
+(a: { expr: Value; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_end_with", a),
     to_equal: /** `mvp:test_expect_to_equal` — fields: expr, value */
-(a: { expr?: Value; value?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_equal", a),
+(a: { expr: Value; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_equal", a),
     to_match: /** `mvp:test_expect_to_match` — fields: expr, value */
-(a: { expr?: Value; value?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_match", a),
+(a: { expr: Value; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_match", a),
     to_not_be_defined: /** `mvp:test_expect_to_not_be_defined` — fields: expr */
-(a: { expr?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_not_be_defined", a),
+(a: { expr: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_not_be_defined", a),
     to_not_be_null: /** `mvp:test_expect_to_not_be_null` — fields: expr */
-(a: { expr?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_not_be_null", a),
+(a: { expr: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_not_be_null", a),
     to_not_equal: /** `mvp:test_expect_to_not_equal` — fields: expr, value */
-(a: { expr?: Value; value?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_not_equal", a),
+(a: { expr: Value; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_not_equal", a),
     to_start_with: /** `mvp:test_expect_to_start_with` — fields: expr, value */
-(a: { expr?: Value; value?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:test_expect_to_start_with", a),
+(a: { expr: Value; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:test_expect_to_start_with", a),
   },
   lambda: /** `mvp:lambda` — fields: as, code, timeout */
 (a: { as?: string; code: Value | LambdaBody<"s.lambda">; timeout?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:lambda", a),
   math: {
     add: /** `mvp:math_add` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string; output?: OutputAuthored }): Statement => fromSpec("mvp:math_add", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:math_add", a),
     bitwise: {
       and: /** `mvp:bitwise_and` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string; output?: OutputAuthored }): Statement => fromSpec("mvp:bitwise_and", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:bitwise_and", a),
       or: /** `mvp:bitwise_or` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string; output?: OutputAuthored }): Statement => fromSpec("mvp:bitwise_or", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:bitwise_or", a),
       xor: /** `mvp:bitwise_xor` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string; output?: OutputAuthored }): Statement => fromSpec("mvp:bitwise_xor", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:bitwise_xor", a),
     },
     div: /** `mvp:math_div` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:math_div", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:math_div", a),
     mod: /** `mvp:math_mod` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:math_mod", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:math_mod", a),
     mul: /** `mvp:math_mul` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:math_mul", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:math_mul", a),
     sub: /** `mvp:math_sub` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:math_sub", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:math_sub", a),
   },
   mcp: {
     oauth: {
@@ -242,14 +242,14 @@ export const generated = {
   },
   object: {
     entries: /** `mvp:object_entries` — fields: as, value */
-(a: { as?: string; value?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:object_entries", a),
+(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:object_entries", a),
     keys: /** `mvp:object_keys` — fields: as, value */
-(a: { as?: string; value?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:object_keys", a),
+(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:object_keys", a),
     values: /** `mvp:object_values` — fields: as, value */
-(a: { as?: string; value?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored } = {}): Statement => fromSpec("mvp:object_values", a),
+(a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:object_values", a),
   },
   precondition: /** `mvp:precondition` — fields: expr, error_type, error, payload */
-(a: { expr?: Condition; error_type?: string; error?: Value; payload?: Value; disabled?: boolean; description?: string } = {}): Statement => fromSpec("mvp:precondition", a),
+(a: { expr: Condition; error_type?: string; error?: Value; payload?: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:precondition", a),
   realtime: {
     get_session: /** `mvp:get_session` — fields: as */
 (a: { as?: string; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:get_session", a),
@@ -328,7 +328,7 @@ export const generated = {
     create_video: /** `mvp:create_video` — fields: as, value, access, filename */
 (a: { as?: string; value: Value; access?: string; filename?: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean; output?: OutputAuthored }): Statement => fromSpec("mvp:create_video", a),
     delete_file: /** `mvp:delete_file` — fields: pathname */
-(a: { pathname: Value; disabled?: boolean; description?: string; output?: OutputAuthored }): Statement => fromSpec("mvp:delete_file", a),
+(a: { pathname: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:delete_file", a),
     read_file_resource: /** `mvp:create_var_from_file_resource` — fields: as, value */
 (a: { as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:create_var_from_file_resource", a),
     sign_private_url: /** `mvp:vault_sign_url` — fields: as, pathname, ttl */
@@ -344,27 +344,27 @@ export const generated = {
   },
   text: {
     append: /** `mvp:text_append` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_append", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_append", a),
     contains: /** `mvp:text_contains` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_contains", a),
+(a: { name: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_contains", a),
     ends_with: /** `mvp:text_ends_with` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_ends_with", a),
+(a: { name: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_ends_with", a),
     icontains: /** `mvp:text_icontains` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_icontains", a),
+(a: { name: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_icontains", a),
     iends_with: /** `mvp:text_iends_with` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_iends_with", a),
+(a: { name: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_iends_with", a),
     istarts_with: /** `mvp:text_istarts_with` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_istarts_with", a),
+(a: { name: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_istarts_with", a),
     ltrim: /** `mvp:text_ltrim` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_ltrim", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_ltrim", a),
     prepend: /** `mvp:text_prepend` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_prepend", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_prepend", a),
     rtrim: /** `mvp:text_rtrim` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_rtrim", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_rtrim", a),
     starts_with: /** `mvp:text_starts_with` — fields: name, as, value */
-(a: { name?: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_starts_with", a),
+(a: { name: string; as?: string; value: Value; disabled?: boolean; description?: string; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:text_starts_with", a),
     trim: /** `mvp:text_trim` — fields: name, value */
-(a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_trim", a),
+(a: { name: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:text_trim", a),
   },
   throw: /** `mvp:throw_error` — fields: name, value */
 (a: { name?: string; value: Value; disabled?: boolean; description?: string }): Statement => fromSpec("mvp:throw_error", a),

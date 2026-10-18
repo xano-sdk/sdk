@@ -1,4 +1,4 @@
-# xanosdk v1.0.14
+# xanosdk v1.0.15
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 
@@ -1831,7 +1831,7 @@ Markers for stored shapes the checks refuse — keep them, not for new code:
 
 `s.throw` raises a named error `s.try_catch` catches; uncaught, it answers HTTP 200 `{ payload, statement: "Throw Error" }` (`s.precondition` sets a status). Inside `s.db.transaction` a throw or failed precondition rolls it back.
 
-- `s.await({ as?: string; ids?: value; timeout?: value })`
+- `s.await({ as?: string; ids?: value; timeout?: value; terminate?: value })`
 - `s.foreach_break` [special]
 - `s.comment` [special]
 - `s.conditional` [special]
@@ -1841,7 +1841,7 @@ Markers for stored shapes the checks refuse — keep them, not for new code:
 - `s.foreach` [special]
 - `s.group` [special]
 - `s.lambda({ as?: string; code: value; timeout?: value })`
-- `s.precondition({ expr?: comparison; error_type?: "standard" | "notfound" | "toomanyrequests" | "accessdenied" | "unauthorized" | "badrequest" | "inputerror"; error?: value; payload?: value })`
+- `s.precondition({ expr: comparison; error_type?: "standard" | "notfound" | "toomanyrequests" | "accessdenied" | "unauthorized" | "badrequest" | "inputerror"; error?: value; payload?: value })`
 - `s.return` [special]
 - `s.switch` [special]
 - `s.throw({ name?: string; value: value })`
@@ -1874,23 +1874,23 @@ Markers for stored shapes the checks refuse — keep them, not for new code:
 
 ### array
 
-- `s.array.difference({ as?: string; expr?: value; value?: value; by?: value })`
-- `s.array.every({ expr?: value; as?: string; if?: comparison })` [output] → as: boolean
-- `s.array.filter_count({ expr?: value; as?: string; if?: comparison })`
-- `s.array.filter({ expr?: value; as?: string; if?: comparison })`
-- `s.array.find_index({ expr?: value; as?: string; if?: comparison })`
-- `s.array.find({ expr?: value; as?: string; if?: comparison })` [output]
-- `s.array.group_by({ as?: string; expr?: value; by?: value })`
-- `s.array.has({ expr?: value; as?: string; if?: comparison })`
-- `s.array.intersection({ as?: string; expr?: value; value?: value; by?: value })`
+- `s.array.difference({ as?: string; expr: value; value: value; by?: value })`
+- `s.array.every({ expr: value; as?: string; if: comparison })` [output] → as: boolean
+- `s.array.filter_count({ expr: value; as?: string; if: comparison })`
+- `s.array.filter({ expr: value; as?: string; if: comparison })`
+- `s.array.find_index({ expr: value; as?: string; if: comparison })`
+- `s.array.find({ expr: value; as?: string; if: comparison })` [output]
+- `s.array.group_by({ as?: string; expr: value; by?: value })`
+- `s.array.has({ expr: value; as?: string; if: comparison })`
+- `s.array.intersection({ as?: string; expr: value; value: value; by?: value })`
 - `s.array.map` [special]
-- `s.array.merge({ name?: string; value?: value })` [output]
-- `s.array.partition({ expr?: value; as?: string; if?: comparison })`
-- `s.array.pop({ name?: string; as?: string })` [output]
-- `s.array.push({ name?: string; value: value })` [output]
-- `s.array.shift({ name?: string; as?: string })`
+- `s.array.merge({ name: string; value: value })` [output]
+- `s.array.partition({ expr: value; as?: string; if: comparison })`
+- `s.array.pop({ name: string; as?: string })` [output]
+- `s.array.push({ name: string; value: value })` [output]
+- `s.array.shift({ name: string; as?: string })`
 - `s.array.union` [special]
-- `s.array.unshift({ name?: string; value: value })`
+- `s.array.unshift({ name: string; value: value })`
 
 ### cloud
 
@@ -1967,24 +1967,24 @@ Markers for stored shapes the checks refuse — keep them, not for new code:
 
 Assertions. **Put them in a `workflowTest({...})` stack** — assert on what a `.call` bound with `as`. They are NOT inert elsewhere: a failure aborts the stack, so an `s.expect.*` in a `query`/`function`/`task` fails the request with HTTP 500 and the assertion's message (`to_equal failed - expected value 2 does not equal 1`) — remove it. `to_throw` sees only an error carrying a MESSAGE, so an empty-message failure (`ERROR_CODE_ACCESS_DENIED`) reports "response is ok", and `to_be_within` EXCLUDES both bounds — `min < expr < max` — while `s.security.random_number`'s are inclusive.
 
-- `s.expect.to_be_defined({ expr?: value })`
-- `s.expect.to_be_empty({ expr?: value })`
-- `s.expect.to_be_false({ expr?: value })`
-- `s.expect.to_be_greater_than({ expr?: value; value?: value })`
-- `s.expect.to_be_in_the_future({ expr?: value })`
-- `s.expect.to_be_in_the_past({ expr?: value })`
-- `s.expect.to_be_less_than({ expr?: value; value?: value })`
-- `s.expect.to_be_null({ expr?: value })`
-- `s.expect.to_be_true({ expr?: value })`
-- `s.expect.to_be_within({ expr?: value; min?: value; max?: value })`
-- `s.expect.to_contain({ expr?: value; value?: value })`
-- `s.expect.to_end_with({ expr?: value; value?: value })`
-- `s.expect.to_equal({ expr?: value; value?: value })`
-- `s.expect.to_match({ expr?: value; value?: value })`
-- `s.expect.to_not_be_defined({ expr?: value })`
-- `s.expect.to_not_be_null({ expr?: value })`
-- `s.expect.to_not_equal({ expr?: value; value?: value })`
-- `s.expect.to_start_with({ expr?: value; value?: value })`
+- `s.expect.to_be_defined({ expr: value })`
+- `s.expect.to_be_empty({ expr: value })`
+- `s.expect.to_be_false({ expr: value })`
+- `s.expect.to_be_greater_than({ expr: value; value: value })`
+- `s.expect.to_be_in_the_future({ expr: value })`
+- `s.expect.to_be_in_the_past({ expr: value })`
+- `s.expect.to_be_less_than({ expr: value; value: value })`
+- `s.expect.to_be_null({ expr: value })`
+- `s.expect.to_be_true({ expr: value })`
+- `s.expect.to_be_within({ expr: value; min: value; max: value })`
+- `s.expect.to_contain({ expr: value; value: value })`
+- `s.expect.to_end_with({ expr: value; value: value })`
+- `s.expect.to_equal({ expr: value; value: value })`
+- `s.expect.to_match({ expr: value; value: value })`
+- `s.expect.to_not_be_defined({ expr: value })`
+- `s.expect.to_not_be_null({ expr: value })`
+- `s.expect.to_not_equal({ expr: value; value: value })`
+- `s.expect.to_start_with({ expr: value; value: value })`
 - `s.expect.to_throw` [special]
 
 ### function
@@ -1994,14 +1994,14 @@ Assertions. **Put them in a `workflowTest({...})` stack** — assert on what a `
 
 ### math
 
-- `s.math.add({ name?: string; value: value })` [output] → as: number
-- `s.math.bitwise.and({ name?: string; value: value })` [output] → as: number
-- `s.math.bitwise.or({ name?: string; value: value })` [output] → as: number
-- `s.math.bitwise.xor({ name?: string; value: value })` [output] → as: number
-- `s.math.div({ name?: string; value: value })`
-- `s.math.mod({ name?: string; value: value })`
-- `s.math.mul({ name?: string; value: value })`
-- `s.math.sub({ name?: string; value: value })`
+- `s.math.add({ name: string; value: value })` [output] → as: number
+- `s.math.bitwise.and({ name: string; value: value })` [output] → as: number
+- `s.math.bitwise.or({ name: string; value: value })` [output] → as: number
+- `s.math.bitwise.xor({ name: string; value: value })` [output] → as: number
+- `s.math.div({ name: string; value: value })`
+- `s.math.mod({ name: string; value: value })`
+- `s.math.mul({ name: string; value: value })`
+- `s.math.sub({ name: string; value: value })`
 
 ### mcp
 
@@ -2021,9 +2021,9 @@ Assertions. **Put them in a `workflowTest({...})` stack** — assert on what a `
 
 ### object
 
-- `s.object.entries({ as?: string; value?: value })` [output] → as: [string, unknown][]
-- `s.object.keys({ as?: string; value?: value })` [output] → as: string[]
-- `s.object.values({ as?: string; value?: value })` [output] → as: unknown[]
+- `s.object.entries({ as?: string; value: value })` [output] → as: [string, unknown][]
+- `s.object.keys({ as?: string; value: value })` [output] → as: string[]
+- `s.object.values({ as?: string; value: value })` [output] → as: unknown[]
 
 ### realtime
 
@@ -2089,17 +2089,17 @@ Assertions. **Put them in a `workflowTest({...})` stack** — assert on what a `
 
 ### text
 
-- `s.text.append({ name?: string; value: value })`
-- `s.text.contains({ name?: string; as?: string; value: value })`
-- `s.text.ends_with({ name?: string; as?: string; value: value })`
-- `s.text.icontains({ name?: string; as?: string; value: value })`
-- `s.text.iends_with({ name?: string; as?: string; value: value })`
-- `s.text.istarts_with({ name?: string; as?: string; value: value })`
-- `s.text.ltrim({ name?: string; value: value })`
-- `s.text.prepend({ name?: string; value: value })`
-- `s.text.rtrim({ name?: string; value: value })`
-- `s.text.starts_with({ name?: string; as?: string; value: value })`
-- `s.text.trim({ name?: string; value: value })`
+- `s.text.append({ name: string; value: value })`
+- `s.text.contains({ name: string; as?: string; value: value })`
+- `s.text.ends_with({ name: string; as?: string; value: value })`
+- `s.text.icontains({ name: string; as?: string; value: value })`
+- `s.text.iends_with({ name: string; as?: string; value: value })`
+- `s.text.istarts_with({ name: string; as?: string; value: value })`
+- `s.text.ltrim({ name: string; value: value })`
+- `s.text.prepend({ name: string; value: value })`
+- `s.text.rtrim({ name: string; value: value })`
+- `s.text.starts_with({ name: string; as?: string; value: value })`
+- `s.text.trim({ name: string; value: value })`
 
 ### tool
 

@@ -1,13 +1,12 @@
 /**
- * `s.array.has` — codegen'd declarative statement.
- * Generated from GENERATED_SPECS; edit freely to make it more illustrative.
+ * `s.array.has` — whether any item matches (`true`).
  */
-import { defineFunction, ref, s } from "@xano/sdk";
+import { c, defineFunction, expr, ref, s } from "@xano/sdk";
 
 export const arrayHas = defineFunction({
   name: "ex_array_has",
   stack: [
-    s.array.has({ as: "result" }),
+    s.array.has({ as: "result", expr: c.array([1, 2, 3, 4]), if: expr(c.expression("$this"), ">", c.int(2)) }),
   ],
   response: ref("result"),
 });

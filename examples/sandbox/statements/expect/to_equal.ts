@@ -1,14 +1,16 @@
 /**
- * `s.expect.to_equal` — codegen'd declarative statement.
+ * `s.expect.to_equal` — assert the subject equals the expected value.
  * Hosted by a `workflowTest`: assertions belong there, and a failure raises
  * rather than being collected, so one left in a query/function 500s the request.
- * Generated from GENERATED_SPECS; edit freely to make it more illustrative.
+ * Every operand is required: an absent one is substituted with `0` and the
+ * assertion runs against that instead.
  */
-import { s, workflowTest } from "@xano/sdk";
+import { c, ref, s, workflowTest } from "@xano/sdk";
 
 export const expectToEqual = workflowTest({
   name: "ex_expect_to_equal",
   stack: [
-    s.expect.to_equal({}),
+    s.set_var("total", c.int(3)),
+    s.expect.to_equal({ expr: ref("total"), value: c.int(3) }),
   ],
 });

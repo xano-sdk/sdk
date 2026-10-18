@@ -8,6 +8,19 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.14 — Agents can sign you up
+
+_2026-10-15_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.14)
+
+When nothing is signed in, an agent working with the SDK now asks its human whether they already have a Xano account. If not, it can get them a free one, and the human confirms by email. Every printed and documented command is also now spelled `npx @xano/sdk`, which works in npm, yarn, pnpm and bun projects and outside any project.
+
+- A signed-out agent asks whether you have a Xano account
+- `status` reports when to offer signup
+- An expired temporary token says when and where to sign in
+- Every printed command is `npx @xano/sdk`
+
+---
+
 ## 1.0.13 — Docs that match the CLI
 
 _2026-10-14_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.13)

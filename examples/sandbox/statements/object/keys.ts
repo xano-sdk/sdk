@@ -1,13 +1,12 @@
 /**
- * `s.object.keys` — codegen'd declarative statement.
- * Generated from GENERATED_SPECS; edit freely to make it more illustrative.
+ * `s.object.keys` — the object's keys (`["a", "b"]`).
  */
-import { defineFunction, ref, s } from "@xano/sdk";
+import { c, defineFunction, ref, s } from "@xano/sdk";
 
 export const objectKeys = defineFunction({
   name: "ex_object_keys",
   stack: [
-    s.object.keys({ as: "result" }),
+    s.object.keys({ as: "result", value: c.obj({ a: 1, b: 2 }) }),
   ],
   response: ref("result"),
 });

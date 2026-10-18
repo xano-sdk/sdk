@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -766,14 +766,12 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": "[]"
+          "optional": false
         },
         {
           "name": "by",
@@ -794,8 +792,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "as",
@@ -806,8 +803,7 @@
         {
           "name": "if",
           "type": "comparison",
-          "optional": true,
-          "default": "null"
+          "optional": false
         }
       ],
       "result": {
@@ -826,8 +822,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "as",
@@ -838,8 +833,7 @@
         {
           "name": "if",
           "type": "comparison",
-          "optional": true,
-          "default": "null"
+          "optional": false
         }
       ]
     },
@@ -854,8 +848,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "as",
@@ -866,8 +859,7 @@
         {
           "name": "if",
           "type": "comparison",
-          "optional": true,
-          "default": "null"
+          "optional": false
         }
       ]
     },
@@ -882,8 +874,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "as",
@@ -894,8 +885,7 @@
         {
           "name": "if",
           "type": "comparison",
-          "optional": true,
-          "default": "null"
+          "optional": false
         }
       ]
     },
@@ -910,8 +900,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "as",
@@ -922,8 +911,7 @@
         {
           "name": "if",
           "type": "comparison",
-          "optional": true,
-          "default": "null"
+          "optional": false
         }
       ]
     },
@@ -944,8 +932,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "by",
@@ -966,8 +953,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "as",
@@ -978,8 +964,7 @@
         {
           "name": "if",
           "type": "comparison",
-          "optional": true,
-          "default": "null"
+          "optional": false
         }
       ]
     },
@@ -1000,14 +985,12 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": "[]"
+          "optional": false
         },
         {
           "name": "by",
@@ -1034,13 +1017,12 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true
+          "optional": false
         }
       ]
     },
@@ -1055,8 +1037,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "as",
@@ -1067,8 +1048,7 @@
         {
           "name": "if",
           "type": "comparison",
-          "optional": true,
-          "default": "null"
+          "optional": false
         }
       ]
     },
@@ -1083,8 +1063,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "as",
@@ -1105,8 +1084,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -1126,8 +1104,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "as",
@@ -1155,8 +1132,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -1190,6 +1166,11 @@
           "type": "value",
           "optional": true,
           "default": "10"
+        },
+        {
+          "name": "terminate",
+          "type": "value",
+          "optional": true
         }
       ]
     },
@@ -2954,8 +2935,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -2979,8 +2959,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -3004,8 +2983,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -3029,8 +3007,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -3054,8 +3031,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -3075,8 +3051,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -3096,8 +3071,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -3117,8 +3091,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -3282,8 +3255,7 @@
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ],
       "result": {
@@ -3307,8 +3279,7 @@
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ],
       "result": {
@@ -3332,8 +3303,7 @@
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ],
       "result": {
@@ -3352,8 +3322,7 @@
         {
           "name": "expr",
           "type": "comparison",
-          "optional": true,
-          "default": "null"
+          "optional": false
         },
         {
           "name": "error_type",
@@ -4365,8 +4334,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4381,8 +4349,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4397,8 +4364,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4413,14 +4379,12 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4435,8 +4399,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4451,8 +4414,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4467,14 +4429,12 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4489,8 +4449,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4505,8 +4464,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4521,20 +4479,17 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "min",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "max",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4549,14 +4504,12 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4571,14 +4524,12 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4593,14 +4544,12 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4615,14 +4564,12 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4637,8 +4584,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4653,8 +4599,7 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4669,14 +4614,12 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -4691,14 +4634,12 @@
         {
           "name": "expr",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
           "type": "value",
-          "optional": true,
-          "default": ""
+          "optional": false
         }
       ]
     },
@@ -5039,8 +4980,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -5060,8 +5000,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "as",
@@ -5086,8 +5025,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "as",
@@ -5112,8 +5050,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "as",
@@ -5138,8 +5075,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "as",
@@ -5164,8 +5100,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "as",
@@ -5190,8 +5125,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -5211,8 +5145,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -5232,8 +5165,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",
@@ -5253,8 +5185,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "as",
@@ -5279,8 +5210,7 @@
         {
           "name": "name",
           "type": "string",
-          "optional": true,
-          "default": ""
+          "optional": false
         },
         {
           "name": "value",

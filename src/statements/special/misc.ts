@@ -691,9 +691,9 @@ export function expectToThrow(a: ExpectToThrowArgs): Statement {
 
 export interface ExpectToMatchArgs extends StatementAnnotations {
   /** The value under test — the SUBJECT the pattern is matched against. */
-  expr?: Value;
+  expr: Value;
   /** The regex PATTERN. Build it with `c.regex(...)`, not `c.text(...)`. */
-  value?: Value;
+  value: Value;
 }
 
 const EXPECT_TO_MATCH_KEYS = /* @__PURE__ */ Object.keys({ expr: 1, value: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<ExpectToMatchArgs>, 1>);
@@ -716,7 +716,7 @@ const EXPECT_TO_MATCH_KEYS = /* @__PURE__ */ Object.keys({ expr: 1, value: 1, di
  * `c.regex`, while a `ref`/`inp`/`env` pattern — whose text is not visible here —
  * is passed through untouched.
  */
-export function expectToMatch(a: ExpectToMatchArgs = {}): Statement {
+export function expectToMatch(a: ExpectToMatchArgs): Statement {
   a = argsOrEmpty(a);
   assertKnownKeys(`Statement "s.expect.to_match"`, a, EXPECT_TO_MATCH_KEYS);
   // Operand order first, for the same reason `withFilters` checks it first:

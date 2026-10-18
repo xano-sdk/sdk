@@ -26,7 +26,7 @@
  * logged, never guessed.
  */
 import type { Statement } from "../statement.js";
-import { registerStatement, annotate, readableStatementName } from "../statement.js";
+import { registerStatement, annotate, assertBindsAs, readableStatementName } from "../statement.js";
 import type { Value } from "../../values/value.js";
 import type { MockMap } from "../../values/mock.js";
 import type { FilterXdo } from "../../types/xdo.js";
@@ -409,6 +409,11 @@ export function encodeFromSpec(spec: StatementSpec, authored: Authored): Stateme
   });
   if (env?.settingsRegistry) stmt.settings_registry = [];
   if (spec.output) {
+    // The engine applies a statement's output envelope (selection AND filter
+    // chain) to the result it binds to `as`, and only then: with no binding the
+    // trimmed result is discarded and the block is stored but never acts.
+    // Refused here for the same reason `asFilters` is.
+    if (authoredOut && hasOutputContent(authoredOut)) assertBindsAs(stmt, "output");
     const base = env?.richOutput ? { customize: false, filters: [], items: [] } : { filters: [] };
     // Reserved envelope key: authored output shaping merged over the default —
     // and over whatever `annotate` already wrote, so an `asFilters` chain on a
@@ -418,6 +423,11 @@ export function encodeFromSpec(spec: StatementSpec, authored: Authored): Stateme
   }
   if (env?.addon) stmt.addon = [];
   return stmt;
+}
+
+/** Whether an authored envelope asks the engine to do anything (vs. restating the empty default). */
+function hasOutputContent(out: OutputAuthored): boolean {
+  return out.customize === true || (out.items?.length ?? 0) > 0 || (out.filters?.length ?? 0) > 0;
 }
 
 /** Register a spec on the statement registry; returns its factory. */
