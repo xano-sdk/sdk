@@ -13,6 +13,12 @@
  * `datasource` is left off on purpose. Omitted means an EMPTY datasource — the
  * recommended setting. Naming one makes the engine CLONE that datasource before
  * the test runs, which against production-sized data is slow enough to fail.
+ *
+ * ⚠ A failing child does NOT fail this test: the call binds the child's
+ * `{ code, message }` error to `as` and the parent runs on. A passing child
+ * binds `null`, so `to_be_null` on the binding is what makes the child count.
+ * Export warns
+ * `workflow-test.unchecked-child` when nothing reads the binding.
  */
 import { workflowTest, s, ref } from "@xano/sdk";
 import { doubleFnTest } from "../../kinds/workflowTest.js";
@@ -21,6 +27,6 @@ export const workflowTestCallTest = workflowTest({
   name: "ex_workflow_test_call",
   stack: [
     s.workflow_test.call({ workflowTest: doubleFnTest, as: "result" }),
-    s.expect.to_be_defined({ expr: ref("result") }),
+    s.expect.to_be_null({ expr: ref("result") }),
   ],
 });

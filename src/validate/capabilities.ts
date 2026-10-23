@@ -31,6 +31,17 @@ export interface Capability {
   readonly label: string;
   /** What stops working without it. */
   readonly effect: string;
+  /**
+   * Set when the local Xano Engine (the default `deploy` target) is KNOWN to
+   * lack it: what to do instead. Absent means nothing is known either way.
+   */
+  readonly localEngine?: string;
+  /**
+   * What the local Xano Engine answers a statement needing it, quoted. Set with
+   * {@link localEngine}: a deploy that KNOWS it is landing on the local engine
+   * reports the capability as unavailable there, rather than as unchecked.
+   */
+  readonly localEngineRefusal?: string;
 }
 
 /**
@@ -51,7 +62,11 @@ export const CAPABILITIES = {
   },
   premiumInstance: {
     label: "a premium instance",
-    effect: "`s.await` (awaiting an async function run) and direct SQL",
+    effect: "`s.await` (awaiting an async function run), an `async-shared` run, and direct SQL",
+  },
+  asyncDedicated: {
+    label: "dedicated async workers",
+    effect: "an `async-dedicated` `s.function.run` or `s.ai.agent.run`",
   },
   directQuery: {
     label: "direct-query support",
@@ -84,6 +99,10 @@ export const CAPABILITIES = {
   privateStorage: {
     label: "private file storage",
     effect: "`s.storage.sign_private_url`",
+    // Measured: every call answers 403 "Not supported. Please upgrade your Xano
+    // instance." on the local engine, 200 with a signed URL on an ephemeral.
+    localEngine: "the local Xano Engine refuses it (403 `Not supported`) — exercise it on an ephemeral (`deploy --ephemeral`)",
+    localEngineRefusal: '403 "Not supported. Please upgrade your Xano instance."',
   },
   webflow: { label: "the Webflow integration", effect: "`s.webflow.request`" },
   datadog: { label: "the Datadog integration", effect: "every `s.datadog.*` statement" },
@@ -122,6 +141,7 @@ export const STATEMENT_CAPABILITIES: Readonly<Record<string, readonly Capability
   "mvp:dbo_direct_query": ["premiumInstance", "directQuery"],
   "mvp:microservice_request": ["microservice"],
   "mvp:realtime_publish": ["realtimeV2"],
+  "mvp:realtime_kick": ["realtimeV2"],
   // Files. The zip family is gated on the instance not being FREE; the readers
   // below are gated on raw file access, which is a separate flag.
   "mvp:zip_add_file_resource": ["paidInstance"],
@@ -150,21 +170,45 @@ export const STATEMENT_CAPABILITIES: Readonly<Record<string, readonly Capability
 };
 
 /**
+ * The async runs, gated by their `runtime.mode` rather than by name: each is
+ * stored as a plain `mvp:function` / `mvp:call_agent` with a top-level
+ * `runtime`, and the engine refuses the run ("Not supported. Please upgrade
+ * your Xano instance.") when the instance lacks the mode. `async-shared` is
+ * refused on the plans the editor's premium check excludes; `async-dedicated`
+ * needs the instance's dedicated-worker setting.
+ */
+const ASYNC_RUN_STATEMENTS: ReadonlySet<string> = new Set(["mvp:function", "mvp:call_agent"]);
+export const ASYNC_MODE_CAPABILITIES: Readonly<Record<string, CapabilityId>> = {
+  "async-shared": "premiumInstance",
+  "async-dedicated": "asyncDedicated",
+};
+
+/**
  * What a shared capability covers, per statement — so the line names only what
- * the bundle uses. A premium instance gates both `s.await` and direct SQL, and
- * a bundle with only the SQL was told it needed one for `s.await`.
+ * the bundle uses. A premium instance gates `s.await`, an `async-shared` run,
+ * and direct SQL, and a bundle with only the SQL was told it needed one for
+ * `s.await`. An async run is keyed `<statement>@<mode>`.
  */
 const STATEMENT_EFFECTS: Readonly<Record<string, string>> = {
   "mvp:async_function_await": "`s.await` (awaiting an async function run)",
+  "mvp:call_agent@async-shared": "an `async-shared` `s.ai.agent.run`",
   "mvp:dbo_direct_query": "direct SQL",
+  "mvp:function@async-shared": "an `async-shared` `s.function.run`",
 };
 
-/** The effect line for `id`, narrowed to the statements present where it is split per statement. */
-function effectOf(id: CapabilityId, names: ReadonlySet<string>): string {
-  const parts = [...names].sort().map((n) => (Object.hasOwn(STATEMENT_EFFECTS, n) ? STATEMENT_EFFECTS[n] : undefined));
-  return parts.every((p) => p !== undefined) && parts.length > 0 && id === "premiumInstance"
-    ? parts.join(" and ")
-    : CAPABILITIES[id].effect;
+/** The effect line for `id`, narrowed to what is present where it is split per statement. */
+function effectOf(id: CapabilityId, keys: ReadonlySet<string>): string {
+  const parts = [...keys].sort().map((n) => (Object.hasOwn(STATEMENT_EFFECTS, n) ? STATEMENT_EFFECTS[n] : undefined));
+  if (id !== "premiumInstance" || parts.length === 0 || !parts.every((p) => p !== undefined)) return CAPABILITIES[id].effect;
+  return parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/** The {@link Capability.localEngine} keys, present only when the capability carries them. */
+function localEngineNote(cap: Capability): { localEngine?: string; localEngineRefusal?: string } {
+  return {
+    ...(cap.localEngine !== undefined ? { localEngine: cap.localEngine } : {}),
+    ...(cap.localEngineRefusal !== undefined ? { localEngineRefusal: cap.localEngineRefusal } : {}),
+  };
 }
 
 /** One capability a bundle needs, with what asked for it. */
@@ -176,6 +220,10 @@ export interface CapabilityRequirement {
   readonly statements: readonly string[];
   /** The objects those statements sit in (nearest named ancestor), sorted. */
   readonly objects: readonly string[];
+  /** {@link Capability.localEngine}, when the local engine is known to lack it. */
+  readonly localEngine?: string;
+  /** {@link Capability.localEngineRefusal}, when the local engine is known to lack it. */
+  readonly localEngineRefusal?: string;
 }
 
 /**
@@ -188,6 +236,13 @@ export interface CapabilityRequirement {
 export function bundleCapabilities(bundle: unknown): CapabilityRequirement[] {
   const statements = new Map<CapabilityId, Set<string>>();
   const objects = new Map<CapabilityId, Set<string>>();
+  // What {@link effectOf} narrows by: the statement name, or `<name>@<mode>`.
+  const effects = new Map<CapabilityId, Set<string>>();
+  const need = (id: CapabilityId, name: string, effect: string, context: string): void => {
+    (statements.get(id) ?? statements.set(id, new Set()).get(id)!).add(name);
+    (effects.get(id) ?? effects.set(id, new Set()).get(id)!).add(effect);
+    if (context !== "") (objects.get(id) ?? objects.set(id, new Set()).get(id)!).add(context);
+  };
 
   // `key` is the property the node was reached through: under `payload`, the
   // section — so an object is named with its kind (`middleware "write_rl"`).
@@ -216,9 +271,10 @@ export function bundleCapabilities(bundle: unknown): CapabilityRequirement[] {
       // like an `Object.prototype` key (`constructor`, `toString`) would
       // otherwise resolve to that inherited member and crash the walk.
       const ids = Object.hasOwn(STATEMENT_CAPABILITIES, name) ? STATEMENT_CAPABILITIES[name] : undefined;
-      for (const id of ids ?? []) {
-        (statements.get(id) ?? statements.set(id, new Set()).get(id)!).add(name);
-        if (context !== "") (objects.get(id) ?? objects.set(id, new Set()).get(id)!).add(context);
+      for (const id of ids ?? []) need(id, name, name, context);
+      const mode = ASYNC_RUN_STATEMENTS.has(name) ? (obj.runtime as { mode?: unknown } | undefined)?.mode : undefined;
+      if (typeof mode === "string" && Object.hasOwn(ASYNC_MODE_CAPABILITIES, mode)) {
+        need(ASYNC_MODE_CAPABILITIES[mode]!, name, `${name}@${mode}`, context);
       }
     }
     for (const [k, value] of Object.entries(obj)) walk(value, nextContext, k, key === "payload");
@@ -229,12 +285,64 @@ export function bundleCapabilities(bundle: unknown): CapabilityRequirement[] {
     .map(([id, names]) => ({
       id,
       label: CAPABILITIES[id].label,
-      effect: effectOf(id, names),
+      effect: effectOf(id, effects.get(id) ?? new Set()),
       statements: [...names].sort(),
       objects: [...(objects.get(id) ?? [])].sort(),
+      ...localEngineNote(CAPABILITIES[id]),
     }))
     // By LABEL, which is what a reader sees. Sorting by id puts "attachment
     // storage" above "Redis / cache support" for a reason nothing on screen
     // explains.
     .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** What a deploy prints about the capabilities a bundle needs. */
+export interface CapabilityReport {
+  /** Informational: the heading, one line per capability, and the closing note. Empty when nothing is needed. */
+  readonly info: { readonly heading: string; readonly lines: readonly string[]; readonly footer: string } | undefined;
+  /** Warnings: a capability the deploy's target is KNOWN to lack. Never a failure. */
+  readonly unavailable: ReadonlyArray<{ readonly id: CapabilityId; readonly message: string }>;
+}
+
+/**
+ * Render {@link bundleCapabilities}' result for a deploy.
+ *
+ * Nothing in a CLI token exposes a cloud instance's flag set, so a capability
+ * is listed for a human to check. The local Xano Engine is the exception: when
+ * it is the target, a capability it is known to lack (one carrying
+ * {@link Capability.localEngineRefusal}) is reported as UNAVAILABLE there, with
+ * what the engine answers and where to exercise it instead.
+ */
+export function capabilityReport(
+  needs: readonly CapabilityRequirement[],
+  opts: { readonly localEngine: boolean },
+): CapabilityReport {
+  if (needs.length === 0) return { info: undefined, unavailable: [] };
+  const unavailable: Array<{ id: CapabilityId; message: string }> = [];
+  const lines = needs.map((need) => {
+    // Name one object per capability, not all of them: the point is to make the
+    // requirement findable, and a workspace with forty redis calls would bury
+    // the other lines.
+    const where = need.objects.length
+      ? ` (e.g. ${need.objects[0]}${need.objects.length > 1 ? ` +${need.objects.length - 1} more` : ""})`
+      : "";
+    if (opts.localEngine && need.localEngineRefusal !== undefined) {
+      unavailable.push({
+        id: need.id,
+        message:
+          `${need.label} is unavailable on the local Xano Engine: ${need.effect} returns ${need.localEngineRefusal} ` +
+          `there${where}. Exercise it on an ephemeral (\`deploy --ephemeral\`).`,
+      });
+      return `${need.label} — ${need.effect}${where}; unavailable on the local Xano Engine`;
+    }
+    return `${need.label} — ${need.effect}${where}${need.localEngine !== undefined ? `; ⚠ ${need.localEngine}` : ""}`;
+  });
+  return {
+    info: {
+      heading: `This bundle needs ${needs.length} instance capabilit${needs.length === 1 ? "y" : "ies"}:`,
+      lines,
+      footer: "Check these against the plan of anything you promote to; the deploy cannot.",
+    },
+    unavailable,
+  };
 }

@@ -11,6 +11,8 @@
  *
  * Where both exist, whichever executes wins: the early return below fires only
  * when its condition holds, and the declared response applies otherwise.
+ * `InferResponse` reads `response` only, so a def that returns early declares
+ * `responseShape` as the union of every body it serves.
  */
 import { defineFunction, s, c, ref, inp, input, expr } from "@xano/sdk";
 
@@ -28,4 +30,6 @@ export const returnStmt = defineFunction({
   ],
   // Reached when the early return does not fire → "ran-to-the-end".
   response: ref("status"),
+  // Both bodies are text: "returned-early" | "ran-to-the-end".
+  responseShape: "" as string,
 });

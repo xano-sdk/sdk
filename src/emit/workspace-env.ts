@@ -122,9 +122,10 @@ export function declaredEnv(
  *
  * `parseEnvFile` is strictly line-based: it splits on `\n`, trims, and strips
  * one matched quote pair. A value carrying a newline (a PEM key, a
- * service-account JSON) or significant edge whitespace cannot be expressed, and
- * writing it anyway would truncate a secret into something that still looks
- * valid. Callers derive the flag from the value; nothing that renders a file
+ * service-account JSON) cannot be expressed, and writing it anyway would
+ * truncate a secret into something that still looks valid. Edge whitespace and
+ * a wrapping quote pair can: the writer wraps the value in one more pair of
+ * quotes ({@link envFileValue}), which the reader strips. Callers derive the flag from the value; nothing that renders a file
  * ever sees the value itself.
  */
 export function isRepresentable(value: string): boolean {
@@ -137,22 +138,23 @@ function isRepresentableValue(value: string): boolean {
 }
 
 /** Why a value cannot live in the dotenv format, or undefined when it can. */
-export type EnvValueProblem = "newline" | "edge-whitespace" | "quoted";
+export type EnvValueProblem = "newline";
 
 /** Why the dotenv format cannot carry `value`, or undefined when it can. */
 export function valueProblem(value: string): EnvValueProblem | undefined {
-  if (/[\n\r]/.test(value)) return "newline";
-  if (value !== value.trim()) return "edge-whitespace";
-  // A value that starts AND ends with the same quote would come back stripped.
-  return isQuoted(value) ? "quoted" : undefined;
+  return /[\n\r]/.test(value) ? "newline" : undefined;
 }
 
-/** {@link EnvValueProblem} in words, completing "its value …". */
-const VALUE_PROBLEM_WORDS: Record<EnvValueProblem, string> = {
-  newline: "carries a newline",
-  "edge-whitespace": "has leading or trailing whitespace",
-  quoted: "is wrapped in a matching quote pair that reading the file would strip",
-};
+/**
+ * A value as `KEY=` writes it. Quoted where the bare form would not read back:
+ * empty (a bare `NAME=` is refused at deploy), edge whitespace (the reader
+ * trims), and a value already wrapped in a quote pair (the reader strips one).
+ * The reader strips exactly one pair and unescapes nothing, so wrapping is
+ * the whole encoding.
+ */
+export function envFileValue(value: string): string {
+  return value === "" || value !== value.trim() || isQuoted(value) ? `"${value}"` : value;
+}
 
 /**
  * Is this value wrapped in one matched pair of quotes?
@@ -240,6 +242,29 @@ export function classifyEnv(args: {
  * when the default found it.
  */
 export function parseEnvFile(path: string, label = "--backend-env-file"): Record<string, string> {
+  return readEnvFile(path, label).values;
+}
+
+/** A parsed env file, with the names whose line has nothing after the `=`. */
+export interface EnvFileContents {
+  readonly values: Record<string, string>;
+  /**
+   * Names written `NAME=` with nothing after the `=`. That is what a template
+   * line looks like when someone uncomments it and doesn't fill it in, so a
+   * deploy that replaces the env refuses it. `NAME=""` is the explicit empty,
+   * and it is what `env pull` writes for a value stored empty.
+   */
+  readonly bareEmpty: readonly string[];
+  /**
+   * Names whose UNQUOTED value carries ` #`. The reader has no inline comments,
+   * so `KEY=abc # note` sends `abc # note`. Almost always a comment someone
+   * meant to leave out, and a quoted value says the `#` is meant.
+   */
+  readonly inlineHash: readonly string[];
+}
+
+/** {@link parseEnvFile}, keeping which names were left bare (`NAME=`). */
+export function readEnvFile(path: string, label = "--backend-env-file"): EnvFileContents {
   let source: string;
   try {
     source = readFileSync(path, "utf8");
@@ -257,6 +282,8 @@ export function parseEnvFile(path: string, label = "--backend-env-file"): Record
   // Null-prototype: `__proto__=x` on a plain `{}` sets a prototype and the
   // line is silently lost; here it is a name like any other.
   const out = Object.create(null) as Record<string, string>;
+  const bare = new Set<string>();
+  const hash = new Set<string>();
   for (const [n, raw] of source.split("\n").entries()) {
     const line = raw.trim();
     if (line === "" || line.startsWith("#")) continue;
@@ -270,16 +297,26 @@ export function parseEnvFile(path: string, label = "--backend-env-file"): Record
     }
     const key = body.slice(0, eq).trim();
     let value = body.slice(eq + 1).trim();
+    // A later line for the same name wins, so it decides bareness too.
+    if (value === "") bare.add(key);
+    else bare.delete(key);
+    if (!isQuoted(value) && /\s#/.test(value)) hash.add(key);
+    else hash.delete(key);
     if (isQuoted(value)) value = value.slice(1, -1);
     out[key] = value;
   }
-  return out;
+  return { values: out, bareEmpty: [...bare], inlineHash: [...hash] };
 }
 
 /** Read `path` if it is there; `undefined` when it is not. */
 export function readWorkspaceEnvFile(path: string): Record<string, string> | undefined {
+  return readWorkspaceEnvFileContents(path)?.values;
+}
+
+/** {@link readWorkspaceEnvFile}, keeping which names were left bare (`NAME=`). */
+export function readWorkspaceEnvFileContents(path: string): EnvFileContents | undefined {
   if (!existsSync(path)) return undefined;
-  return parseEnvFile(path, WORKSPACE_ENV_FILE);
+  return readEnvFile(path, WORKSPACE_ENV_FILE);
 }
 
 /**
@@ -299,15 +336,11 @@ function commentSafe(name: string): string {
 export interface EnvExampleName {
   readonly name: string;
   /**
-   * Derived by the CALLER from the value. `true` when no value is in hand — an
-   * unknown value is not an unwritable one.
+   * Whether the NAME is one an env var can have. Read off the name alone: the
+   * template is committed and `--check` renders it with no values in hand, so
+   * nothing about a value may change a byte of it.
    */
   readonly representable: boolean;
-  /**
-   * Why it is not representable: the NAME is not one an env var can have, or
-   * the value has a {@link EnvValueProblem}. Absent, a value problem is assumed.
-   */
-  readonly problem?: "name" | EnvValueProblem;
 }
 
 /**
@@ -392,20 +425,23 @@ export function renderWorkspaceEnvExample(
 `;
   }
 
-  const lines = names.map(({ name, representable, problem }) =>
+  const lines = names.map(({ name, representable }) =>
     representable
       ? `# ${commentSafe(name)}=`
-      : problem === "name"
-        ? // No `NAME=` shape: the line must not parse back as a declared name, and
-          // no flag can supply a name `--env-var` refuses.
-          `# "${commentSafe(name)}"   (not a usable env var name — letters, digits and _, not starting
-#   with a digit — so no file or flag can supply it. Rename it in \`workspaceConfig({ env })\`.)`
-        : `# ${commentSafe(name)}=   (this value cannot be written here — it ${VALUE_PROBLEM_WORDS[problem ?? "newline"]},
-#   so the dotenv format cannot carry it. Pass it with
-#   \`--env-var ${commentSafe(name)}=...\` instead.)`,
+      : // No `NAME=` shape: the line must not parse back as a declared name, and
+        // no flag can supply a name `--env-var` refuses.
+        `# "${commentSafe(name)}"   (not a usable env var name — letters, digits and _, not starting
+#   with a digit — so no file or flag can supply it. Rename it in \`workspaceConfig({ env })\`.)`,
   );
   return `${header}#
-# One line per declared name. Uncomment and fill in the ones you need.
+# One line per declared name. Uncomment and fill in the ones you need. A deploy
+# refuses a line left as \`NAME=\`, because it would clear the live value. Write
+# \`NAME=""\` to send a name empty on purpose.
+#
+# One \`KEY=VALUE\` per line. Everything after the \`=\` is the value, a \`#\`
+# included (only a line that STARTS with \`#\` is a comment), and one pair of
+# matching quotes around it is stripped. Nothing is interpolated or unescaped:
+# \`\\n\` stays two characters, and a value cannot span lines.
 
 ${lines.join("\n")}
 `;
@@ -467,7 +503,7 @@ export function renderWorkspaceEnvFile(
   const omitted: string[] = [];
   const lines: string[] = [];
   for (const [name, value] of Object.entries(values)) {
-    if (isRepresentableName(name) && isRepresentableValue(value)) lines.push(`${name}=${value}`);
+    if (isRepresentableName(name) && isRepresentableValue(value)) lines.push(`${name}=${envFileValue(value)}`);
     else omitted.push(name);
   }
   const badNames = omitted.filter((n) => !isRepresentableName(n));
@@ -486,7 +522,7 @@ ${
     ? ""
     : `#
 # NOT written, because the dotenv format cannot carry ${badValues.length === 1 ? "its value" : "their values"}
-# (a newline, edge whitespace, or a wrapping quote pair): ${badValues.map(commentSafe).join(", ")}.
+# (a newline): ${badValues.map(commentSafe).join(", ")}.
 # Pass ${badValues.length === 1 ? "it" : "each"} at deploy time with \`--env-var NAME=...\` instead.
 `
 }${

@@ -6,7 +6,7 @@
  * bound to an API group — all point at the handles defined here so the whole set
  * type-checks and exports as a single coherent Xano workspace.
  */
-import { apiGroup, table, f, defineFunction, input, s, ref, inp } from "@xano/sdk";
+import { apiGroup, table, f, defineFunction, input, s, c, ref, inp } from "@xano/sdk";
 
 /** The API group every example query is published under. */
 export const api = apiGroup({ name: "examples", canonical: "examples" });
@@ -44,6 +44,7 @@ export const posts = table({
 export const doubleFn = defineFunction({
   name: "ex_shared_double",
   input: { n: input.int({ required: true }) },
-  stack: [s.math.mul({ name: "n", value: inp("n") })],
+  // `s.math.*` changes an EXISTING variable, so declare it from the input first.
+  stack: [s.set_var("n", inp("n")), s.math.mul({ name: "n", value: c.int(2) })],
   response: ref("n"),
 });

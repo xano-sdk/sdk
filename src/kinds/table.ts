@@ -9,7 +9,7 @@ import type { FieldXdo, ExprNode } from "../types/xdo.js";
 import { encodeField, COLUMN_CONTEXT, authoredFieldType, isListColumn } from "../fields/field.js";
 import type { FieldOptions } from "../fields/field.js";
 import type { FieldDescriptor, FieldMap } from "../fields/catalog.js";
-import type { RowFromFieldMap, Prettify, BrandOpts, BrandType, ValueOf, ProtoKeySafe, XanoFileRef } from "../fields/value-types.js";
+import type { RowFromFieldMap, Prettify, BrandOpts, BrandType, SeedValueOf, ProtoKeySafe, XanoFileRef } from "../fields/value-types.js";
 import type { HostedFile } from "../fields/hosted-file.js";
 import { encodeComparison } from "../statements/conditional.js";
 import type { Condition } from "../statements/conditional.js";
@@ -199,6 +199,25 @@ export interface IndexDef {
    * uses, and it is refused alongside `op` rather than one silently winning.
    */
   fields: Array<{ name: string; op?: IndexOp; priority?: SearchPriority }>;
+  /**
+   * The index's stored name. Optional for most index types, but a `search`
+   * index is QUERIED by this name and so needs one (an unnamed search index
+   * warns `table.search-index-unnamed` — it deploys but can never be searched).
+   *
+   * Full-text search recipe — give the index a `name`, then in `s.db.query`
+   * reference it as a column spelled `"$<name>"`:
+   * ```ts
+   * index: [{ type: "search", name: "ft", lang: "english",
+   *           fields: [{ name: "title", priority: 1 }, { name: "body", priority: 3 }] }]
+   * // query:
+   * where: cmp(col("$ft"), "search", inp("q")),
+   * eval:  [{ name: "$ft", as: "rank", filters: [qf.search_rank(inp("q"))] }],
+   * sort:  [{ sortBy: "rank", dir: "desc" }],
+   * ```
+   * `$<name>` resolves against the stored index name — `col("$ft")`, bare, not
+   * `col("accounts.$ft")`. The `priority` weights the rank (a title hit outranks
+   * a body hit). A plain `cmp(col("title"), "search", …)` (no `$`) 500s.
+   */
   name?: string;
   /** A `search` index's language; omitted, `"english"`. */
   lang?: IndexLang;
@@ -374,8 +393,8 @@ type SeedRequiredKeys<M> = {
 }[keyof M];
 
 /** {@link FromFieldMap} on the column surface, with a defaulted column optional. */
-type SeedFields<M> = { [K in SeedRequiredKeys<M>]: SeedFileValue<ValueOf<M[K], "column">> } & {
-  [K in Exclude<keyof M, SeedRequiredKeys<M>>]?: SeedFileValue<ProtoKeySafe<K, ValueOf<M[K], "column">>>;
+type SeedFields<M> = { [K in SeedRequiredKeys<M>]: SeedFileValue<SeedValueOf<M[K]>> } & {
+  [K in Exclude<keyof M, SeedRequiredKeys<M>>]?: SeedFileValue<ProtoKeySafe<K, SeedValueOf<M[K]>>>;
 };
 
 /**
@@ -992,6 +1011,15 @@ function assertIndexFieldTypes(def: TableDef): void {
     const at = `table "${def.name}", index "${type}(${index.fields.map((f) => f.name).join(", ")})"`;
     if ((type === "hash" || type === "vector") && index.fields.length !== 1) {
       throw new Error(`${at}: a ${type} index covers exactly one column — the deploy fails on ${index.fields.length}. Declare one index per column.`);
+    }
+    if (type === "search" && (index.name === undefined || index.name === "")) {
+      emitDiagnostic({
+        severity: "warning",
+        code: "table.search-index-unnamed",
+        message:
+          `${at}: a search index is queried by its \`name\` (\`col("$<name>")\` + \`qf.search_rank\`), so without one it deploys but can never be searched. ` +
+          `Give it \`name: "<name>"\` and match rows with \`where: cmp(col("$<name>"), "search", <term>)\`.`,
+      });
     }
     const ops = INDEX_OPS[type];
     const xdo = def.useXdo === true;

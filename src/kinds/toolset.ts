@@ -77,7 +77,20 @@ export interface ToolDef<
   name: string;
   /** Explicit Xano `guid` (this object's identity). Defaults to a guid derived from `name`; set it to keep identity across a rename or to match an existing object. */
   guid?: string;
+  /**
+   * Builder-side note for this tool. Shown as the MCP `description` in
+   * `tools/list` ONLY when `instructions` is empty — a set `instructions`
+   * replaces it, so a short `description` paired with a longer `instructions`
+   * is never seen by the client.
+   */
   description?: string;
+  /**
+   * What the MODEL sees as the tool's description — the MCP `description` in
+   * `tools/list` and the agent-tool description — and what an
+   * `mcpServerTrigger`/`agentTrigger` can rewrite (`t.tools[].instructions`).
+   * When set it takes the place of `description`. Leave it empty to let
+   * `description` reach the client.
+   */
   instructions?: string;
   docs?: string;
   enabled?: boolean;
@@ -246,12 +259,15 @@ export interface ToolsetToolRef {
    * its name) and it resolves to that table's guid at export; a raw numeric
    * `dbo.id` is the escape hatch, and `false`/omitted means no auth.
    *
-   * ⚠ It is also what gives the tool's stack a CALLER, on an `agent()` exactly
-   * as on an `mcpServer()`. `auth()` inside a tool whose entry names no table
-   * does NOT return null: the tool call answers a NORMAL result carrying
-   * `{"code":"ERROR_FATAL","message":""}`, so the model reads a successful tool
-   * result and reports success while nothing is written. A caller token does not
-   * rescue it — the entry is what supplies identity, so this cannot be fixed
+   * ⚠ It is also what gives the tool's stack a CALLER, on an `agent()` and an
+   * `mcpServer()` alike. `auth()` inside a tool whose entry names no table does
+   * NOT return null: the run binds the NORMAL result
+   * `{"code":"ERROR_FATAL","message":""}`. On an `agent()` the model reads that
+   * as a successful tool result and reports success while nothing is written;
+   * over an `mcpServer()`'s `tools/call` the relay wraps it as an `isError: true`
+   * tool error with the generic text `Unable to get successful response from
+   * executing tool`. Either way the write never happens, and a caller token does
+   * not rescue it — the entry is what supplies identity, so this cannot be fixed
    * from the client side. Any tool reading `auth()` wants
    * `{ tool: saveNote, auth: users }`; `export()` warns
    * (`toolset.tool-reads-auth-ungated`) when one does not have it.

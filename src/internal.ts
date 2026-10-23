@@ -44,8 +44,9 @@ export {
   CAPABILITIES,
   STATEMENT_CAPABILITIES,
   bundleCapabilities,
+  capabilityReport,
 } from "./validate/capabilities.js";
-export type { Capability, CapabilityId, CapabilityRequirement } from "./validate/capabilities.js";
+export type { Capability, CapabilityId, CapabilityReport, CapabilityRequirement } from "./validate/capabilities.js";
 export {
   encodeStatement,
   getStatementFactory,

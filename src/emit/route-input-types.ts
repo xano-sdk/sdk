@@ -22,7 +22,7 @@
  *   member's type (`ProtoKeySafe`), or an object literal that omits it fails
  *   against the inherited member.
  * - The SDK value types this file cannot import (`XanoFileRef`,
- *   `XanoFileUpload`, `XanoGeoValue`) are written out structurally, member for
+ *   `XanoGeoValue`) are written out structurally, member for
  *   member, so each is the same type as the SDK's, not merely a compatible one.
  *
  * The deliberate divergences from `InferInput`, each pinned by the parity test
@@ -39,6 +39,8 @@
  * - A `json` list admits `null`: the engine binds every `json` input nullable,
  *   and `InferInput` only shows it on a scalar `json`, where `unknown` already
  *   absorbs `null`.
+ * - An `input.file()` is `Blob`, what a client holds and appends to the
+ *   multipart body, not `InferInput`'s server-side `XanoFileUpload` marker.
  *
  * Types only, and no import: these sections add nothing to a bundle, and the
  * manifest stays loadable without the SDK installed.
@@ -63,21 +65,29 @@ const OBJECT_MEMBERS: ReadonlySet<string> = new Set([
 ]);
 
 /** `XanoFileRef`, member for member (`src/fields/value-types.ts`). */
-const FILE_REF = "{ path?: string; name?: string; type?: string; size?: number; access?: string; meta?: unknown; url?: string }";
+const FILE_REF = "{ path?: string; name?: string; type?: string; size?: number; mime?: string; access?: string; meta?: unknown; url?: string }";
 
-/** `XanoFileUpload`, member for member. */
-const FILE_UPLOAD = "{ readonly __fileUpload?: never }";
+/**
+ * What a client sends for an `input.file()`: the bytes, as a `Blob` (a `File`
+ * is one). Not `XanoFileUpload`, the server-side marker no browser value
+ * satisfies, so the natural `{ img: file }` failed to type-check. A deliberate
+ * divergence from `InferInput` (see the list above).
+ */
+const FILE_UPLOAD = "Blob";
 
-const POSITION = "{ lng: number; lat: number }";
-
-/** `XanoGeoValue<K>` for each stored geo type: the `type` name and its `data` nesting. */
+/**
+ * A geo INPUT reads back as WKT text (`inp(...)` → `"POINT(10 20)"`), so every
+ * stored geo type brands the read value `string` here — matching `input.geo.*`
+ * (and `InferInput`). A geo *column* keeps the `{ type, data }` `XanoGeoValue`
+ * shape, but that is a response/row type, not a request-input type. sdk-dev#65.
+ */
 const GEO: Readonly<Record<string, string>> = {
-  geo_point: `{ type: "point"; data: ${POSITION} }`,
-  geo_multipoint: `{ type: "points"; data: ${POSITION}[] }`,
-  geo_linestring: `{ type: "path"; data: ${POSITION}[] }`,
-  geo_multilinestring: `{ type: "paths"; data: ${POSITION}[][] }`,
-  geo_polygon: `{ type: "poly"; data: ${POSITION}[] }`,
-  geo_multipolygon: `{ type: "polys"; data: ${POSITION}[][] }`,
+  geo_point: "string",
+  geo_multipoint: "string",
+  geo_linestring: "string",
+  geo_multilinestring: "string",
+  geo_polygon: "string",
+  geo_multipolygon: "string",
 };
 
 /** The value type each scalar stored type carries, as `f.*`/`input.*` brand it. */

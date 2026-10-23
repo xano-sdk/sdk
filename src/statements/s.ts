@@ -67,6 +67,7 @@ import {
   postProcess,
   realtimeEvent,
   realtimePublish,
+  realtimeKick,
   createAuthToken,
   expectToThrow,
   expectToMatch,
@@ -89,22 +90,35 @@ import {
   foreachRemove,
 } from "./special/control-flow.js";
 
-/** `s.object.keys`, branded so the bound var reads as the key list. */
+/** `s.object.keys`, branded so the bound var reads as the key list. An
+ * integer-like key comes back as a NUMBER (PHP coerces it), so the element is
+ * `string | number`, not `string`. */
 type ObjectKeys = <const As extends string = string, const Fs extends readonly FilterXdo[] = readonly []>(
-  a?: Omit<NonNullable<Parameters<typeof generated.object.keys>[0]>, "as" | "asFilters"> & { as?: As; asFilters?: Fs },
-) => Statement & AsShapeBrand<As, ApplyFilters<string[], Fs>>;
+  a: Omit<NonNullable<Parameters<typeof generated.object.keys>[0]>, "as" | "asFilters"> & { as?: As; asFilters?: Fs },
+) => Statement & AsShapeBrand<As, ApplyFilters<(string | number)[], Fs>>;
+
+/** `s.object.entries`, branded so the bound var reads as the entry list. Each
+ * entry is a `{ key, value }` OBJECT (not a `[key, value]` tuple), and an
+ * integer-like key comes back as a NUMBER. */
+type ObjectEntries = <const As extends string = string, const Fs extends readonly FilterXdo[] = readonly []>(
+  a: Omit<NonNullable<Parameters<typeof generated.object.entries>[0]>, "as" | "asFilters"> & { as?: As; asFilters?: Fs },
+) => Statement & AsShapeBrand<As, ApplyFilters<{ key: string | number; value: unknown }[], Fs>>;
 
 /** `s.security.create_uuid`, branded so the bound var reads as the UUID string it is. */
 type CreateUuid = <const As extends string = string, const Fs extends readonly FilterXdo[] = readonly []>(
   a?: Omit<NonNullable<Parameters<typeof generated.security.create_uuid>[0]>, "as" | "asFilters"> & { as?: As; asFilters?: Fs },
 ) => Statement & AsShapeBrand<As, ApplyFilters<string, Fs>>;
 
-/** An in-place list mutator, branded with the name it appends to and the value appended. */
+/**
+ * An in-place list mutator, branded with the name it appends to and the value
+ * appended. `name` and `value` are both required: the build refuses either
+ * missing, so the type must too.
+ */
 type Appender<F extends (a: never) => Statement, Spread extends boolean> = <
   const N extends string = string,
   V extends Value = Value,
 >(
-  a: Omit<NonNullable<Parameters<F>[0]>, "name" | "value"> & { name?: N } & (Spread extends true ? { value?: V } : { value: V }),
+  a: Omit<NonNullable<Parameters<F>[0]>, "name" | "value"> & { name: N; value: V },
 ) => Statement & AppendBrand<N, V, Spread>;
 
 /** A `db.external.<engine>.direct_query` factory bound to one engine. */
@@ -119,8 +133,8 @@ const cloudJobNs = Object.assign(cloudJob, { await: cloudJobAwait, status: cloud
 export const s = {
   ...generated,
   // Typed overrides of generated factories: `precondition` narrows `error_type`
-  // to the status-bearing enum, and `throw` documents that it returns HTTP 200
-  // (use `precondition` for a status-observable rejection).
+  // to the status-bearing enum, and `throw` documents its `status` (an uncaught
+  // throw without one answers HTTP 200).
   precondition,
   throw: throwError,
   // Typed refusal of `capture`, which belongs to `lam.fn` — the bare TS2353 the
@@ -157,7 +171,7 @@ export const s = {
   microservice: { ...generated.microservice, request: microserviceRequest },
   // `realtime.publish` is the CURRENT-layer send statement (`api.realtime_event` is the
   // superseded one); `get_session` beside it is generated.
-  realtime: { ...generated.realtime, publish: realtimePublish },
+  realtime: { ...generated.realtime, publish: realtimePublish, kick: realtimeKick },
   stream: { ...generated.stream, from_request: streamFromRequest },
   webflow: { ...generated.webflow, request: webflowRequest },
   task: { call: taskCall },
@@ -211,9 +225,14 @@ export const s = {
   },
   expect: { ...generated.expect, to_throw: expectToThrow, to_match: expectToMatch },
   security: { ...generated.security, create_auth_token: createAuthToken, create_uuid: generated.security.create_uuid as CreateUuid },
-  // The generated factory, typed: `object.keys` always binds a list of the
-  // object's key names, so `ref("<as>")` traces to `string[]`, not `unknown`.
-  object: { ...generated.object, keys: generated.object.keys as ObjectKeys },
+  // The generated factory, typed: `object.keys` binds the list of key names and
+  // `object.entries` the list of `{ key, value }` objects, so `ref("<as>")`
+  // traces to a real shape, not `unknown`. An integer-like key reads as a number.
+  object: {
+    ...generated.object,
+    keys: generated.object.keys as ObjectKeys,
+    entries: generated.object.entries as ObjectEntries,
+  },
   util: {
     ...generated.util,
     get_raw_input: getRawInput,

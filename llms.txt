@@ -1,4 +1,4 @@
-# xanosdk v1.0.15
+# xanosdk v1.0.16
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 
@@ -16,21 +16,18 @@ TAGGED value — `ref("x")` a stack variable, `inp("x")` an input, `auth("id")` 
 caller, `c.*` a constant — resolved at request time; JS operators over them do not
 compute (see Gotchas). Requests share no memory — state persists in tables or redis.
 
-Authorable: statement surfaces 218/218, filters 246 (246 typed).
-Not authorable here: branch, market_item, realtime_channel, run.job, run.service, tablemap — these cannot be authored and do not survive a pull; reasons in `coverage.objectKinds.unmodeled`.
+Authorable: statement surfaces 219/219, filters 246 (246 typed).
+Not authorable here: branch, market_item, realtime_channel (legacy; author realtimeServer + realtimeChannel instead), run.job, run.service, tablemap — these cannot be authored and do not survive a pull; reasons in `coverage.objectKinds.unmodeled`.
 
-This file is the whole always-read surface: the mental model, the deploy contract,
-every cross-cutting gotcha, and control flow. Per-surface detail lives in the topic files listed
-below — open the one whose condition matches the task, skip the rest. For
-exhaustive per-entry detail in NEITHER — a statement's field schema with engine
-defaults, a filter's full argument list, the `storedName` mapping — do a TARGETED
-lookup in the shipped `manifest.json` (a program imports it as
-`@xano/sdk/manifest.json`, needing `with { type: "json" }` in Node ESM;
-it is ~70k tokens, so never read it whole). Its top-level keys are `name`, `version`, `description`, `coverage`, `values`, `objectKinds`, `fieldTypes`, `statements`, `filters`, `cli`, `cliGlobalFlags`. `statements` and `filters` are ARRAYS, not maps — SELECT, do not index:
+Per-surface detail is in the topic files below: open the one whose condition matches the task.
+Per-entry detail (a statement's field schema with engine defaults, a filter's full argument
+list, the `storedName` mapping) is in the shipped `manifest.json` — do a TARGETED lookup;
+it is ~70k tokens, so never read it whole. A program imports it as `@xano/sdk/manifest.json`
+(Node ESM needs `with { type: "json" }`). Its top-level keys are `name`, `version`, `description`, `coverage`, `values`, `objectKinds`, `fieldTypes`, `statements`, `filters`, `cli`, `cliGlobalFlags`. `statements` and `filters` are ARRAYS, not maps — SELECT, do not index:
   jq '.statements[] | select(.sPath=="db.get")' manifest.json
   jq '.filters[]    | select(.name=="json_decode")' manifest.json
-⚠ `fields` is null on the 65 `declarative: false` statements (`db.get`, …): typed wrappers whose arguments are the factory's `.d.ts` signature. Null ≠ missing.
-Select a statement on `sPath` (the `s.*` path you write), NOT `surface` (the XanoScript term): 24 of 218 differ — `var`→`set_var`, `break`→`foreach_break`, `foreach.remove`→`foreach_remove`, and every `expect.*`.
+⚠ `fields` is null on the 66 `declarative: false` statements (`db.get`, …): typed wrappers whose arguments are the factory's `.d.ts` signature. Null ≠ missing.
+Select a statement on `sPath` (the `s.*` path you write), NOT `surface` (the XanoScript term): 24 of 219 differ — `var`→`set_var`, `break`→`foreach_break`, `foreach.remove`→`foreach_remove`, and every `expect.*`.
 
 ## Topic files
 
@@ -61,9 +58,6 @@ plain file read resolves them at the version you have.
 
 ## Quickstart
 
-Authoring is **declarative def-objects** passed to factories — there is no
-callback/chaining builder.
-
 ```ts
 import { workspace, apiGroup, query, table, input, f, ref, inp, auth, s } from "@xano/sdk";
 
@@ -72,13 +66,13 @@ const users = table({
   auth: true, // backs authentication
   // `id` (int PK) + `created_at` (epochms) are auto-injected — don't declare them.
   schema: {
-    email: f.email({ required: true }),
+    email: f.email({ required: true, methods: ["trim", "lower"] }), // a unique email index is CASE-SENSITIVE — lowercase it
     name: f.text(),
   },
   // Indexes: { type, fields: [{ name, op? }] }. `"unique"` is shorthand for `"btree|unique"`.
   // A DOTTED name indexes a key inside a column (`xdo.email`); only the part before the
   // first dot is checked against the schema.
-  index: [{ type: "unique", fields: [{ name: "email" }] }],  // also: btree, hash, gin, search, gist, vector
+  index: [{ type: "unique", fields: [{ name: "email" }] }],
 });
 
 const posts = table({
@@ -119,30 +113,26 @@ package.json or name the entry `.mts`. `npm init -y` writes `"type": "commonjs"`
 which fails with a "must be ES modules" error until you switch it to module.
 
 Set `canonical` on every `apiGroup`. The engine mints the URL token server-side, so
-without one a group's client paths are unresolvable until a lock exists: the bundle
-exports fine and `npx @xano/sdk routes` / `getPath()` then fail on the very queries it just
-built. An explicit `canonical` resolves them from the source alone.
-⚠ A canonical is unique across the whole INSTANCE, not per workspace — two
-workspaces cannot serve the same one, and no flag shares it. One set in code is a PIN:
-a merge refuses (exit 2) when another workspace holds it. One the lock minted is a
-preference the instance may keep or replace with a random token, and `--static` is
-refused when it does.
+without one `npx @xano/sdk routes` / `getPath()` cannot resolve the group's paths until a
+lock exists (the export itself succeeds).
+⚠ A canonical is unique across the whole INSTANCE, not per workspace; no flag shares one.
+A canonical set in code is a PIN: a merge refuses (exit 2) when another workspace holds it.
+One only the lock minted is not pinned: the instance may replace it with a random token,
+and `--static` is refused when it does.
 
-Build warnings: `export()` prints the shapes that deploy clean and then do the wrong
-thing (a `bulk.update` zero-filling omitted columns, an `ignoreEmpty` on an empty
-operand, a `ref()` nothing binds). Each has a legitimate use, so each only warns —
-but nothing fails on a message no one reads, so in CI and in unattended agent builds
-pass `--strict` (`emitBundle(app, { strict: true })` / `app.export({ strict: true })`):
-every warning becomes a hard failure. Same bundle bytes either way.
+Build warnings: `export()` warns on shapes that deploy but misbehave (a `bulk.update`
+zero-filling omitted columns, an `ignoreEmpty` on an empty operand, a `ref()` nothing
+binds). In CI and agent builds pass `--strict` (`emitBundle(app, { strict: true })` /
+`app.export({ strict: true })`): every warning becomes a hard failure. Same bundle bytes
+either way.
 Before calling the work done: `npm run typecheck`, `npx @xano/sdk export <entry> --strict`,
 `deploy <entry>`, then `test run-all` against what deployed.
 
-Identity: object guids derive from `(type, name)` — a query's from `(api group,
-verb, name)` — so renames change identity.
-EVERY build freezes every guid + api-group/toolset canonical in a lock file
-BESIDE THE ENTRY FILE — `xano/xano.lock` for the standard scaffold,
-NOT the project root — which you COMMIT (`--no-lock` opts out; CI guard
-`--frozen-lock` fails instead of changing it).
+Identity: object guids derive from `(type, name)` (a query adds group + verb),
+so renames change identity.
+Every build freezes every guid + api-group/toolset canonical in a lock file beside the entry
+file (`xano/xano.lock` in the standard scaffold, not the project root). Commit it
+(`--no-lock` opts out; CI guard `--frozen-lock` fails instead of changing it).
 To rename an object: rename in code, export (stderr prints the exact fix-up), run
 `npx @xano/sdk lock rename <kind> <old> <new>`, export again — the original guid is emitted
 under the new name, so the engine renames in place instead of delete+create. Taking
@@ -156,51 +146,58 @@ Commands here run as `npx @xano/sdk <cmd>`: `init` → `deploy` → URL. A deplo
 `export` (honoring `xano.lock`), imports the result, and prints the URL.
 ⚠ Every deploy is a FULL REPLACE of its destination — objects AND records.
 
-**Backends** — one grammar: `workspace` | `ephemeral[:<name>]` | `local[:<name>]`
-(no credential) | `tenant:<name>` | `release:<name>` | a bundle path where a file fits. Reads
-`--from`, writes `--to`, `test --on`; positional on `deploy`/`pull`/`generate`/`tables`/
-`impersonate`. Omitted = the ephemeral or Xano Engine this project last deployed to, never
-workspace/tenant; bare `deploy` compiles onto the Xano Engine instead (`--ephemeral`: an
-ephemeral), and `generate`/`init --from` need one. A refusal, typed or tracked,
-names the reason and the spellings (`release create` refuses a Xano Engine).
-`release create --from` records a run: no bundle path, no `release:`,
-and a `tenant:` only if throwaway (`standard`/`run` refused).
+**Backends** — one grammar for every command that names a backend:
+
+- Spellings: `workspace` | `ephemeral[:<name>]` | `local[:<name>]` (no credential) |
+  `tenant:<name>` | `release:<name>` | a bundle path where a file fits.
+- Reads `--from`, writes `--to`, `test --on`; positional on `deploy`/`pull`/`generate`/`tables`/
+  `impersonate`.
+- Omitted = the ephemeral or Xano Engine this project last deployed to, never
+  workspace/tenant. Exceptions: bare `deploy` always targets the Xano Engine (`--ephemeral`: an
+  ephemeral); `generate`/`init --from` need one.
+- A backend a command cannot serve is refused, typed or tracked, with the reason and the valid
+  spellings (`release create` refuses a Xano Engine).
+- `release create --from` takes a run only: no bundle path, no `release:`, and a
+  `tenant:` only if throwaway (`standard`/`run` refused).
 
 **Destinations** — the Xano Engine by default, real only when you say so:
 
-- `deploy [source]` → the Xano Engine on this machine (no account). `--ephemeral` → a NAMED, auto-expiring ephemeral (~1h; `--expires-hours`
-  1–24), tracked in `./.xano/ephemeral.json`, so deploying again REFRESHES it at the same
-  URL; if it expired or was swept, a fresh one is created and the new URL called out.
-  ⚠ Only the BACKEND URL survives a refresh — the replace clears static hosting, so
-  `--static` publishes a NEW host every run and the previous URL stops serving
-  (not under `--keep-data`, which MERGES an env a deploy filled: rows kept, no re-seed,
-  removed objects deleted; ⚠ a rename loses values, a RETYPE reads unfit ones as null, env
-  VALUES are not applied, a table trigger refuses it — `--reset` replaces and re-seeds).
-- `release create <name>` cuts from a running source and LANDS in your workspace
-  — the record that it came up, and the only thing `promote`/`tenant deploy` take. A
-  taken name is refused, and so is one that addresses a LOCATION instead of naming: `/`,
-  `\`, `:`, or a leading `.`. Every export derives its FILENAME from the name it is given,
-  so `release|ephemeral|workspace export` refuse those same shapes unless `--path` names
-  the file. Carries EVERY table's SCHEMA either way; `--seed[=<guids>]` adds
-  ROWS — guids from `tables <backend>`; a redeploy KEEPS them.
+- `deploy [source]` → the Xano Engine on this machine (no account).
+  - `--ephemeral` → a NAMED, auto-expiring ephemeral (~1h; `--expires-hours` 1–24), tracked in
+    `./.xano/ephemeral.json`, so deploying again REFRESHES it at the same URL; if it expired or
+    was swept, a fresh one is created and the new URL printed.
+  - ⚠ Only the BACKEND URL survives a refresh: the replace clears static hosting, so
+    `--static` publishes a NEW host every run and the previous URL stops serving.
+  - Under `--keep-data`, which MERGES an env a deploy filled instead of replacing it, the static
+    URL survives too: rows kept, no re-seed, removed objects deleted. ⚠ Limits: a rename loses values,
+    a RETYPE reads unfit ones as null, env VALUES are not applied, a table trigger refuses it.
+    `--reset` replaces and re-seeds.
+- `release create <name>` cuts a release from a running source and LANDS it in your workspace.
+  A release records that the source came up; it is the only thing `promote`/`tenant deploy` take.
+  - Refused: a taken name, and one that addresses a LOCATION instead of naming (`/`, `\`, `:`,
+    or a leading `.`). Every export derives its FILENAME from the name it is given, so
+    `release|ephemeral|workspace export` refuse those same shapes unless `--path` names the file.
+  - Carries EVERY table's SCHEMA either way; `--seed[=<guids>]` adds ROWS. Guids come from
+    `tables <backend>`; a redeploy KEEPS them.
 - `release transfer <name> --to-profile <profile>` copies a release to another
   workspace/instance by CONTENT (tar sha256): identical → reused; same name, other
   bytes → exit 2.
 - `promote <release>` / `tenant deploy <tenant> <release>` land it.
-  `promote` adds a branch; ⚠ its TABLE edits hit live
-  (`--allow-shared-schema-changes`). `tenant deploy` REPLACES: DROPS tables it lacks,
-  CONVERTS retypes (`--seed`: rows).
-  `promote` refuses a taken name/pinned slug (`SDK_IDENTITY_CONFLICT`), then
-  EXITS NON-ZERO if a declared object did not arrive or a pinned slug is not served;
-  `--set-live` waits on that (previous branch serving). Extra objects: reported;
-  a check missing an input reports `unverified`, exit 0. `--json` on every release write:
-  `completed` yes|no|unknown; UNKNOWN exits 9 — run `resolveWith`, never retry blind.
-  `--expect-live <label>` (with `--set-live`) refuses if live moved; not atomic. Inspect a staged branch with
-  `workspace export --branch <label>` or `workspace diff <entry> --branch <label>`.
-  ⚠ The redis family, `s.lambda`, `s.db.direct_query`, `s.await`, `s.microservice.request`,
-  `s.zip.*`, the raw-file readers, Datadog and Webflow need an INSTANCE CAPABILITY: they
-  deploy clean and fail on the first request if the target lacks it. `export`/`deploy` list
-  what the bundle needs — compare it to the target yourself.
+  - `promote` adds a branch; ⚠ its TABLE edits hit live (`--allow-shared-schema-changes`).
+  - `tenant deploy` REPLACES: DROPS tables it lacks, CONVERTS retypes (`--seed`: rows).
+  - `promote` refuses a taken name/pinned slug (`SDK_IDENTITY_CONFLICT`), then EXITS NON-ZERO
+    if a declared object did not arrive or a pinned slug is not served. `--set-live` switches
+    only after that check passes; a failure leaves the previous branch serving. Extra objects
+    are reported; a check missing an input reports `unverified`, exit 0.
+  - `--expect-live <label>` (with `--set-live`) refuses if live moved; not atomic.
+  - `--json` on every release write: `completed` yes|no|unknown; UNKNOWN exits 9 — run
+    `resolveWith`, never retry blind.
+  - Inspect a staged branch with `workspace export --branch <label>` or
+    `workspace diff <entry> --branch <label>`.
+- ⚠ The redis family, `s.lambda`, `s.db.direct_query`, `s.await`, async runs,
+  `s.microservice.request`, `s.zip.*`, the raw-file readers, Datadog and Webflow need an
+  INSTANCE CAPABILITY: they deploy clean and fail on the first request if the target lacks it.
+  `export`/`deploy` list what the bundle needs — compare it to the target yourself.
 - Backend SECRETS stay out of the repo: declare the NAME, value empty, in `workspaceConfig({ env })`
   passed to `registerWorkspace()`; the VALUE lives in `xano/.env` — gitignored, kept across a
   pull, read by every build. `--backend-env-file <path>` replaces that default (CI has
@@ -233,9 +230,7 @@ and a `tenant:` only if throwaway (`standard`/`run` refused).
 - `workspace reset-tables <entry> --table <guid>` puts NAMED tables back to their
   compiled `table({ seed })` rows, touching no other table. Dry run unless `--write`.
   ⚠ ROWS BEFORE LOGIC: rows are workspace-shared like schema, so they reach production when
-  applied even while the logic reading them is staged — no ordering makes a half-data change
-  atomic. Reset rows FIRST, then `promote`: new rows under old logic break only a feature
-  being removed; new logic over old rows breaks the one you are shipping.
+  applied, even while the logic reading them is staged. Reset rows FIRST, then `promote`.
 - `pull` refreshes THIS project from a backend: rewrites decoded files,
   keeps yours, lists and confirms (`--yes`).
 - `generate <source>`: the decoded tree ONLY, no project.
@@ -265,11 +260,9 @@ Non-obvious authoring rules:
 - **No callback builder.** Flat def-objects + `register*`, not
   `workspace(w => w.table(...))`. `workspace(name)` returns a named `new Xano()`;
   tables are `table({ schema: { col: f.text() } })`.
-- **Reference-helper picker:** `ref` = stack var (`as:` output), `inp` = input,
-  `col` = table column (in `db.query` `where`), `auth("id")` = the caller,
-  `c.*` = a constant. Pick by what you're pointing at.
-- **Foreign key is `f.tableRef(table)`, not `ref`.** `ref(name)` references a
-  stack variable (a value); `f.tableRef` is the column constructor.
+- **Foreign key is `f.tableRef(table)`, not `ref`.** `ref` = stack var (`as:` output),
+  `inp` = input, `col` = table column (in `db.query` `where`), `auth("id")` = the caller,
+  `c.*` = a constant; `f.tableRef` is the column constructor.
 - **Tagged values are DATA — a JS template literal cannot compose them.** `${ref(...)}`
   (or `"a" + ref(...)`) stringifies the tag object at BUILD time: ``c.text(`Hi ${ref("u.name")}`)``
   type-checks and encodes the literal text `Hi [object Object]`, served verbatim.
@@ -283,11 +276,11 @@ Non-obvious authoring rules:
 - **`get_input`/`get_raw_input` read the whole payload**, not one named input
   (args are `{ as?, encoding?, excludeMiddleware? }` — no `name`). For a single
   input use `inp("name")`.
-- **To match every row, omit `where` — never pass a constant.** `where: c.bool(true)` is
-  not "no filter": a bare scalar literal states no condition and the engine reads the
-  resulting `context.search` as garbage, so it throws. An absent `where` is how "every
-  row" is spelled. A raw `Value` `where` stays the escape hatch for a clause built
-  elsewhere — `inp("clause")`, `ref("built_where")`, or `c.text("id > 0")`.
+- **A `where` is a comparison, never a value.** To match every row, omit `where`. A value
+  `where` — `c.bool(true)`, a text clause, or one built at run time (`inp("clause")`,
+  `ref("built_where")`) — throws at build: the engine reads a filter only as a comparison
+  tree and runs anything else over EVERY row. Bind run-time values as operands instead:
+  `expr(col("status"), "=", inp("status"))`.
 
 ### Tables and columns
 
@@ -305,8 +298,7 @@ Non-obvious authoring rules:
   defaults or a 400. HTTP binds it fine. `--strict` fails on it.
 - **Numeric columns lose money quietly.** A normalized table's `f.decimal` reads
   `0.12345678` back as `0.12346`; `f.int` saturates at `9223372036854775807`
-  instead of failing. Both at HTTP 200 and plausible on read, so it surfaces as
-  arithmetic that stops reconciling. Hold money as a count of the smallest unit;
+  instead of failing, both at HTTP 200. Hold money as a count of the smallest unit;
   exact bounds: `llms/fields.md`.
 - **Self-referencing tables** need the bare-name form: inside `tweets`'s own
   schema, write `f.tableRef("tweets", { type: "int" })` — the `const tweets`
@@ -333,22 +325,17 @@ Non-obvious authoring rules:
 ### Reading and writing rows
 
 - **DB reads are field-match, not `where`-expr.** `db.get`/`db.edit`/`db.del`/
-  `db.has`/`db.patch` match one field: `{ fieldName, fieldValue }` (`fieldName`
-  defaults to the PK `id`). Only `db.query` takes a `where`/`additionalWhere`
-  `expr(...)`; writes (`db.add`/`db.edit`/`db.add_or_edit`) take a `row`/`data`.
-  Signatures: `llms/statements-data.md`.
-- **Single-field only — no composite match.** These ops match exactly ONE field;
-  there is no two-field form (the engine's by-field lookup takes a single
-  predicate). For a `(a, b)` existence/fetch — e.g. dedupe a `(habit, date)`
-  check-in — use `db.query({ where: [expr(col("habit"), "=", ...), expr(col("date"), "=", ...)], as })`
-  (a `where` array is ANDed) and branch on the result, rather than pushing the
-  check to the client.
+  `db.has`/`db.patch` match exactly ONE field: `{ fieldName, fieldValue }` (`fieldName`
+  defaults to the PK `id`); there is no composite match. Only `db.query` takes a
+  `where`/`additionalWhere` `expr(...)`; writes (`db.add`/`db.edit`/`db.add_or_edit`) take a
+  `row`/`data`. For an `(a, b)` existence/fetch (e.g. dedupe a `(habit, date)` check-in), use
+  `db.query({ where: [expr(col("habit"), "=", ...), expr(col("date"), "=", ...)], as })`
+  (a `where` array is ANDed) and branch on the result. Signatures: `llms/statements-data.md`.
 - **Drilling into a maybe-null `db.get` result 500s — use `ref(path, { safe: true })`.**
   `db.get` binds `null` on a no-match, but a nested `ref("owner.user_id")` raises a runtime
   "Unable to locate var" (HTTP 500) when `owner` is null — an ownership guard throws instead
-  of failing cleanly. Two correct shapes:
-  - Guard existence first — `s.precondition({ expr: expr(ref("owner"), "!=", c.null()),
-    error_type: "notfound", error: c.text("Not found.") })` — then drill WITHOUT `safe`.
+  of failing cleanly (same for a `single` `db.query`; warns `stack.drill-maybe-null`). Two correct shapes:
+  - Guard existence first — `guard.found("owner")` (a 404 precondition) — then drill WITHOUT `safe`.
   - Or drill null-safe inside an EXPRESSION or `obj()` operand:
     `expr(ref("owner.user_id", { safe: true }), "=", auth("id"))` yields `null` (the guard
     reads `false`) instead of 500ing. Works inside `obj({...})` too — no `s.set_var` hoist needed.
@@ -379,12 +366,12 @@ Non-obvious authoring rules:
 - **`s.api.call` / `s.task.call` / `s.trigger.call` / `s.workflow_test.call` are
   WORKFLOW-TEST ONLY.** Outside a `workflowTest({...})` stack the engine cannot reach
   the target, so one in a query/function/task deploys clean and then answers the first
-  real request with `ERROR_FATAL: <Type> does not exist: <type>:<n>` — and not per
-  host kind, the same call fails identically from a function a query runs.
+  real request with `ERROR_FATAL: <Type> does not exist: <type>:<n>`. The failure is not per
+  host kind: the same call inside a function that a query runs fails the same way.
   `export()` refuses them. `s.function.call`, `s.tool.call`, `s.middleware.call` and
-  `s.addon.call` run anywhere, as does `s.function.run` (the ordinary function
-  invocation). To share logic between endpoints, put it in a `defineFunction` and
-  `s.function.run` it from both.
+  `s.addon.call` run anywhere, as does `s.function.run`. To share logic, put it in a
+  `defineFunction` and `s.function.run` it — NOT `s.function.call`, which binds a failing
+  target's error envelope instead of raising.
 - **`expect.*` is a unit-test assertion; `s.expect.*` is a workflow-test statement.**
   A statement's `mock` is keyed by TEST NAME; an undeclared name throws. See `llms/tests.md`.
 - **A helper returning `Statement[]` widens the stack and kills `InferResponse`.**
@@ -398,17 +385,15 @@ Non-obvious authoring rules:
   The regex filters (`regex_test`/`regex_match`/`regex_replace`/…) are PHP `preg_*`: the
   piped value is the PATTERN and must be delimiter-wrapped, and the ARGUMENT is the subject.
   Correct: `withFilters(c.regex(/^[a-z-]+$/i), fl.regex_test(inp("slug")))`.
-  - A bare `c.text("^…$")` is an invalid pattern that matches *nothing* for every input,
-    so a precondition on it silently rejects all values. `c.regex(body, "i")` wraps +
-    escapes it for you (a JS `RegExp` too: `c.regex(/^…$/i)`).
-  - Reversed — subject piped, pattern in the argument — reads correctly, type-checks, and
+  - A bare `c.text("^…$")` is an invalid pattern that matches *nothing* for every input, so
+    a precondition on it rejects all values. `c.regex(body, "i")` (or a JS `RegExp`) wraps + escapes it.
+  - Reversed (subject piped, pattern in the argument) type-checks and
     answers false for EVERY input, so an `if (matches) reject` guard admits what it refuses.
-  - Build time refuses both: `withFilters` throws on a bare `c.text` pattern from ANY position
-    in the chain (a normalizer in front of the regex filter is refused too; nothing upstream
-    adds the delimiters) and on a pattern found in the subject slot; `s.expect.to_match` is the
-    same PATTERN slot, refused both ways; a `ref`/`inp` pattern is passed through untouched.
-    `export()` warns on a reversed pair in stored bytes.
-  - Better still: a native typed input (`input.email`) over hand-rolled validation.
+  - `withFilters` throws on both: a bare `c.text` pattern at ANY position in the chain (a
+    normalizer in front does not add delimiters) and a pattern in the subject slot.
+    `s.expect.to_match` is the same PATTERN slot, refused both ways. A `ref`/`inp` pattern is
+    passed through untouched. `export()` warns on a reversed pair in stored bytes.
+  - Prefer a native typed input (`input.email`) over hand-rolled validation.
 - **An `auth()`-keyed limiter FAILS the request on any host with no caller identity —**
   **at every tier.** `s.redis.ratelimit({ key: withFilters(c.text("rl:"), fl.concat(auth("id"))), error: c.text("…") })`
   is the per-user form, and a public query, a task, or a function has no caller identity.
@@ -420,8 +405,8 @@ Non-obvious authoring rules:
 ### Identity, build, and deploy
 
 - **Same-name siblings collide — queries excepted: their identity carries group + verb.**
-  Guids derive from `(type, name)`, so two functions (or tables, toolsets, …) sharing
-  a name derive ONE guid and `export()` throws — give them DISTINCT names. A QUERY
+  Two functions (or tables, toolsets, …) sharing a name derive ONE guid and `export()`
+  throws — give them DISTINCT names. A QUERY
   derives from `(api group, verb, name)`, the engine's own uniqueness: `GET items` +
   `POST items`, and `items` across two groups, coexist, and the lock keys the same
   composed identity (`query:blog|GET|items`) — changing a query's verb or group
@@ -455,29 +440,27 @@ Non-obvious authoring rules:
     the runner has. An explicit `--profile` against it is a hard error too, not a displacement.
   - On disk: `npx @xano/sdk profile add <name> --instance … --workspace-id <n>` reads the token
     from piped stdin, else PROMPTS (a flag would reach the process list); the instance must accept it.
-    `auth.json` holds a map of named profiles, selected by `--profile <name>`. The older
-    `$XANO_REFRESH_TOKEN` + `$XANO_CLIENT_ID` pair still works but ROTATES: single-use.
-- **Event-driven objects fire on an EPHEMERAL.** A `task` (scheduled), an `mcpServer`,
-  and every trigger — `tableTrigger` included — run normally on an ephemeral env, which
-  is where `deploy` sends them. So test an event-driven design (screen-on-insert, cron
-  cleanup, MCP tool call) by deploying it and letting it run.
+    `auth.json` holds a map of named profiles, selected by `--profile <name>`.
+    `$XANO_REFRESH_TOKEN` + `$XANO_CLIENT_ID` also authenticate, but the refresh token is single-use (it ROTATES).
+- **Event-driven objects run once deployed.** A `task` (scheduled), an `mcpServer`, and
+  every trigger — `tableTrigger` included — run on every deploy target, the Xano Engine and
+  an ephemeral alike. Test an event-driven design (screen-on-insert, scheduled cleanup, MCP
+  tool call) by deploying it and letting it run.
 
 ## Statements
 
 Reachable through the `s` namespace: `s.<path>({...})`. Declarative statements
 take one typed args object (field names match the engine); every surface's field
 signature is in `llms/statements-catalog.md`. Specials (`[special]`) are
-hand-authored: control flow is below, and the rest are in the `llms/statements-*`
-topic files this doc's navigation names.
-Wrap an `input`-routed `value` field in `ignored(...)` to store it but SKIP it at
-  runtime — the engine records `<name>:ignore` and the parameter falls back to its
-  default. Not the same as an empty value, and not the same as omitting the field
-  (which stores no entry at all). Mostly seen on a pulled workspace. A field written
-  into `context` instead (the `s.math.*`/`s.text.append` mutation family) has no slot
-  for the flag and THROWS rather than dropping it.
+hand-authored: control flow is below, the rest are in the `llms/statements-*` topic files.
 Fields marked `value` take a `Value` (`c.*`/`ref`/`inp`); `comparison` takes an
 `expr(...)`. A `→ as: <type>` suffix names what the statement's `as:` output var
 holds (curated, not exhaustive — absence means read the `[output]` flag and prose).
+`ignored(...)` around an `input`-routed `value` field stores it but SKIPS it at runtime: the
+engine records `<name>:ignore` and the parameter takes its default. Distinct from an empty
+value and from omitting the field (no entry stored). Mostly seen on a pulled workspace. On a
+`context`-routed field (the `s.math.*`/`s.text.append` mutation family) `ignored(...)` THROWS:
+there is no slot for the flag.
 
 ### Specials — authored signatures
 

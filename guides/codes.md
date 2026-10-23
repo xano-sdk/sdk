@@ -75,7 +75,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `env-pull.declared-missing` | … holds no value for …, which this project declares — so … has none for … either, and a deploy has nothing to send. |
 | `env-pull.dropped-keys` | Dropped … key… that … only in the local …: …. |
 | `env-pull.invalid-name` | … could not be written: … — a name is letters, digits and `_`, and does not start with a digit. |
-| `env-pull.unwritable-value` | … could not be written: the dotenv format carries no newlines or edge whitespace in a value. |
+| `env-pull.unwritable-value` | … could not be written: the dotenv format carries no newline in a value. |
 | `ephemeral.duplicate-name` | … also named "…" (…) — this deploy created … beside …. |
 | `ephemeral.entry-changed` | … was last deployed from …; …. |
 | `ephemeral.expires-not-applied` | --expires-hours … was not applied: … already exists, and an ephemeral's lifetime is set only when it is created (this one expires …). |
@@ -99,6 +99,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `init.verify-failed` | Verification FAILED — the objects listed above do not re-export as they were pulled. |
 | `init.workflow-exists` | … already exists — moving the new workflow there replaces it. |
 | `landing.record-failed` | The prune landed, but … could not be updated: … |
+| `local.capability-unavailable` | A deploy to the local Xano Engine uses a statement the engine refuses (`s.storage.sign_private_url`: 403 `Not supported`); exercise it on an ephemeral (`deploy --ephemeral`). Never a `--strict` failure. |
 | `local.foreign` | Left running, not started by xanosdk: … |
 | `local.import-failed` | The import failed — the engine is still running, so nothing needs restarting: |
 | `local.list-failed` | Could not list running engines, so none are shown: … |
@@ -241,6 +242,9 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `secrets.not-ignored` | … holds secrets and git was not ignoring it. |
 | `secrets.tracked-by-git` | … holds secrets and is tracked by git — an ignore rule cannot untrack it. |
 | `secrets.vault-in-bundle` | … contains … private stored …. |
+| `security.encrypt-default-algorithm` | …: `s.security.…` sets no `algorithm`, so the engine uses `aes-128-cbc` — even a 256-bit key then runs AES-128. |
+| `security.jwt-no-ttl` | …: `s.security.…` sets no `ttl`, so the token carries no `exp` and never expires. |
+| `security.rsa-default-bits` | …: `s.security.create_rsa_key` sets no `bits`, so the engine generates a 1024-bit key — below the 2048-bit minimum now considered safe. |
 | `seed.guarded-columns` | Could not read which columns are sensitive in … — the source's export does not carry …, so only `internal` and password columns were checked: … |
 | `seed.none-declared` | `--seed` was passed, but no table in this project declares seed rows — no rows will be written. |
 | `seed.password-hashes` | Seed rows land password columns as given — they must already be hashes. |
@@ -268,6 +272,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `update.available` | A new @xano/sdk is available: … → … |
 | `upgrade.partial` | Could not restore the … range in package.json: … |
 | `workspace-env.compared-empty` | Workspace env: … compared as EMPTY (--allow-empty-env). |
+| `workspace-env.inline-comment` | Workspace env: the value of … in `…` carries " #", and … sent with it: the file has no inline comments, so `KEY=abc # note` sends "abc # note". |
 | `workspace-env.missing-values` | … declared env var… no value in …: …. |
 | `workspace-env.not-written` | Workspace env: the bundle carries … (…) — NOT written (--no-secrets). |
 | `workspace-env.undeclared` | A workspace env var is supplied but not declared in `workspaceConfig({ env })`; the deploy would add it. |
@@ -298,10 +303,13 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 | `db.addon-unknown-column` | …: the attached … binds `out("…")`, but the rows it reads have no `…` column — the binding is null on every row, so the addon grafts nothing. |
 | `db.addon-unknown-input` | …: the attached … is passed `…`, which that addon does not declare — the engine drops it, so the addon runs with its input unset and grafts nothing. |
 | `db.bulk-update-partial-item` | …: `s.db.bulk.update` on table "…" is a full-row REPLACE, and these items omit … — each omitted column is written to its zero value ("" / 0 / null), not left… |
+| `db.edit-optional-input` | … "…": `…` writes … from optional, non-nullable …. |
+| `db.eval-unselected` | …: `eval` computes …, but `output` does not select … — `output` applies to the eval columns too, so … dropped from the result with no error (and `InferRespon… |
 | `db.filter-operand-invalid` | …: a `where` clause fails every request that reaches it, whatever the data — …. |
 | `db.internal-column-read` | …: reads `ref("…")`, but "…" on table "…" is `access: "internal"` and a `db.get` does not return it — the row has no "…" key, so this fails at runtime with `… |
 | `db.null-match-arg` | …: `c.null()` is the … of `…`. |
 | `db.output-unknown-column` | …: `output` selects "…", but the row has no "…" — the key is absent from the result. |
+| `db.patch-raw-input` | … "…": `s.db.patch` writes `inp("…")` as sent, so the caller can set ANY column, the primary key included (`{"id": 50}` renumbers the row). |
 | `db.query-envelope-read-unpaged` | … "…": `ref("…")` reads the paging envelope, but `s.db.query` "…" is not paged with one, so it binds the row list and `…` is no key of it. |
 | `db.query-output-joined-column` | …: `output` selects "…", a JOINED column — a join adds no key to the row, so it is dropped from the result with no error. |
 | `db.query-output-mixed-roots` | …: `s.db.query` is PAGED, so `output` selects from the envelope (…) — but …, which no envelope key matches, so … dropped from the result. |
@@ -309,6 +317,7 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 | `db.query-output-totals-off` | …: `output` keeps …, but the envelope carries … only when counting is on — the key is absent from the result. |
 | `db.query-output-unknown-column` | …: `output` selects "…", but the row has no "…" — the key is absent from the result. |
 | `db.safe-ref-match-arg` | …: a `ref(…, { safe: true })` is the … of `…`. |
+| `db.stream-returned` | … returns `…`, a `returnType: "stream"` binding. |
 | `diagnostics.allow-unused` | … "…": `diagnostics.allow` accepts …, but this export raised no such warning about … — the shape … accepted is gone, or the check no longer finds it. |
 | `doc-token.unsupplied` | API group "…" declares a documentation gate and no token was found for it in `…`, so this artifact carries no `documentation` block — the bytes an export wou… |
 | `documentation.literal-token` | … spells a documentation token literally in …. |
@@ -317,7 +326,10 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 | `field.email-default-invalid` | The `default` at … is …, which is not an email address — every insert or request that leaves the field out is refused "Invalid email format.". |
 | `field.enum-default-not-a-value` | The `default` at … is …, which is not one of the enum's values (…) — a value no request can send back. |
 | `field.input-default-invalid` | The `default` at … is …, which … — every request that leaves the input out is refused. |
+| `field.input-never-omittable` | …, input "…" is optional, but it can never be omitted: an omitted input binds …, and …, so every request that leaves it out is refused with a 400. |
 | `field.input-required-default-ignored` | The `default` at …, input "…" is …, but the input is `required: true` — the engine refuses a request that leaves a required input out ("Missing param") befor… |
+| `field.list-bounds-on-scalar` | …, … "…" sets `list`, but it is a single value: `list` is the length BOUNDS of a list and does not make the field one, so it is ignored. |
+| `field.list-default-ignored` | The `default` at …, input "…" is …, but the input is a list, and the engine replaces any default on a list input with `[]`: an omitted list binds `[]`, not t… |
 | `field.vector-not-nullable` | table "…", column "…" is a vector with `nullable: false` and no default — an empty default becomes NULL only on a nullable column, and `''` is not a vector,… |
 | `function.reserved-input-name` | function "…": the input name `…` is reserved by the engine — a call passes its arguments keyed by input name, and the engine skips a `…` key when it evaluate… |
 | `guard.role-unsatisfiable` | A guard.role on a table passed by name checks a column the table lacks, or a role its enum column cannot hold. |
@@ -349,6 +361,7 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 | `middleware.input-never-bound` | middleware "…" declares `input`, which the host request never binds — `inp()` inside a middleware fails at runtime with `Unable to locate input`, and a decla… |
 | `middleware.post-merge-list` | query "…" answers a list, and the post middleware … merges its response into it: the list arrives as an object keyed by index (`{"0":{…},"1":{…},…}`), not th… |
 | `middleware.post-reads-request` | middleware "…" is in the post chain of … "…"… and reads … from `s.util.get_all_input`. |
+| `middleware.pre-replace-drops-input` | query "…" reads …, which the pre middleware "…" (`resultStrategy: "replace"`) does not re-emit: a replace swaps the caller's inputs for its response (…), so… |
 | `query.auth-table-unflagged` | query "…" requires auth against table "…", which is not marked `table({ auth: true })`. |
 | `query.auth-table-unregistered` | query "…": `auth` is a table def that isn't registered on this workspace — add it with `registerTables([…])`. |
 | `query.input-name-mangled` | query "…" (…) has an input named …, which a query string cannot deliver — the request parser rewrites param names, so `?…=…` … and the input stays empty. |
@@ -361,48 +374,64 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 | `realtime.gate-denies-everyone` | … "…" gates `…` but declares no `response`, so it returns nothing on every run — and an empty return is a DENY, which refuses every client. |
 | `realtime.join-deliver-object-response` | … "…" serves both `join` and `deliver` with one object response — `join` reads it as the admit decision, but `deliver` reads an object as the recipient's NEW… |
 | `realtime.per-recipient-without-deliver` | realtimeChannel "…" sets `delivery: { perRecipient: true }` but no active `deliver` trigger is bound to it, so the flag is a no-op — the engine falls back to… |
+| `realtime.precondition-fails-open` | realtimeMessage "…" guards with `s.precondition`/`guard.*`, which cannot block a realtime message: a failing one crashes the handler, and a crashed handler F… |
 | `realtime.publish-unknown-channel` | …: `s.realtime.publish` targets channel path "…" on realtime server "…", but that path is a channel of … only, so no client of "…" can be subscribed to it —… |
 | `realtime.publish-unknown-server` | …: `s.realtime.publish` targets realtime server "…", which this workspace does not register. |
 | `realtime.server-disabled` | realtimeServer "…" is not enabled — `enabled` defaults to FALSE, unlike every other `enabled` — but … channel… registered on it, so no client can connect to …. |
 | `redis.ratelimit-no-error` | … "…": an `s.redis.ratelimit` has no `error`, so it never stops a request — over `max` it …. |
 | `reference.unresolved` | … references …, which is not registered on this workspace. |
+| `response.return-outside-type` | …: an `s.return` in its stack serves a body other than `response`, and `InferResponse` types this def from `response` only, so the early-return body is missi… |
 | `response.unbound-return` | … "…" ends with s.return(...) but has no `response` field. |
 | `search.request-only-filter` | … pipes a search operand through `…`, which evaluates only in the request. |
 | `seed.invalid` | A seed row does not match its table's columns. |
 | `seed.public-seed` | Table "…" declares publicSeed but has no `seed`: there are no seed values to declare public. |
-| `stack.agent-tools-off` | …: `s.ai.agent.run` of agent "…" leaves `allowToolExecution` unset, so the agent runs with its tools off: it sees them but never calls one, and answers as if… |
-| `stack.auth-no-caller` | … "…" reads `auth()`, but …: it deploys clean and never holds the caller's identity. |
+| `stack.agent-tools-off` | …: `s.ai.agent.run` of agent "…" sets `allowToolExecution: c.bool(false)`. |
+| `stack.array-index-unbound` | …: `…`'s `if` reads `$index`, which it does not bind (only `$this`), so every non-empty request fails with 500 "Missing var entry: $index". |
+| `stack.array-key-constant` | …: `…`'s `…` is a constant, so every item gets the same key. |
+| `stack.auth-no-caller` | query "…" reads `auth()`, but …. |
 | `stack.auth-null-host` | … "…": an `s.redis.ratelimit` in its stack keys off auth(), where …. |
+| `stack.auth-token-optional-expiration` | … "…": `s.security.create_auth_token` takes `expiration` from `inp("…")`, an optional, non-nullable input with no default. |
 | `stack.blank-table` | … has … (…) bound to no table (`table: null`) — … nothing when run. |
 | `stack.col-outside-query` | `col("…")` outside a `db.*` statement's where/sort/eval — the engine reads it as the column NAME, so a condition on it is decided by that text and a response returns it. |
+| `stack.drill-maybe-null` | …: `ref("…")` in … drills into `…`, which … binds to `null` when no row matches, and nothing before it checks that. |
+| `stack.env-secret-in-response` | …: the `s.util.get_env` binding … returned in the response. |
 | `stack.env-undeclared` | … "…" reads …, which … among the … environment variable… this workspace config declares (…). |
 | `stack.expect-outside-test` | … runs … in its stack. |
 | `stack.inp-undeclared` | … "…" reads …, which … here — ….… This deploys clean and fails at runtime with `Unable to locate input: …`. |
 | `stack.loop-control-outside-loop` | … runs `…` outside any loop. |
 | `stack.password-input-double-hash` | …: `s.security.check_password` reads `inp("…")`, and the input `…` is declared `input.password()`. |
+| `stack.precondition-bare-error` | …: `s.precondition`'s `error` is a bare string (…), which the engine drops: the client gets "Precondition failed." instead. |
+| `stack.predicate-unbound` | …: `…` has no `as`, so it does nothing. |
 | `stack.reserved-var-namespace` | `ref("…")` reads a stack variable named after a reserved namespace (`auth`, `input`, `env`, …) that nothing binds — use its accessor (`auth()`, `inp()`, `env()`, …) — a 500 at runtime. |
 | `stack.to-throw-isolated-var` | …: `ref("…")` inside an `s.expect.to_throw` body names `…`, which is bound OUTSIDE the body. |
+| `stack.tool-call-reads-auth` | … "…": `s.tool.call` runs tool … with NO caller, even from an authenticated query: its `auth()` fails ACCESS_DENIED, the failure is bound to `as`, and the re… |
 | `stack.unbound-var` | `ref("…")` reads a variable nothing in the stack binds with `as` — `Missing var entry`, a 500 at runtime. |
+| `stack.var-conditionally-bound` | A var bound only on some paths (one `s.conditional` branch, some `switch` cases, a loop body, a `try` block) is read after the block — `Missing var entry` on the skipped path, a 500; declare it first with `s.set_var(name, c.null())`. |
 | `stack.zip-password-absent` | …: `…` sends no … key (`…: null`), and the engine rejects that at run time with `Missing param: …`. |
 | `statement.decode-only` | A pulled workspace carries a statement Xano SDK has no factory for, as a `raw(…)` call; replace it with the statement it stands in for. |
 | `statement.omitted-input` | …: `s.function.run` of function "…" does not pass …. |
 | `statement.reserved-input-name` | …: `…` passes an input named `…`, which is reserved by the engine — it skips a `…` key when it evaluates a call's arguments, so the callee receives the uneva… |
 | `statement.run-family-host` | … contains `…`, which only runs inside a workflow test. |
 | `statement.unknown-input` | …: `…` of … "…" passes `…`, which that … does not declare — the engine drops it, so the target never sees the value. |
+| `storage.include-meta-returned` | … returns `…`, from an `s.storage.create_attachment({ include_meta: true })` binding. |
 | `storage.stored-file-input` | … "…": `s.storage.…` reads `inp("…")`…, an `input.…()` — that input takes an already-stored file, so an upload to it is refused (`400 Missing param: path`) b… |
 | `switch.missing-break` | … has a `s.switch` whose case … omits `break: true`, so a match there FALLS THROUGH and also runs …. |
 | `table.column-default-unfit` | A JSON-storage column's `default` its type cannot hold: the table deploys, then every insert that leaves the column unset is refused. |
 | `table.column-name-unusable` | A stored column name the rule refuses (inserts, filters or reads fail on it), kept on a pulled table. |
 | `table.reserved-column-name` | table "…": the column name `…` is reserved by the engine — it is the key a block statement stores its sub-stack under, and an insert's parameter map collides… |
+| `table.search-index-unnamed` | A `type: "search"` index with no `name`: it deploys but cannot be queried — a search needs `col("$<name>")`, so an unnamed one is unreferenceable. |
 | `table.view-duplicate` | …: `id` "…" is also the id of … — each view needs its own uuid. |
 | `table.view-id-not-uuid` | …: `id` "…" is not a uuid, and the engine keys the view by it. |
 | `table.view-unknown-column` | …: `…` names "…", which is not a column of this table… The view exports and then …. |
 | `test.live-datasource` | A def's test runs against the "live" datasource, which every run clones first; `datasource: ""` or a small fixture is the default. |
 | `test.unknown-input` | …: `input` passes `…`, which the … does not declare — the engine drops it, so the test runs without it. |
+| `tool.description-shadowed` | tool "…" sets both `description` and `instructions`. |
 | `tool.output-mismatch` | tool "…": its `response` …. |
 | `toolset.primitive-reads-auth-ungated` | mcpServer "…": … "…" reads `auth()`, but its entry names no auth table, so it runs with no caller and every `…` answers `-32603 "Access Denied"`. |
 | `toolset.tool-reads-auth-ungated` | … "…": tool "…" reads `auth()`, but its entry names no auth table, so the tool runs with no caller. |
 | `toolset.tool-ref-zero` | … `tools[…]` is `id: 0`, which references no tool — engine ids start at 1. |
+| `trigger.absent-side-read` | tableTrigger "…" reads `t.…("…")` outside any branch, but on … `…` is `{}`: the read RAISES `Unable to locate input: …` and silently aborts that run (nothing… |
+| `trigger.mcp-response-missing-key` | mcpServerTrigger "…": its response has no … key. |
 | `trigger.no-action` | … "…" enables no action, so it deploys and never fires. |
 | `trigger.search-bare-column` | tableTrigger "…": `search` reads `col("…")`, which names neither row the condition is tested against. |
 | `trigger.search-unknown-column` | tableTrigger "…": `search` reads `col("…")`, but its table has no column "…" — it declares …. |
@@ -413,3 +442,4 @@ Raised while a workspace compiles (`export`, `deploy`, `release`, …). A warnin
 | `value.regex-operands-reversed` | … pipes a regex filter's SUBJECT and passes its PATTERN as the argument: …. |
 | `value.timezone-unknown` | … "…": … names a timezone the engine does not apply — it formats in UTC instead, without an error. |
 | `workflow-test.live-datasource` | A workflow test runs against the "live" datasource, which every run clones first; `datasource: ""` or a small fixture is the default. |
+| `workflow-test.unchecked-child` | workflowTest "…": `s.workflow_test.call` runs … and nothing reads its result. |

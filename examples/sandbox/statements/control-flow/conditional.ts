@@ -6,11 +6,16 @@
  */
 import { defineFunction, s, c, ref, expr, cmp, and, or } from "@xano/sdk";
 
-/** Gate 1 — `then` only (no else branch). */
+/**
+ * Gate 1 — `then` only (no else branch). A var the branch binds is declared
+ * first: when the branch is skipped, a var bound only inside it does not exist,
+ * and reading it 500s (`Missing var entry`).
+ */
 export const conditionalThenOnly = defineFunction({
   name: "ex_conditional_then_only",
   stack: [
     s.set_var("n", c.int(3)),
+    s.set_var("sign", c.text("non-positive")),
     s.conditional({
       when: expr(ref("n"), ">", c.int(0)),
       then: [s.set_var("sign", c.text("positive"))],

@@ -585,8 +585,11 @@ export async function resolveLiveEngine(
  *
  * The order is what keeps the pin honest: resolve, ACQUIRE, then write the pin
  * — a version that does not exist or fails to download never reaches
- * `package.json`. Already on the target is an answer, not work: no write, no
- * download, and nothing running is touched.
+ * `package.json`. Already on the target still acquires it, because a pin is
+ * not a binary: a fresh machine with a current pin has nothing cached, and an
+ * update that answered "nothing to update" there left the next run without an
+ * engine. A cached pin is answered from disk; nothing is written and nothing
+ * running is touched.
  *
  * A live engine on another binary is replaced through the deploy's own KTD6
  * path (stopped by name, the new binary started, recorded as a fresh start).
@@ -621,16 +624,7 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
   const fetch = opts.fetch === undefined ? {} : { fetch: opts.fetch };
   const target = await requestedEngineVersion(args.engineVersion ?? "latest", opts, env, "update to");
 
-  // Every outcome is said on stderr whatever stdout is, as `cache clear` says
-  // its own: off a terminal the document alone left the log empty (E2E pass 29).
-  if (current === target) {
-    success(`Already on ${target} — nothing to update.`);
-    if (isMachineOutput(args)) {
-      writeJson({ from: current, to: target, changed: false, pinPath: join(dir, "package.json"), restarted: null });
-    }
-    return;
-  }
-
+  const wasCached = readEngineEntry({ version: target }, env) !== undefined;
   const acquired = await acquireEngine({
     spec: { kind: "release", version: target },
     env,
@@ -638,6 +632,23 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
     ...(opts.platform === undefined ? {} : { platform: opts.platform }),
     ...(opts.arch === undefined ? {} : { arch: opts.arch }),
   });
+
+  // Every outcome is said on stderr whatever stdout is, as `cache clear` says
+  // its own: off a terminal the document alone left the log empty (E2E pass 29).
+  if (current === target) {
+    success(wasCached ? `Already on ${target} — nothing to update.` : `Already on ${target} — downloaded it to this machine.`);
+    if (isMachineOutput(args)) {
+      writeJson({
+        from: current,
+        to: target,
+        changed: false,
+        downloaded: !wasCached,
+        pinPath: join(dir, "package.json"),
+        restarted: null,
+      });
+    }
+    return;
+  }
   const pin = writePin(dir, target);
   const replaced = await restartMismatchedEngine({
     dir,
@@ -670,6 +681,7 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
       from: current,
       to: target,
       changed: true,
+      downloaded: !wasCached,
       pinPath: pin.path,
       restarted: replaced?.name ?? null,
       url: replaced?.url ?? null,

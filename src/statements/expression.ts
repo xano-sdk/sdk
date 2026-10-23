@@ -199,12 +199,18 @@ export type Condition = SearchNode | SearchNode[];
  * narrow `expr()`.
  *
  * ⚠ **`opts.ignoreEmpty` DROPS the clause when its right value resolves empty —
- * it does not match zero rows.** On `in`/`not in` those are opposite results:
- * `cmp(col("owner"), "in", ids)` with an empty `ids` matches nothing, and the
- * same clause with `{ ignoreEmpty: true }` returns the UNFILTERED table. Never
+ * it does not match zero rows.** "Empty" is PHP `empty()`: `null`, `""`, `"0"`,
+ * `0`, `0.0`, `false`, and `[]` — so `0`/`false` all drop the clause. A numeric
+ * or bool filter therefore CANNOT match on zero or false (`max_price=0` returns
+ * the whole table), and an omitted `input.int()`/`input.bool()` binds `0`/`false`,
+ * indistinguishable from a real zero. On `in`/`not in` empty is an opposite
+ * result: `cmp(col("owner"), "in", ids)` with an empty `ids` matches nothing, and
+ * the same clause with `{ ignoreEmpty: true }` returns the UNFILTERED table. Never
  * put it on a clause that scopes rows to a permitted set — an empty permission
- * list then returns everything. It is for an OPTIONAL search filter,
- * where "the caller left this box blank" really does mean "do not filter".
+ * list then returns everything. It is for an OPTIONAL TEXT/LIST search filter,
+ * where "the caller left this box blank" really does mean "do not filter"; for an
+ * optional numeric/bool filter use a `nullable: true` input and an
+ * `s.conditional` on `!= null` (or a precondition) instead.
  */
 export function cmp(
   left: Value,

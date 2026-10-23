@@ -6,19 +6,22 @@ Author table columns + function/API inputs with the typed catalog: `f.<type>(opt
 for columns, `input.<type>(opts?)` for inputs. Common opts: `required`, `nullable`,
 `default`, `description`, `access` (a read omits `"internal"` columns, returns `"private"` ones; `InferRow`
 is the full row, both kept), `sensitive` (masks the input's value in request logs; a read still RETURNS a sensitive column — `access: "internal"` keeps it out).
-**`nullable` defaults PER TYPE, matching the engine's own column-creation API**: `true`
-for `f.vector`, `f.uuid`, every `f.geo.*` and every file type (`f.image`/`f.video`/
-`f.audio`/`f.attachment`), `false` for everything else (text, int, decimal, bool, email,
-enum, json, object, password, date, tableRef); inputs add date, timestamp and file, so an
-omitted one binds `null` (a `required` one still accepts an explicit `null`). Pass `nullable` to override —
-e.g. `f.geo.polygon({ nullable: false })`. An empty default becomes NULL only when
+⚠ On a column, `required` is not a write-time constraint: `db.add`/`edit` store a null, `""`, or (after a `trim` method) whitespace-only value at HTTP 200 — it only shapes the seed write-shape, the typed row, and the editor. Enforce presence on the input (`input.*({ required: true })` plus a non-empty check — a `min: 1` method or an `s.precondition`).
+⚠ An `f.date` COLUMN does not validate the written value: an invalid calendar date ROLLS OVER into a different valid one (`"2020-13-45"` stores `"2021-02-14"`) instead of failing, so a value arriving through `input.text`/`input.json` or a computed var is silently corrupted. Validate at the boundary with `input.date` (it rejects the same string with a 400).
+**`nullable` defaults per type**: `true` for `f.vector`, `f.uuid`, every `f.geo.*` and every
+file type (`f.image`/`f.video`/`f.audio`/`f.attachment`); `false` for the rest. Inputs add
+date, timestamp and file, so an omitted one binds `null`
+(a `required` one still accepts an explicit `null`). Pass `nullable` to override.
+⚠ Except `input.geo.*`: an omitted optional geo input is not bound at all, so `inp("p")` 500s `Unable to locate input: p`. Mark it `required: true`, or read it only inside an `s.conditional` that a sibling flag gates.
+An empty default becomes NULL only when
 nullable, so a non-null `f.vector(8)` column fails to create (`''` is not a vector).
 **`f.geo.*` values are `{ type, data }`, not GeoJSON.** The same shape goes in and comes
 back. `type` per column: `point` → `"point"`, `data` `{ lng, lat }`; `multipoint` → `"points"`,
 `linestring` → `"path"`, `polygon` → `"poly"` (ring closed for you), `data` `[{ lng, lat }, …]`;
 `multilinestring` → `"paths"`, `multipolygon` → `"polys"`, `data` `[[{ lng, lat }, …], …]`.
 Any other spelling (`"multipoint"`, `"linestring"`, `"Point"`) 400s `Only strings are supported for:`.
-Raw WKT text (`c.text("POINT(1 2)")`) is accepted on write too, but a read never returns one.
+Raw WKT text (`c.text("POINT(1 2)")`) is accepted on write too, but a COLUMN read never returns one.
+⚠ An `input.geo.*` is the exception: `inp("p")` inside the stack reads back as WKT TEXT (`"POINT(10 20)"`), NOT the `{ type, data }` you POSTed — it becomes `{ type, data }` only once WRITTEN to a geo column and read back. So `InferResponse` of a bare `inp()` of a geo input is wrong (it types `{ type, data }`); treat a bound geo input as a `string`.
 `methods` (validators/transforms, names per type below): `"trim"`, `"min:8"`
 (a text arg keeps its `:`: `"startsWith:https://"`), or `{ name, arg }` — for unlisted names and `pattern`'s error text.
 `f.json({children})` declares the nested shape stored INSIDE a json column — an ARRAY of
@@ -26,10 +29,11 @@ Raw WKT text (`c.text("POINT(1 2)")`) is accepted on write too, but a read never
 `f.object` takes positionally. Omit it for an unstructured json column.
 `f.enum(values)`/`f.vector(size)`/`f.object(children)`/`f.tableRef(table)` take a
 positional payload before opts — and still accept the standard `FieldOptions` after it
-(`f.enum([])`/`input.enum([])` are accepted: a pulled enum with no options, not one to
-author — it brands the column `never`, which `InferRow` surfaces as `undefined`.)
 (e.g. `f.tableRef(users, { required: true })` — only `min`/`max` are listed as tableRef
-methods below, but `required`/`nullable`/`description`/… apply like any field.)
+methods below, but `required`/`nullable`/`description`/… apply like any field).
+`f.enum([])`/`input.enum([])` (a pulled enum with no options) brands the column `never`; `InferRow` surfaces it as `undefined`.
+⚠ An `f.enum` column refuses a non-member (400) but STORES `""`, which an omitted optional
+`input.text`/`input.enum` binds, overriding the `default`; `InferRow` types it members `| ""`. Declare that input `nullable: true` (omitted → `null` → the default).
 An **OPTIONAL foreign key wants a `0` sentinel, not `nullable: true`**. `f.tableRef` to an int-keyed table stores
 an `int`, and a null in it is unqueryable: `null` is never a legal `fieldValue`/`id`, so
 `s.db.get`/`edit`/`del` on that column answer HTTP 400 `Missing param: field_value` rather
@@ -40,10 +44,11 @@ binds `null`, which is the answer the null was reaching for. `export()` warns on
 An `f.vector(size)` column is SEARCHED through `s.db.query`'s `eval` pipeline, not through
 any `SearchOp`: give the table `index: [{ type: "vector", fields: [{ name: "embedding", op:
 "vector_cosine_ops" }] }]`, then rank with a distance filter + a sort on its alias (see
-`s.db.query` → `eval`). Without that pairing the column stores and indexes but nothing
-queries it.
+`s.db.query` → `eval`).
 `{ array: true }` makes any `f.*` scalar a **list column** — `f.text({ array: true })`
-surfaces as `string[]` in `InferRow<typeof table>` (the column analogue of `input.list`).
+surfaces as `string[]` in `InferRow<typeof table>`.
+Filter one to rows containing a value with `contains`/`overlaps` and a LIST operand (NOT a
+scalar — `llms/statements-data.md`).
 **Seed a table's starting rows with `table({ seed })`.** `seed` takes rows
 typed against the table's schema as a WRITE shape (a column without
 `required: true`, and the system columns, may be omitted; `null` needs
@@ -68,7 +73,7 @@ Omit `id` and rows auto-number `1..N` (int PK) or take
 a stable derived uuid (uuid PK); supplying `id` pins it (and
 resets an int sequence past the max). All-or-nothing — mixing explicit and
 omitted `id` throws. A `system:false` PK is the author's to supply. Pinning is
-`seed`-only — `s.db.bulk.add` DROPS `id` unless `allowIdField: true`.
+`seed`-only — `s.db.bulk.add` DROPS `id` unless `allowIdField: true`. ⚠ After a deploy, the FIRST insert into an UNSEEDED int-keyed table gets `id: 2`, not 1 (a seeded table continues correctly from its max) — so a test or fixture must not assume the first inserted row is `id: 1`.
 **`use_xdo` storage mode.** Workspace setting (`registerWorkspace({ use_xdo })`,
 default `false`): `true` stores fields as JSON in the `xdo` column (+ `gin(xdo)` index),
 `false` real columns.
@@ -77,10 +82,10 @@ A **column `default` must stay within the BMP** — a 4-byte character (codepoin
 e.g. an emoji) is rejected at export; put such a value on an `input.<type>({ default })`.
 `input.*` mirrors `f.*` — every column type below is
 a legal input (scalars, files `input.image/video/audio/attachment`, `input.geo.*`,
-`input.vector(size)`, `input.tableRef(table)`, `input.object(children)`), plus
-`input.dbLink(table)` is the odd one: ONE entry that EXPANDS into one input per
-COLUMN of the linked table, so read them by column name (`inp("email")`), never by
-the entry's own name. `hidden: ["created_at"]` drops columns from that expansion.
+`input.vector(size)`, `input.tableRef(table)`, `input.object(children)`).
+Input-only: `input.dbLink(table)` expands into one input per column of the linked table;
+read them by column name (`inp("email")`), not by the entry's own name.
+`hidden: ["created_at"]` drops columns from that expansion.
 `input.list(element)` for arrays — wrap any element constructor, e.g.
 `input.list(input.text())` or `input.list(input.object({ id: f.int() }))`.
 **A file reaches a column in two steps.** `input.file` is the RAW upload (the request's
@@ -92,6 +97,7 @@ multipart/base64 bytes) and cannot be written to a file column directly: store i
 `"public"` (a guessable URL): pass `"private"` and hand out `s.storage.sign_private_url`
 results for anything user-scoped. `create_video`/`create_audio`/`create_attachment` are
 the same shape for the other file columns, each fed `input.file` (`input.image`/… 400s an upload).
+⚠ A WRONG-KIND upload to `create_image`/`create_audio`/`create_video` (text sent as an image, or a `.txt` renamed `.png`) fails the request with HTTP 500 `ERROR_FATAL` (`Invalid file extension.` / `This resource is not a valid image.`), not a 4xx. Guard it: wrap the store in `s.try_catch`, or precondition the upload's extension/mime first.
 **An empty file column is a stored null that `where` does not see as null.** `expr(col("file"), "!=", c.null())`
 matches EVERY row, and `= c.null()` matches none. Compare a key inside the file instead:
 `expr(col("file.path"), "!=", c.null())` keeps only the rows holding a file.
@@ -101,6 +107,9 @@ malformed address with a 400 (and trims; add `methods: ["lower"]` to downcase) �
 `regex_matches` needed; `input.int`/`input.decimal`/`input.uuid`/`input.enum([...])`/`input.date`
 likewise reject or coerce bad input at the boundary. Drop to `input.text` + `s.precondition`
 only for rules no type expresses.
+⚠ `input.int` COERCES by TRUNCATION, not refusal: a fractional number binds its integer part
+at HTTP 200 (`1.7` → `1`, `2.9` → `2`), where `"abc"` gets a 400. When a fraction must be
+refused rather than silently floored, take `input.decimal` and check it with `s.precondition`.
 ⚠ `input.url` is NOT one of them — there is no engine `url` type, so it stores as `text`
 and validates NOTHING: a `javascript:`/`data:` URL type-checks, imports, and binds. When the value gets navigated
 to, check the scheme in the stack. It is INPUT ONLY — there is no `f.url` column.
@@ -109,25 +118,39 @@ SECONDS (`date +%s`) bind in January 1970 with no error. An ISO-8601 string keep
 offset but DROPS fractional seconds (`"…T19:30:00.123Z"` binds `…:00.000`). Send epoch ms
 (`Date.now()`, `getTime()`) whenever sub-second precision matters.
 ⚠ `input.list` does NOT reject a non-array: one value binds as a ONE-item list (`"a"` →
-`["a"]`), and a non-JSON string given to an `input.object` binds an object of its
-children's DEFAULTS — so `input.list(input.object({...}))` given `"notalist"` binds
-`[{ name: "", … }]` with a 200. A list `min` does not catch it (that is one item). A string
-starting with `[` is parsed as JSON with NO element check at all. When the shape must hold,
-mark an object child `required: true` (the default-filled object then 400s with its param
-path) and check anything else with `s.precondition`.
-⚠ `s.precondition`'s `error` must be a TAGGED value — `c.text("…")`, not a bare string.
-The engine falls back to the generic "Precondition failed." whenever it reads an empty or
-non-scalar message, and a bare string lands there, so the client never sees your text. The
-`error_type` → HTTP status mapping is correct either way; only the message is lost.
+`["a"]`); a non-JSON string given to an `input.object` binds an object of its
+children's DEFAULTS, so `input.list(input.object({...}))` given `"notalist"` binds
+`[{ name: "", … }]` with a 200 (a list `min` passes: one item). A string starting with `[`
+is parsed as JSON with NO element check. To enforce the shape, mark an object child
+`required: true` (the default-filled object then 400s with its param path); check the rest
+with `s.precondition`.
+⚠ `s.precondition`'s `error` must be a TAGGED value — `c.text("…")`, not a bare string (warns `stack.precondition-bare-error`).
+A bare string is replaced by the generic "Precondition failed."; the status from `error_type` still applies.
 `error_type` is how a stack sets a FAILURE status: `badrequest`/`inputerror` → 400, `unauthorized` → 401, `accessdenied` → 403, `notfound` → 404, `toomanyrequests` → 429, `standard` → 500.
+A failed request answers a JSON envelope `{ code, message, payload }`: `code` is the
+`ERROR_CODE_*` string for the `error_type` (`badrequest` → `ERROR_CODE_BAD_REQUEST`,
+`accessdenied` → `ERROR_CODE_ACCESS_DENIED`, `notfound` → `ERROR_CODE_NOT_FOUND`, …;
+`standard`/an uncaught engine error → `ERROR_FATAL`). `message` is the `error` text.
+`payload` is `s.precondition`'s optional structured detail (`obj({...})`), client-visible;
+it is `""` when a precondition sets none and the key is ABSENT entirely on engine errors.
+⚠ A `db.edit`/`db.del` NotFound carries an EMPTY `message` (just `{code:"ERROR_CODE_NOT_FOUND"}`),
+so a `catch` that re-raises `fl.concat(caught("message"))` yields only its prefix and an
+`expect.to_throw(c.text(...))` can never match it — re-raise with your own `error` text.
+⚠ An uncaught `s.throw` (including one inside a function run with `s.function.run`):
+- answers HTTP **200** with `{ payload, statement: "Throw Error" }`, so `res.ok` is true — UNLESS it
+  sets `status`: `s.throw({ name: "NOT_ALLOWED", value: c.text("no access"), status: 403 })`
+  answers 403 with that body (`status` is a whole number, 100–599).
+- The status applies only when nothing catches the throw; a caught throw leaves the response status alone.
+- The body carries `value` as `payload` and never the `name`.
+- For the `{ code, message, payload }` envelope, fail with `s.precondition` or `guard.require` instead.
+
 For any other status — and for a redirect — use `respond.*`, which is sugar over
 `s.util.set_header` (that statement reaches the status line): `respond.status(201)`,
 `respond.redirect(url, { status?: 301|302|303|307 })` (a TUPLE — spread it; a `Location`
 alone does NOT redirect), and `respond.header(name, value)`. Position in the stack does not
 matter, a later status wins, and a FAILING `precondition` still wins over anything set
 before it. ⚠ `204` answers with an empty body whatever `response` says. ⚠ `respond.status`
-REFUSES `308`/`425`/`451`/`102`/`103`: the platform writes those and does not act on them,
-so the response is 200 with nothing reported — use 301, 429 and 403 instead.
+REFUSES `308`/`425`/`451`/`102`/`103` (they would answer 200, nothing reported); use 301, 429 and 403 instead.
 Normalizing transforms run on bind too — put `trim`/`lower`/`upper` on the input's `methods`
 so `inp("name")` reads already-normalized; don't reroll `var $x = inp("name")|trim` in the stack.
 ⚠ `f.decimal`'s size depends on the table's layout; it takes no precision or scale option.

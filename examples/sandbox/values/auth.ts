@@ -1,6 +1,6 @@
 /**
- * `auth(path?)` — reference the authenticated identity. `auth("id")` is the
- * authenticated row id; bare `auth()` is the whole record. Meaningful on an
+ * `auth(path)` — reference the authenticated identity. `auth("id")` is the
+ * authenticated row id; the path is required (there is no bare form). Meaningful on an
  * endpoint whose `auth` names an auth table.
  */
 import { defineFunction, s, auth, inp, input } from "@xano/sdk";

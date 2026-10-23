@@ -25,7 +25,7 @@ function assertPositive(varName: string, label: string) {
     s.precondition({
       expr: expr(ref(`${varName}_ok`), "==", c.bool(true)),
       error_type: "badrequest",
-      error: `${label} must be positive`,
+      error: c.text(`${label} must be positive`),
     }),
   );
 }

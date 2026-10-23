@@ -270,7 +270,9 @@ function decodeBase(v: TaggedValue, regexPiped: boolean): Candidate | null {
     case "input":
       return propose(call("inp", lit(v.value)), inp(v.value), "inp");
     case "auth":
-      return propose(call("auth", lit(v.value)), auth(v.value), "auth");
+      // A stored bare auth (`value:""`) is refused by `auth()`, so it declines
+      // here and keeps its `rawValue`: exact, and visibly not an authored read.
+      return propose(call("auth", lit(v.value)), attempt(() => auth(v.value)), "auth");
     case "col":
       return propose(call("col", lit(v.value)), col(v.value), "col");
     case "trycatch":

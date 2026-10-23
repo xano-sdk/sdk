@@ -6,7 +6,7 @@
 stay renames (guids otherwise derive from `(type, name)`; a query's from `(api group,
 verb, name)`). Committed. A composed entry is keyed by that identity —
 `query:<group>|<verb>|<name>`, `channel:<server>|<path>`, `message:<server>|<path>|<name>`
-— its guid's seed; a legacy `query:<name>` is migrated by the next locked export.
+— its guid's seed; a bare `query:<name>` key is rewritten to the composed form by the next locked export.
 
 - `npx @xano/sdk lock rename <kind> <old> <new>` — `kind` is the SDK kind (`table`, `apiGroup`) or stored key (`dbo`).
   Run it when `export` names it after a rename in code (it prints the command); the next export emits the original guid under the new name.
@@ -22,19 +22,23 @@ verb, name)`). Committed. A composed entry is keyed by that identity —
 - Programmatic use: call `seedLockOverrides(readLockFile(path))` BEFORE importing any def
   module — references bake guids at import time; `writeBundle` refuses an unseeded lock.
 
-What writes the lock: `export`/`deploy`/`release`/`preflight` of an ENTRY FILE update it;
-`compile`/`paths` only READ. `--no-lock` builds
-without one (names derive guids, the instance invents public URLs, no `--prune`);
-REFUSED over a parseable lock. A DEPLOY or a RELEASE writes back only `landed`: what
-this project LANDED on each destination (ephemerals: `.xano/ephemeral.json`). `--prune` deletes only that — never a merely
-exported name; no record there, no prune until one landing (commit it). A `deploy` (`--replace`
-too) PRESERVES the archive's guids, so the lock still describes the rebuilt
-workspace. CI: `--frozen-lock` fails (`SDK_DRIFT`) instead of changing the lock, and fails while the lock
-carries an entry no exported object matches — a plain `export` only warns and writes that
-entry down, after which nothing tells a rename from a deletion: resolve it with
-`lock rename` or `lock prune`, or accept them with `--allow-lock-orphans` when they are the
-not-yet-ported half of an adopted workspace.
-`export --check` implies `--frozen-lock` and writes nothing — no bundle, no lock — so it
-reads no `xano/.env` or `.secrets.json` and refuses the flags that supply them; this is
-what `npm run xano:check` runs, so CI needs no secrets. With no lock at all, either flag
-fails only when the source has identities to record (an empty workspace passes).
+### Writers and readers
+
+- `export`/`deploy`/`release`/`preflight` of an ENTRY FILE update the lock; `compile`/`routes` only READ.
+- `--no-lock` builds without one (names derive guids, the instance invents public URLs, no `--prune`);
+  REFUSED over a parseable lock.
+- A DEPLOY or a RELEASE writes back only `landed`: what this project LANDED on each destination
+  (ephemerals: `.xano/ephemeral.json`). `--prune` deletes only that, never a merely exported name;
+  no record there, no prune until one landing. Commit the lock.
+- A `deploy` (`--replace` too) PRESERVES the archive's guids, so the lock still describes the rebuilt workspace.
+
+### CI
+
+- `--frozen-lock` fails (`SDK_DRIFT`) instead of changing the lock, and fails while the lock carries
+  an entry no exported object matches. A plain `export` only warns and writes that entry down, after
+  which a rename and a deletion look the same. Resolve it with `lock rename` or `lock prune`, or
+  accept them with `--allow-lock-orphans` when they are the not-yet-ported half of an adopted workspace.
+- `export --check` implies `--frozen-lock` and writes nothing — no bundle, no lock — so it
+  reads no `xano/.env` or `.secrets.json` and refuses the flags that supply them. `npm run xano:check` runs it,
+  so CI needs no secrets.
+- With no lock at all, either flag fails only when the source has identities to record (an empty workspace passes).

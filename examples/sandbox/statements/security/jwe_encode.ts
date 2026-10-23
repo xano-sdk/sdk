@@ -13,6 +13,8 @@ export const securityJweEncode = defineFunction({
       key: env("JWE_KEY"),
       key_algorithm: "A128KW",
       content_algorithm: "A128GCM",
+      // Without `ttl` the token carries no `exp` and never expires.
+      ttl: c.int(3600),
     }),
   ],
   response: ref("result"),

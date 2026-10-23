@@ -219,9 +219,15 @@ export interface RealtimeChannelDef<
   /** Whether the channel accepts joins. Defaults to `true`. */
   active?: boolean;
   /**
-   * Typed PATH parameters, bound at join time. Joining `"rooms/42"` against
-   * `"rooms/{room_id}"` yields `room_id = 42`, coerced and validated by the
-   * declared type. Distinct from a message's `input`, which types the payload.
+   * Typed PATH parameters. ⚠ They bind as RAW TEXT at join and are NOT validated
+   * or coerced there: joining `"rooms/42"` against `"rooms/{room_id}"` binds the
+   * STRING `"42"`, and `"rooms/abc"` joins just as happily (only the name charset
+   * is checked). `session.params.<name>` and the join ack are always strings. The
+   * declared type applies only when a MESSAGE reads `inp("room_id")` — there it is
+   * coerced and validated PER FRAME, after the client has already joined (a
+   * non-convertible value is then a per-frame `Invalid payload`). A join gate that
+   * needs a number must cast (`|to_int`) and refuse non-numeric values itself.
+   * Distinct from a message's `input`, which types the payload.
    */
   input?: I;
   /**
@@ -254,17 +260,18 @@ export interface RealtimeChannelDef<
    * The full chain is message -> channel -> realtime server -> branch/workspace,
    * mirroring `history`. A channel that customizes neither phase falls to the server's block.
    *
-   * Live-verified: a deployed workspace whose channel carries this block exports
-   * back with it intact, the customize flag set on the phase that was given and
-   * clear on the one that was not.
+   * Verified by export round-trip: a deployed workspace whose channel carries
+   * this block exports back with it intact, the customize flag set on the phase
+   * that was given and clear on the one that was not.
    *
    * Presence-preserving: omit it and the stored object carries no `middleware`
    * key at all, which is what an engine-captured channel has. Providing a phase
    * sets its `_customize` flag, so this tier stops inheriting the one above it;
    * `pre: middleware.clear()` customizes with nothing.
    *
-   * Before this, a realtime auth or rate-limit guard had to be repeated on every
-   * `realtimeMessage()` — the only realtime kind that took one.
+   * ⚠ Not a guard: a middleware that THROWS (an `s.precondition`, a runtime
+   * error) fails the message OPEN — the sender's original payload is broadcast.
+   * A realtime guard vetoes by having the handler RETURN `null`.
    */
   middleware?: MiddlewareAttach;
   /** Workspace tags (stored `tag: [{tag}]`). */

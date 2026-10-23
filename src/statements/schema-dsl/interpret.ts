@@ -43,10 +43,13 @@ import { assertKnownKeys } from "../../util/known-keys.js";
  * What kind of authored value a field consumes:
  *  - `string`     — a plain `static:text` arg.
  *  - `boolean`    — a plain `static:bool` arg, authored as a real boolean.
+ *  - `number`     — a plain `static:int` arg (the `!static:int` directive),
+ *                   authored as a whole number. Never a Value: the engine stores
+ *                   the literal, so a variable cannot reach it.
  *  - `value`      — a `!kinds assign` tagged Value.
  *  - `comparison` — a `Condition` expression tree (the `!compare` directive).
  */
-export type FieldType = "string" | "boolean" | "value" | "comparison";
+export type FieldType = "string" | "boolean" | "number" | "value" | "comparison";
 
 /** Where one authored field lands in the stored statement. */
 export type Route =
@@ -106,6 +109,12 @@ export interface FieldRule {
    * no key at all — the spelling a pull uses for a statement stored without it.
    */
   emptyWhenAbsent?: true;
+  /**
+   * The inclusive range a `number` field must fall in, which the engine checks
+   * only at run time (a request 500s). Set by `overrides.ts` from the engine
+   * class, since the transform schema declares a bare `static:int`.
+   */
+  range?: readonly [min: number, max: number];
   /** Routing target. */
   route: Route;
 }
@@ -259,6 +268,19 @@ export function specLabel(spec: StatementSpec): string {
 /** The step annotations every spec-driven statement reads besides its own fields. */
 const SPEC_ENVELOPE_KEYS = ["disabled", "description", "mock", "asFilters", "uncheckedAs", "output"] as const;
 
+/**
+ * A `number` field takes a whole number, checked here so a bad one fails the
+ * build rather than every request: the engine reads the stored literal raw and
+ * refuses it only at run time.
+ */
+function assertWholeNumber(label: string, rule: FieldRule, provided: unknown): void {
+  const [min, max] = rule.range ?? [Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER];
+  if (typeof provided !== "number" || !Number.isInteger(provided) || provided < min || provided > max) {
+    const want = rule.range ? `a whole number from ${min} to ${max}` : "a whole number";
+    throw new Error(`Statement "${label}": argument "${rule.field}" must be ${want} — got ${describeEntry(provided)}.`);
+  }
+}
+
 /** Encode authored inputs into a `Statement` using a spec's field rules. */
 export function encodeFromSpec(spec: StatementSpec, authored: Authored): Statement {
   // A statement whose arguments are ALL required generates no `= {}` default,
@@ -330,6 +352,7 @@ export function encodeFromSpec(spec: StatementSpec, authored: Authored): Stateme
         break;
       case "context-plain":
         assertIgnorable(label, rule.field, provided);
+        if (rule.type === "number") assertWholeNumber(label, rule, provided);
         setPath(context, rule.route.path, provided);
         break;
       case "context-spread":

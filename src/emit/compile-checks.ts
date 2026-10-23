@@ -24,19 +24,30 @@ import {
   checkZipPasswordKeys,
   checkPathSegmentCandidates,
   checkRegexOperandOrder,
+  checkUnboundPredicates,
+  checkConstantArrayKeys,
+  checkPredicateIndexReads,
+  checkPreconditionBareErrors,
+  checkReturnedStreams,
+  checkReturnedIncludeMeta,
+  checkReturnsOutsideInferredType,
   checkReservedColumnNames,
   checkReservedInputNames,
   checkRunFamilyHosts,
   checkLiveDatasourceTests,
+  checkUncheckedWorkflowTestCalls,
   checkSafeRefMatchArgs,
   checkSearchOperandFilters,
   checkSeed,
   checkStacks,
   checkSwitchFallthrough,
   checkToThrowScope,
+  checkToolDescriptionShadowed,
   checkUnboundVarRefs,
+  checkConditionallyBoundVars,
 } from "../workspace/guards.js";
 import { checkFilterOperands } from "../workspace/filter-operands.js";
+import { checkDrillMaybeNull } from "../workspace/drill-maybe-null.js";
 
 /** The bundle section a compiled def sits in — the section `emit` encoded it for. */
 function payloadKeyOf(def: object): string {
@@ -73,19 +84,30 @@ export function checkCompiledDef(
   checkExpressionOperands(sections, bag);
   checkInterpolatedValues(sections, bag);
   checkRegexOperandOrder(sections, bag);
+  checkUnboundPredicates(sections, bag);
+  checkConstantArrayKeys(sections, bag);
+  checkPredicateIndexReads(sections, bag);
+  checkPreconditionBareErrors(sections, bag);
+  checkReturnedStreams(sections, bag);
+  checkReturnedIncludeMeta(sections, bag);
+  checkToolDescriptionShadowed(sections, bag);
+  checkReturnsOutsideInferredType(sections, bag, () => Object.hasOwn(def, "responseShape"));
   checkDecodeOnlyStatements(sections, bag);
   checkRunFamilyHosts(sections, bag);
   checkLiveDatasourceTests(sections, bag);
+  checkUncheckedWorkflowTestCalls(sections, bag);
   checkLoopControl(sections, bag);
   checkSwitchFallthrough(sections, bag);
   checkSearchOperandFilters(sections, bag);
   checkFilterOperands(sections, bag);
   checkUnboundVarRefs(sections, bag);
+  checkConditionallyBoundVars(sections, bag);
   checkToThrowScope(sections, bag);
   checkPasswordInputHashing(sections, bag);
   checkZipPasswordKeys(sections, bag);
   checkSafeRefMatchArgs(sections, bag);
   checkNullMatchArgs(sections, bag);
+  checkDrillMaybeNull(sections, bag);
   checkPathSegmentCandidates(sections, bag);
   checkSeed(tables, bag);
   checkReservedColumnNames(tables, bag);

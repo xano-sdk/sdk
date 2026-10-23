@@ -150,7 +150,12 @@ export interface MiddlewareDef<
    * body with `s.util.get_all_input` instead, which hands back a
    * `{ type, vars }` envelope — `vars` is the request inputs in `pre` but
    * `{ status, result }` (the host's outcome) in `post`, where the request is
-   * read with `s.util.get_raw_input`. `export()` warns if this is set.
+   * read with `s.util.get_raw_input`. In `post`, `status` is the STRING
+   * `"ok" | "exception"` (NOT an HTTP code — store it in a text column); on
+   * `"exception"`, `result` is the `{ code, message, payload }` error. A throw
+   * in a `post` middleware (default `rethrow`) REPLACES the host's response, so
+   * an audit middleware that should never mask the host wants
+   * `exceptionPolicy: "silent"`. `export()` warns if this is set.
    */
   input?: Record<string, InputDescriptor>;
   /**

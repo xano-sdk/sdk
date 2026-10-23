@@ -19,6 +19,7 @@
  * keeps install, uninstall and status stateless.
  */
 import { createHash } from "node:crypto";
+import { AGENT_SIGNUP_URL } from "../auth/agent-signup.js";
 import { AGENT_RULE_BACKENDS } from "./init-ai-presets.js";
 
 /** The skill's name. The Agent Skills spec requires it to equal its directory name. */
@@ -131,9 +132,8 @@ Run it at the project root. Which form:
 
 The JSON names the \`mode\` that ran, the \`files\` it wrote or merged, and \`next\`,
 the command to run next. When \`init\` refuses and lists clashes, show the list to
-the user. Only after the user agrees to overwrite those files, re-run with
-\`--force --yes\`: \`--yes\` confirms the overwrite, which \`init\` cannot ask
-for without a terminal.
+the user. If the user agrees to overwrite them, re-run with \`--force --yes\`
+(\`--yes\` gives the confirmation \`init\` cannot prompt for without a terminal).
 
 ## 5. Deploy
 
@@ -145,10 +145,10 @@ other platform, such as Windows or an Intel Mac, tell the user before deploying:
 the backend goes to a Xano ephemeral instead (\`npx @xano/sdk deploy --ephemeral\`),
 which needs a Xano account.
 
-Only a human can do these. Stop and ask the user, then continue once they are
-done:
+These need the user. Stop and ask, then continue once they are done:
 
-- Creating a Xano account.
+- A Xano account: ask whether they have one; do not guess. If not, sign them up via
+  ${AGENT_SIGNUP_URL} (their email only; they confirm from an emailed link).
 - Signing in: \`npx @xano/sdk login\` opens a browser consent. Ask the user to run it
   in their own terminal. Do not run it yourself.
 
@@ -160,14 +160,13 @@ done:
 
 ## 7. Hand off
 
-Read \`AGENTS.md\`, which \`init\` wrote, and follow it for all further backend work.
-Before writing code in \`xano/\`, read \`node_modules/@xano/sdk/llms.txt\`.
+Read and follow \`AGENTS.md\`, which \`init\` wrote, for all further backend work.
 
 Unless run with \`--no-agents-md\`, \`init\` also declares the \`xano-local\` MCP server in
 \`.mcp.json\` and \`.cursor/mcp.json\`: the deployed backend's tables, rows and runs,
 which \`AGENTS.md\` describes. \`npx @xano/sdk local mcp\` prints the server block for any
-other agent. It is not loaded into a session that was already running. Tell the user
-to restart the agent, or reconnect its MCP servers, to use it.
+other agent. A running agent session does not pick it up: tell the user to restart the
+agent or reconnect MCP servers.
 `;
 
 /** The frontmatter with `digest` in the digest slot. */

@@ -7,6 +7,9 @@
  * no `var $email_norm = inp("email")|to_lower` reroll needed. `input.email`
  * trims + 400s on a malformed address on its own; `methods: ["lower"]` downcases
  * so the match key is stable.
+ *
+ * Every written input is required: an omitted optional one binds `""` and the
+ * edit path writes it, blanking a stored name (`db.edit-optional-input`).
  */
 import { defineFunction, s, inp, ref, input } from "@xano/sdk";
 import { users } from "../../_shared.js";
@@ -15,7 +18,7 @@ export const dbAddOrEdit = defineFunction({
   name: "ex_db_add_or_edit",
   input: {
     email: input.email({ required: true, methods: ["lower"] }),
-    name: input.text({ methods: ["trim"] }),
+    name: input.text({ required: true, methods: ["trim"] }),
   },
   stack: [
     s.db.add_or_edit({

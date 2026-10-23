@@ -173,11 +173,10 @@ function parseReference(token: string): Parsed | null {
     case "db":
       return path === "" ? null : { expr: call("col", lit(path)), built: col(path), symbols: ["col"] };
     case "auth":
-      // `$auth` alone is the whole auth record; `$auth.x` is one field. Both are
-      // reachable, unlike the others, whose bare form `obj()` never emits.
-      return path === ""
-        ? { expr: call("auth"), built: auth(), symbols: ["auth"] }
-        : { expr: call("auth", lit(path)), built: auth(path), symbols: ["auth"] };
+      // A bare `$auth` is not a read the engine resolves, so `auth()` refuses it
+      // and there is no member to offer. Declining leaves the whole expression to
+      // the verbatim `c.expression` passthrough, which still round-trips.
+      return path === "" ? null : { expr: call("auth", lit(path)), built: auth(path), symbols: ["auth"] };
     default:
       return null;
   }

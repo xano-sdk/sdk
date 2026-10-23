@@ -233,7 +233,14 @@ export interface ArrayUnionArgs extends StatementOptions {
    */
   with: Value;
   as?: string;
-  /** Optional per-item transform → stored `transform_value`. */
+  /**
+   * Optional per-item DEDUPE KEY → stored `transform_value`. NOT a map: the
+   * result keeps the ORIGINAL items, deduped by this value (first occurrence
+   * wins). Evaluated per item with `$this` (and `$index`) bound; default `$this`,
+   * the item itself. `ref("$this.id")` unions records by `id`;
+   * `withFilters(ref("$this.v"), fl.lower())` dedupes case-insensitively. A
+   * `$this.<path>` over a list of scalars 500s `Unable to locate var`.
+   */
   transform?: Value;
 }
 
@@ -431,6 +438,10 @@ export interface RealtimePublishArgs extends StatementAnnotations {
    * This is attribution carried on the frame, NOT a credential — nothing validates it
    * and no auth gate consumes it. Do not use it to grant a publish that a channel's
    * `publish.who` would otherwise refuse; this statement bypasses that gate entirely.
+   *
+   * It lands in the frame's `_meta.as` as `{ dbo_id, row_id }` (NOT in `payload`).
+   * Every published frame also carries `_meta.injected: true`, the marker that
+   * tells a client a server-authored event from a relayed peer frame.
    */
   authTable?: ObjectRef;
   /** The asserted identity's row id. Attribution only — see {@link RealtimePublishArgs.authTable}. */
@@ -509,6 +520,85 @@ export function realtimePublish(a: RealtimePublishArgs): Statement {
   return annotate({ name: "mvp:realtime_publish", context, input: [] }, a);
 }
 
+// --- realtime kick ------------------------------------------------------------
+
+export interface RealtimeKickArgs extends StatementAnnotations {
+  /** The owning realtime server, by name (a `realtimeServer()` handle, its name, or a `Value`). */
+  server: RealtimePublishServer;
+  /**
+   * The FILLED-IN channel path to remove the user from, `"rooms/42"` (build it with
+   * `realtimeChannel().getChannel({…})`), or a `Value` computed at runtime.
+   */
+  channel: string | Value;
+  /** The removed user's auth table: a `table({ auth: true })` def or its name. Required. */
+  authTable: ObjectRef;
+  /** The removed user's row id. Required. */
+  authId: Value;
+  /** Optional reason sent to the removed connections with their `leave`. */
+  reason?: Value;
+}
+
+const REALTIME_KICK_KEYS = /* @__PURE__ */ Object.keys({ server: 1, channel: 1, authTable: 1, authId: 1, reason: 1, disabled: 1, description: 1, mock: 1 } satisfies Record<AllKeys<RealtimeKickArgs>, 1>);
+
+/**
+ * `realtime.kick { … }` — take one user's sockets out of one realtime channel
+ * (`mvp:realtime_kick`).
+ *
+ * A channel's `join` trigger runs ONCE, at join, so revoking a member later (a kick,
+ * a leave over HTTP, a private room losing someone) does not touch their open sockets:
+ * they keep receiving the channel and can still publish. Call this from the endpoint
+ * that revokes the membership. Every socket of that user, on every node, leaves the
+ * channel through the same steps as a client `leave` (the `leave` trigger, a
+ * `presence_leave`) and receives `{ action: "leave", channel, payload: { left: true,
+ * kicked: true, reason } }`. The socket stays CONNECTED and keeps its other channels.
+ *
+ * Unlike `s.realtime.publish` it is NOT fail-soft: an unknown server, a missing
+ * identity, or an unreachable bus FAILS the stack, since a kick that silently did
+ * nothing leaves the member subscribed.
+ *
+ * ```ts
+ * s.realtime.kick({
+ *   server: chat,
+ *   channel: rooms.getChannel({ room_id: 42 }),
+ *   authTable: users,
+ *   authId: inp("user_id"),
+ *   reason: c.text("removed from the room"),
+ * });
+ * ```
+ */
+export function realtimeKick(a: RealtimeKickArgs): Statement {
+  a = argsOrEmpty(a);
+  assertKnownKeys(`Statement "s.realtime.kick"`, a, REALTIME_KICK_KEYS);
+  const server = publishServerValue(a.server, "s.realtime.kick");
+  const channel = typeof a.channel === "string" ? c.text(a.channel) : a.channel;
+  if (!channel || channel.value === "") {
+    throw new Error(
+      "Statement \"s.realtime.kick\": required argument \"channel\" is missing — the filled-in channel path to remove the user from (use `realtimeChannel().getChannel({…})`).",
+    );
+  }
+  assertValueArg("s.realtime.kick", "channel", channel);
+  assertFilledChannel(channel, "s.realtime.kick");
+  if (a.authTable === undefined || a.authTable === null) {
+    throw new Error(
+      "Statement \"s.realtime.kick\": required argument \"authTable\" is missing — the auth table of the user to remove.",
+    );
+  }
+  assertValueArg("s.realtime.kick", "authId", a.authId);
+  const context: Record<string, unknown> = {
+    realtime_server: server,
+    channel: vf(channel),
+    auth: {
+      dbo_id: resolveRef("dbo", a.authTable, `Statement "s.realtime.kick": argument "authTable"`),
+      row_id: vf(a.authId),
+    },
+  };
+  if (a.reason !== undefined && a.reason !== null) {
+    assertValueArg("s.realtime.kick", "reason", a.reason);
+    context.reason = vf(a.reason);
+  }
+  return annotate({ name: "mvp:realtime_kick", context, input: [] }, a);
+}
+
 /**
  * Refuse a `channel` that is still a `{param}` TEMPLATE.
  *
@@ -525,29 +615,33 @@ export function realtimePublish(a: RealtimePublishArgs): Statement {
  * CONSTANT is inspected — a `ref`/`inp` channel is computed at runtime and says
  * nothing here.
  */
-function assertFilledChannel(channel: Value): void {
+function assertFilledChannel(channel: Value, statement = "s.realtime.publish"): void {
   if (!channel.tag.startsWith("const")) return;
   if (typeof channel.value !== "string" || !/[{}]/.test(channel.value)) return;
   throw new Error(
-    `Statement "s.realtime.publish": \`channel\` is "${channel.value}", which is still a TEMPLATE — its ` +
-      `{param} was never filled in, so this publishes onto a path no client can join, and the ` +
-      `engine swallows the miss silently. Fill it in with ` +
+    `Statement "${statement}": \`channel\` is "${channel.value}", which is still a TEMPLATE — its ` +
+      `{param} was never filled in, so it names a path no client can join` +
+      (statement === "s.realtime.publish" ? `, and the engine swallows the miss silently` : "") +
+      `. Fill it in with ` +
       `\`channel.getChannel({ … })\` (e.g. \`c.text(rooms.getChannel({ room_id: 42 }))\`), or ` +
       `build the path at runtime from a \`ref\`/\`inp\`.`,
   );
 }
 
 /** Coerce the `server` argument to its stored value form — always the server's NAME. */
-function publishServerValue(server: RealtimePublishServer): { value: string; tag: string; filters: unknown[] } {
+function publishServerValue(
+  server: RealtimePublishServer,
+  statement = "s.realtime.publish",
+): { value: string; tag: string; filters: unknown[] } {
   if (typeof server === "string") {
-    if (server === "") throw new Error("Statement \"s.realtime.publish\": required argument \"server\" is missing — the owning realtime server's name.");
+    if (server === "") throw new Error(`Statement "${statement}": required argument "server" is missing — the owning realtime server's name.`);
     return { value: server, tag: "const", filters: [] };
   }
   if (server && typeof server === "object" && "tag" in server) return vf(server as Value);
   const name = server && typeof server === "object" ? server.name : undefined;
   if (!name) {
     throw new Error(
-      "Statement \"s.realtime.publish\": required argument \"server\" is missing — pass the `realtimeServer()` handle, its name, or a value naming it.",
+      `Statement "${statement}": required argument "server" is missing — pass the \`realtimeServer()\` handle, its name, or a value naming it.`,
     );
   }
   return { value: name, tag: "const", filters: [] };
@@ -747,5 +841,6 @@ registerStatement("mvp:get_input", getRawInput);
 registerStatement("mvp:post_process", postProcess);
 registerStatement("mvp:realtime_event", realtimeEvent);
 registerStatement("mvp:realtime_publish", realtimePublish);
+registerStatement("mvp:realtime_kick", realtimeKick);
 registerStatement("mvp:create_auth", createAuthToken);
 registerStatement("mvp:test_expect_to_throw", expectToThrow);

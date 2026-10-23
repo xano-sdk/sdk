@@ -1200,14 +1200,11 @@ The backend lives in [\`index.ts\`](index.ts) and is a single default-exported
 
 ## Learn the library from the library
 
-Everything you need is in the package itself:
-
-- \`node_modules/@xano/sdk/llms.txt\` — the router: the mental model, the deploy contract, every gotcha, and control flow. Read it in full first; it ends with a list of topic files and the condition for opening each.
-- \`node_modules/@xano/sdk/llms/*.md\` — one file per surface. Open the one or two whose condition matches the task; skip the rest.
-- The published TypeScript types and JSDoc (\`node_modules/@xano/sdk/**/*.d.ts\`).
-- \`node_modules/@xano/sdk/manifest.json\` — the exhaustive reference; grep or \`jq\` the one entry you need rather than reading it whole.
-
-Author against those signatures — don't invent an API that isn't there.
+Read \`node_modules/@xano/sdk/llms.txt\` in full first; it ends with the topic files
+(\`node_modules/@xano/sdk/llms/*.md\`) and the condition for opening each. Author against
+the published types (\`node_modules/@xano/sdk/**/*.d.ts\`), and grep
+\`node_modules/@xano/sdk/manifest.json\` for one entry's full detail. Don't invent an API
+that isn't there.
 
 ## The shape
 
@@ -1248,35 +1245,21 @@ xano/
 
 ## Testing
 
-Two kinds of test are authored in \`xano/\` alongside the objects they cover, and
-both run against a DEPLOYED environment:
-
-- **Unit test** — \`tests: [...]\` on a \`query\`, \`defineFunction\`, or
-  \`middleware\`. Each entry is a named set of inputs run against that object, with
-  \`expect.*\` assertions on its response. A statement's \`mock\` (keyed by test
-  NAME) makes one step return a value instead of doing its work, but only while
-  that test runs.
-- **Workflow test** — \`workflowTest({ name, stack })\`, a standalone object whose
-  stack calls others (\`s.function.call\`, \`s.api.call\`) and asserts with
-  \`s.expect.*\`. Use it for behavior that spans objects.
-
-\`expect.*\` and \`s.expect.*\` are different builders — an assertion record versus
-a workflow-test statement — and are not interchangeable.
+Unit tests (\`tests: [...]\` on a query, function or middleware, asserting with \`expect.*\`)
+and workflow tests (\`workflowTest({ name, stack })\`, asserting with \`s.expect.*\`) both
+run against what is DEPLOYED:
 
 \`\`\`bash
-npm run xano:deploy    # tests run against what is deployed, so deploy first
+npm run xano:deploy    # deploy first
 npm run xano:test      # runs both kinds; exits 5 if any fail
 \`\`\`
 
-\`npx @xano/sdk deploy ./xano/index.ts --test\` does both in one step, and
-\`npx @xano/sdk test list\` shows what a deployed environment carries without running
-anything. Read \`node_modules/@xano/sdk/llms/tests.md\` before authoring either
-kind.
+Read \`node_modules/@xano/sdk/llms/tests.md\` before authoring either kind.
 
 ### Event-driven objects
 
-A scheduled \`task\`, an \`mcpServer\`, and every trigger **fire normally on an
-ephemeral** — where \`deploy\` sends them — so test them by deploying and letting
+A scheduled \`task\`, an \`mcpServer\`, and every trigger **run once deployed**,
+on the Xano Engine and an ephemeral alike — test them by deploying and letting
 them run.
 
 ## Wire the frontend
@@ -1412,8 +1395,10 @@ Every command that compiles a bundle reads \`xano/.env\` with no flag. It and
 the two files under \`xano/\` that are not committed. The source beside them is meant to
 be reviewed, so never ignore \`xano/\` wholesale.
 
-A deploy REPLACES the backend's env set, so a declared name with no value refuses the
-deploy rather than clearing the live value. In CI, which does not have this file, mount
+\`npm run xano:deploy\` keeps rows AND live env values (\`--keep-data\`): after editing a
+value, apply it with \`printf %s "$VALUE" | npx @xano/sdk env set NAME\`. A deploy that
+REPLACES the env set (no \`--keep-data\`, or a backend the merge cannot vouch for) refuses a
+declared name with no value rather than clearing the live value. In CI, which does not have this file, mount
 one and pass \`--backend-env-file <path>\`, or supply names with \`--env-var KEY=VALUE\`.
 
 \`workspace.json\` is a different matter: a compiled bundle carries these values in

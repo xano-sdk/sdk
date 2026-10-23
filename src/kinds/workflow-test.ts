@@ -44,7 +44,14 @@ export interface WorkflowTestDef {
   datasource?: string;
   /** Accepted export warnings — `"live"` on purpose (an ephemeral run). Never emitted. */
   diagnostics?: DiagnosticsFor<"workflow_test">;
-  /** Whether the test is enabled. Defaults to `true` (the engine's own default). */
+  /**
+   * Stored as the test's enabled flag. Defaults to `true` (the engine's own
+   * default). `active: false` parks the test: `test run-all` and `deploy --test`
+   * SKIP it (reported `status: "skipped"`, counted in `notRun`, never failing
+   * the suite), `test list` shows it as `inactive`, and `test run "<name>"` still
+   * runs it on request. Deploy is a full replace, so unregistering a test also
+   * removes it.
+   */
   active?: boolean;
   tags?: string[];
   /**

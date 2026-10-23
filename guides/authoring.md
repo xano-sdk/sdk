@@ -320,6 +320,7 @@ sources.
 
   ```ts
   s.db.get({ table, fieldValue: inp("id"), as: "current" }),
+  guard.found("current"), // a miss would 500 on the `current.clicks` drill
   s.db.edit({ table, fieldValue: inp("id"), row: { clicks: withFilters(ref("current.clicks"), fl.add(c.int(1))) } }),
   ```
 

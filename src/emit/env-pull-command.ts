@@ -176,7 +176,7 @@ export async function runEnvPullCommand(args: ParsedArgs, opts: EnvPullCommandOp
   const declared = readableDeclaredEnvNames(dirname(path)) ?? [
     ...new Set([...declaredEnvNames(dirname(path)), ...namesInEnvExample(join(dirname(path), WORKSPACE_ENV_EXAMPLE_BASENAME))]),
   ];
-  // Absent only: a value stored empty is written as `NAME=` and deploys as the
+  // Absent only: a value stored empty is written as `NAME=""` and deploys as the
   // empty value it is, so it is not "nothing to send".
   const valueless = declared.filter((n) => isRepresentableName(n) && !Object.hasOwn(values, n));
   const sayValueless = (): void => {
@@ -295,8 +295,8 @@ export async function runEnvPullCommand(args: ParsedArgs, opts: EnvPullCommandOp
   const badValues = omitted.filter((n) => isRepresentableName(n));
   if (badValues.length > 0) {
     warn(
-      `${safeNames(badValues)} could not be written: the dotenv format carries no newlines or ` +
-        `edge whitespace in a value. Pass ${badValues.length === 1 ? "it" : "each"} at deploy time with ` +
+      `${safeNames(badValues)} could not be written: the dotenv format carries no newline ` +
+        `in a value. Pass ${badValues.length === 1 ? "it" : "each"} at deploy time with ` +
         `\`--env-var NAME=...\` — the value is still in the backend.`,
       "env-pull.unwritable-value",
     );

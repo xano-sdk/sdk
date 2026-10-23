@@ -112,12 +112,20 @@ import {
   checkDecodeOnlyStatements,
   checkRunFamilyHosts,
   checkLiveDatasourceTests,
+  checkUncheckedWorkflowTestCalls,
   checkExpressionOperands,
   checkInterpolatedValues,
   checkMcpStackHazards,
   checkZeroBasedObjects,
   checkIntRange,
   checkRegexOperandOrder,
+  checkUnboundPredicates,
+  checkConstantArrayKeys,
+  checkPredicateIndexReads,
+  checkPreconditionBareErrors,
+  checkReturnedStreams,
+  checkReturnedIncludeMeta,
+  checkReturnsOutsideInferredType,
   checkTimezoneArgs,
   checkReferences,
   checkMicroserviceReferences,
@@ -130,6 +138,10 @@ import {
   checkStackAuthRatelimit,
   checkRatelimitWithoutError,
   checkAuthNoCaller,
+  checkToolCallReadsAuth,
+  checkPatchRawInput,
+  checkEditOptionalInput,
+  checkAuthTokenOptionalExpiration,
   checkRealtimeSilentShapes,
   checkNonNullVectorColumns,
   checkRealtimeDeliver,
@@ -146,6 +158,7 @@ import {
   checkAddonOutput,
   checkGuardRoleColumns,
   checkToolOutputSchema,
+  checkToolDescriptionShadowed,
   checkAgentArgPlaceholders,
   checkAgentToolsOff,
   checkAssertionsOutsideTests,
@@ -153,10 +166,13 @@ import {
   checkKnowledge,
   checkRealtimePublish,
   checkTriggerBindings,
+  checkTriggerAbsentSideReads,
+  checkMcpTriggerResponseKeys,
   checkPasswordInputHashing,
   checkZipPasswordKeys,
   checkToThrowScope,
   checkUnboundVarRefs,
+  checkConditionallyBoundVars,
   checkSafeRefMatchArgs,
   checkNullMatchArgs,
   checkPathSegmentCandidates,
@@ -175,6 +191,7 @@ import {
 } from "./guards.js";
 import { checkMcpOauth, checkMcpOauthRevoke } from "./guards-mcp-oauth.js";
 import { checkFilterOperands } from "./filter-operands.js";
+import { checkDrillMaybeNull } from "./drill-maybe-null.js";
 
 /**
  * Cross-realm brand. `instanceof Xano` breaks when Xano SDK is loaded by two
@@ -604,6 +621,8 @@ export class Xano {
       const encoded = this.encodeOne(kind, def);
       const allow = allows[i];
       if (allow && encoded && typeof encoded === "object") this.accepted.set(encoded, allow);
+      // Type-only and never encoded, so the export's response checks learn it here.
+      if (encoded && typeof encoded === "object" && Object.hasOwn(def as object, "responseShape")) this.shapedResponses.add(encoded);
       bucket.push(encoded);
     });
     this.sections.set(kind.payloadKey, bucket);
@@ -696,6 +715,9 @@ export class Xano {
 
   /** The warnings each encoded object's encoder raised, raised again about it by every export. */
   private readonly encodeWarnings = new WeakMap<object, readonly Diagnostic[]>();
+
+  /** The encoded objects whose def declares `responseShape` (a type-only field the encoding drops). */
+  private readonly shapedResponses = new WeakSet<object>();
 
   /** Each encoded object's accepted warning codes, from its def's `diagnostics.allow`. */
   private readonly accepted = new WeakMap<object, ReadonlySet<string>>();
@@ -1124,6 +1146,7 @@ export class Xano {
     // because every walker after this one reads the tree as JSON.
     checkNonJsonValues(sections, bag, this.workspaceConfig);
     checkLiveDatasourceTests(sections, bag);
+    checkUncheckedWorkflowTestCalls(sections, bag);
     checkStacks(
       this.tableDefs,
       sections,
@@ -1145,6 +1168,13 @@ export class Xano {
     // passed through it (a `rawValue`, a decoded workspace), because the shape
     // deploys clean and answers false for every input.
     checkRegexOperandOrder(sections, bag);
+    checkUnboundPredicates(sections, bag);
+    checkConstantArrayKeys(sections, bag);
+    checkPredicateIndexReads(sections, bag);
+    checkPreconditionBareErrors(sections, bag);
+    checkReturnedStreams(sections, bag);
+    checkReturnedIncludeMeta(sections, bag);
+    checkReturnsOutsideInferredType(sections, bag, (encoded) => this.shapedResponses.has(encoded));
     checkTimezoneArgs(sections, bag);
     checkReferences(this.bundleType, sections, this.workspaceConfig.guid, bag);
     checkMicroserviceReferences(this.bundleType, sections, bag);
@@ -1184,6 +1214,10 @@ export class Xano {
     // A limiter with no `error` never stops a request: it binds false and the stack runs on.
     checkRatelimitWithoutError(sections, bag);
     checkAuthNoCaller(sections, bag);
+    checkToolCallReadsAuth(sections, bag);
+    checkPatchRawInput(sections, bag);
+    checkEditOptionalInput(sections, bag);
+    checkAuthTokenOptionalExpiration(sections, bag);
     // A realtime gate that can only ever say no — a lockout, not a breach.
     checkRealtimeGates(sections, bag);
     // The realtime shapes the docs call silent: a server left off, a transcript
@@ -1196,8 +1230,13 @@ export class Xano {
     checkRealtimeJoinDeliver(sections, bag);
     // A trigger attached to no object: it deploys, and then never fires.
     checkTriggerBindings(sections, bag);
+    checkTriggerAbsentSideReads(sections, bag);
+    checkMcpTriggerResponseKeys(sections, bag);
     // A `ref()` naming a variable nothing binds: a clean bundle and a 500.
     checkUnboundVarRefs(sections, bag);
+    // A var bound only on some paths (one branch, a loop body, a try block)
+    // and read after the block: the skipped path 500s with `Missing var entry`.
+    checkConditionallyBoundVars(sections, bag);
     // A `to_throw` body reading a variable bound outside it: the isolated var
     // stack makes the setup unreachable, and the test blames the guard.
     checkToThrowScope(sections, bag);
@@ -1214,6 +1253,9 @@ export class Xano {
     // The literal sibling: a `c.null()` in that same slot, which the engine
     // refuses on the FIRST call rather than on an unlucky one.
     checkNullMatchArgs(sections, bag);
+    // A dotted ref into a `db.get` / single `db.query` row nothing narrowed: a
+    // miss is `Unable to locate var` (HTTP 500), not the null the type promises.
+    checkDrillMaybeNull(sections, bag);
     // An input that addresses one row but rides the query string instead of the
     // path, so the route is not addressable the way a REST client expects.
     checkPathSegmentCandidates(sections, bag);
@@ -1244,6 +1286,7 @@ export class Xano {
     checkAddonOutput(sections, bag);
     checkGuardRoleColumns(sections, this.tableDefs, bag);
     checkToolOutputSchema(sections, bag);
+    checkToolDescriptionShadowed(sections, bag);
     checkAgentArgPlaceholders(sections, bag);
     checkAgentToolsOff(sections, bag);
     checkAssertionsOutsideTests(sections, bag);
@@ -1430,7 +1473,7 @@ export class Xano {
    * middleware registry is known (an attachment entry only carries the target's
    * guid; we resolve it back to the encoded `run` to inspect for `auth()`).
    *
-   * It **warns, never throws** — a bare `auth()` reference is not proof the
+   * It **warns, never throws** — an `auth()` reference alone is not proof the
    * request will fail: the statement holding it may sit on a branch that never
    * runs on this host, and the same middleware object is often attached to
    * authenticated hosts too. Blocking the export would produce false positives

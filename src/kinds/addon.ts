@@ -52,10 +52,12 @@ export type AddonCardinality = "single" | "list" | "count" | "exists" | "aggrega
 /**
  * The graft shape an attached addon lands on each row. For a table-bound addon
  * with an `output` list it's `Pick<InferRow<Tbl>, Out>`, wrapped per the
- * cardinality: an object or `null` when no row matches (`"single"`) or an array (`"list"`). `"count"` grafts a
+ * cardinality: an object, or `undefined` because the engine leaves the alias OUT of the row when no row
+ * matches (`"single"`; the row key is optional), or an array (`"list"`). `"count"` grafts a
  * `number` and `"exists"` a `boolean` (the `output`/`table` are irrelevant to
  * those); `"aggregate"` grafts an array keyed by the declared `group`/`eval`
- * aliases (a plain group typed by its column), or `unknown` when neither is declared. Falls back to
+ * aliases (a plain group typed by its column), ONE object (an optional key) for an
+ * eval with no group, or `unknown` when neither is declared. Falls back to
  * `unknown` when the addon carries no typed `table` + `output` (a bare-name/raw-context addon the SDK can't shape).
  * Mirrors the engine's per-return-type graft.
  */
@@ -72,7 +74,11 @@ export type AddonGraft<
     : Card extends "aggregate"
       ? [Grp, Ev] extends [readonly [], readonly []]
         ? unknown // no group/eval declared → honest floor
-        : Prettify<AggregateRow<{ group: Grp; eval: Ev }, InferRow<Tbl>>>[]
+        : [Grp] extends [readonly []]
+          ? // Eval with no group is ONE ungrouped row: an object, and the alias is
+            // absent when nothing matches (#150). Grouped, it is an array.
+            Prettify<AggregateRow<{ group: Grp; eval: Ev }, InferRow<Tbl>>> | undefined
+          : Prettify<AggregateRow<{ group: Grp; eval: Ev }, InferRow<Tbl>>>[]
       : [Out] extends [readonly []]
         ? unknown
         : InferRow<Tbl> extends infer Row
@@ -80,7 +86,7 @@ export type AddonGraft<
             ? unknown
             : Row extends object
               ? Card extends "single"
-                ? Prettify<Pick<Row, Extract<Out[number], keyof Row>>> | null
+                ? Prettify<Pick<Row, Extract<Out[number], keyof Row>>> | undefined
                 : Prettify<Pick<Row, Extract<Out[number], keyof Row>>>[]
               : unknown
           : unknown;
@@ -240,12 +246,25 @@ function buildContext(def: AddonDef): Record<string, unknown> {
       // an aggregate); an author-dotted (joined) name passes through.
       // An unbound (`null`) table has no alias to qualify with, same as an absent
       // one — fall back to whatever the raw context carries.
+      const dbo = ctx.dbo as { as?: string } | undefined;
       const addonAlias =
         def.table === undefined || def.table === null
-          ? ((ctx.dbo as { as?: string } | undefined)?.as ?? "")
-          : typeof def.table === "string"
-            ? def.table
-            : def.table.name;
+          ? (dbo?.as ?? "")
+          : (def.tableAlias ?? (typeof def.table === "string" ? def.table : def.table.name));
+      // The qualifier has to be an alias the statement declares: qualified by the
+      // table name with no `dbo.as`, the engine answers "Unsupported object
+      // reference - comments.score" and the addon grafts NOTHING at HTTP 200
+      // (#149). So the alias is declared whenever the SDK adds a qualifier. A
+      // pulled addon's names are already dotted, so its bytes are unchanged.
+      if (
+        def.context?.dbo === undefined &&
+        dbo !== undefined &&
+        dbo.as === undefined &&
+        addonAlias !== "" &&
+        [...(def.group ?? []), ...(def.eval ?? [])].some((e) => !e.name.includes("."))
+      ) {
+        ctx.dbo = { ...dbo, as: addonAlias };
+      }
       ctx.return = {
         type: "aggregate",
         aggregate: {

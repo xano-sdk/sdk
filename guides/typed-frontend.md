@@ -156,6 +156,15 @@ JSON value, `lol=[[1,2],[3]]`). A list item that sends nothing (`null`, `{}`) th
 naming it. A repeated plain key (`tags=a&tags=b`) reaches the endpoint as its last
 value only, so don't hand-roll it.
 
+A frontend that imports only `routes.gen.ts` gets the same encoding with no SDK
+runtime: `routeQuery(key, input)` returns the query string (path params dropped),
+typed by `RouteInputs[key]`:
+
+```ts
+import { routePath, routeQuery } from "../xano/routes.gen.js";
+fetch(`${BASE}${routePath("GET search")}?${routeQuery("GET search", { tags: ["a", "b"], range: { min: 1 } })}`);
+```
+
 The `@xano/sdk` entry has **zero Node dependencies**, so importing your workspace
 graph into a browser bundle just works. The `node:fs`-backed emitters live in the
 separate `@xano/sdk/node` entry a frontend never pulls in.

@@ -43,7 +43,7 @@ import type {
   MaybeBodyBrand,
   MemberUpdateBrand,
 } from "../statements/statement.js";
-import type { Prettify } from "../fields/value-types.js";
+import type { BrandOpts, BrandType, Prettify } from "../fields/value-types.js";
 import type { PathParams } from "../kinds/path-params.js";
 
 /**
@@ -348,22 +348,28 @@ type RebindsLater<Name extends string, S> = S extends readonly [infer Head, ...i
  *
  * **Null-propagating**: when the base is nullable (e.g. a `db.get` row,
  * `Row | null`), the null flows *through* the projection rather than erasing it —
- * `IndexShape<Row | null, "slug">` → `string | null`, mirroring the engine's
- * runtime where `$row.slug` on a missed (null) row is itself null. Without this,
- * `keyof (Row | null)` narrows to `never` and every dotted ref into a nullable
- * base would bottom out at `unknown`, silently dropping the projection.
+ * `IndexShape<Row | null, "slug">` → `string | null`, which is what a
+ * `ref(path, { safe: true })` (`$row|get:"slug"`) yields on a missed row. Without
+ * this, `keyof (Row | null)` narrows to `never` and every dotted ref into a
+ * nullable base would bottom out at `unknown`, silently dropping the projection.
+ *
+ * `Strict` is the PLAIN dotted ref: `$row.slug` on a null base RAISES `Unable to
+ * locate var` (HTTP 500) rather than yielding null, so the base's null is dropped
+ * (`string`) — the type then describes the only response the endpoint serves.
  *
  * A segment that genuinely isn't a key of the (non-null) shape — including a
  * shape that is already `unknown` (whose `keyof` is `never`) — still bottoms out
  * at `unknown`, the same honest floor as an untraceable whole ref.
  */
-type IndexShape<Shape, Path extends string> = unknown extends Shape
-  ? IndexStep<Shape, Path>
+type IndexShape<Shape, Path extends string, Strict extends boolean = false> = unknown extends Shape
+  ? IndexStep<Shape, Path, Strict>
   : null extends Shape
-    ? IndexShape<Exclude<Shape, null>, Path> | null
+    ? Strict extends true
+      ? IndexShape<Exclude<Shape, null>, Path, Strict>
+      : IndexShape<Exclude<Shape, null>, Path, Strict> | null
     : undefined extends Shape
-      ? IndexShape<Exclude<Shape, undefined>, Path> | undefined
-      : IndexStep<Shape, Path>;
+      ? IndexShape<Exclude<Shape, undefined>, Path, Strict> | undefined
+      : IndexStep<Shape, Path, Strict>;
 
 /**
  * One non-null indexing step for {@link IndexShape}: split the head segment off
@@ -373,13 +379,40 @@ type IndexShape<Shape, Path extends string> = unknown extends Shape
  * (true for exactly `unknown`/`any` — the bases where null-distribution can't
  * terminate) routes straight here without looping.
  */
-type IndexStep<Shape, Path extends string> = Path extends `${infer Head}.${infer Rest}`
-  ? Head extends keyof Shape
-    ? IndexShape<Shape[Head], Rest>
-    : unknown
-  : Path extends keyof Shape
-    ? Shape[Path]
-    : unknown;
+type IndexStep<Shape, Path extends string, Strict extends boolean = false> = Path extends `${infer Head}.${infer Rest}`
+  ? IndexShape<Project<Shape, Head>, Rest, Strict>
+  : Project<Shape, Path>;
+
+/**
+ * Project key `Key` out of `Shape`, distributing over a union so a key present
+ * on only SOME arms is honest about the others: `{ a: number } | { b: string }`
+ * at `a` is `number | undefined`, because a value of that union might be the
+ * `{ b }` arm that has no `a`. This is what makes a non-raising call binding
+ * (`InferResponse<Fn> | CallErrorEnvelope`) drillable — `ref("<as>.code")`
+ * types `string | undefined`, `ref("<as>.okField")` `T | undefined` — instead
+ * of collapsing to `unknown` the moment the envelope joined the union.
+ *
+ * A key on NO arm still bottoms out at `unknown` (the honest floor for an
+ * untraceable path), and a non-union shape is unchanged: `Shape[Key]` when it
+ * has the key, `unknown` when it does not.
+ */
+type Project<Shape, Key extends string> = [HasKey<Shape, Key>] extends [never]
+  ? unknown
+  : DistributeKey<Shape, Key>;
+
+/** The arms of `Shape` that carry `Key` (optional included); `never` if none do. */
+type HasKey<Shape, Key extends string> = Shape extends unknown ? (Key extends keyof Shape ? Shape : never) : never;
+
+/**
+ * `Key` across every arm of `Shape`: its value where the arm has it, `undefined`
+ * where the arm does not — so a key on some-but-not-all arms carries the honest
+ * `| undefined`. Only reached once {@link HasKey} proves at least one arm has it.
+ */
+type DistributeKey<Shape, Key extends string> = Shape extends unknown
+  ? Key extends keyof Shape
+    ? Shape[Key]
+    : undefined
+  : never;
 
 /**
  * Resolve a `ref` name against the branded stack `S`. A **dotted** name projects
@@ -390,8 +423,8 @@ type IndexStep<Shape, Path extends string> = Path extends `${infer Head}.${infer
  * identifiers (no dots), so the first `.` always splits the variable from the
  * subpath — matching how the engine resolves `$generated.result`.
  */
-type TraceVar<Name extends string, S, I = unknown> = Name extends `${infer Base}.${infer Path}`
-  ? IndexShape<Traced<Base, S, I>, Path>
+type TraceVar<Name extends string, S, I = unknown, Strict extends boolean = false> = Name extends `${infer Base}.${infer Path}`
+  ? IndexShape<Traced<Base, S, I>, Path, Strict>
   : Traced<Name, S, I>;
 
 /**
@@ -549,7 +582,7 @@ type ResolveValue<V, S, I = unknown> = V extends ObjValue<infer Members>
   : V extends FilteredValue<infer Base, infer Chain>
     ? ApplyFilters<ResolveValue<Base, S, I>, Chain>
     : V extends RefValue<infer Name>
-      ? TraceVar<Name, S, I>
+      ? TraceVar<Name, S, I, V extends { readonly __safe: true } ? false : true>
       : V extends InpValue<infer Name>
         ? InputAt<I, Name>
         : V extends AuthValue<infer Path>
@@ -576,8 +609,9 @@ type AuthAt<I, Path extends string> = Path extends "id"
 /**
  * An `inp(name)` read, typed from the def's declared `input` (`I`, the def
  * itself): `inp("")` is the whole payload, a dotted name projects into an
- * object input. An optional input the request left out reads as `null`; a
- * path param (a query's `{param}`, a message's channel `{param}`) never does.
+ * object input. An optional input the request left out (or sent as `null`)
+ * reads as its type's EMPTY value, not `null` ({@link OmittedInput}); a path
+ * param (a query's `{param}`, a message's channel `{param}`) is always present.
  */
 type InputAt<I, Name extends string> = unknown extends InputsOf<I>
   ? unknown
@@ -590,10 +624,37 @@ type InputAt<I, Name extends string> = unknown extends InputsOf<I>
       : IndexShape<Required<InferInput<I>>, Name> extends infer T
         ? InputHead<Name> extends QueryPathParams<I>
           ? Exclude<T, null>
-          : InputHead<Name> extends RequiredKeys<InferInput<I>> ? T : T | null
+          : InputHead<Name> extends RequiredKeys<InferInput<I>>
+            ? T
+            : Name extends InputHead<Name>
+              ? OmittedInput<InputMapOfDef<I>[Name & keyof InputMapOfDef<I>], T>
+              : T | null
         : never;
 
 type InputHead<Name extends string> = Name extends `${infer Head}.${string}` ? Head : Name;
+
+type InputMapOfDef<I> = I extends { input?: infer M } ? NonNullable<M> : never;
+
+/**
+ * What an OPTIONAL top-level input `D` (value type `T`) binds when the request
+ * omits it or sends `null`. Measured on both backends: the engine binds the
+ * type's EMPTY value — `""`, `0`, `false`, `{}`, `[]` — so `T` already covers
+ * it, except an enum, whose `""` is outside its member union. A non-empty
+ * `default` always applies. A type that binds `null` (the nullable-by-default
+ * ones, `nullable: true`) carries it in `T` already. An `object` input keeps
+ * `| null`: what it binds was not measured.
+ */
+type OmittedInput<D, T> = [BrandType<D>] extends ["obj"]
+  ? T | null
+  : BrandOpts<D> extends { default: infer Dv }
+    ? [Dv] extends ["" | undefined] ? EmptyOf<D, T> : T
+    : EmptyOf<D, T>;
+
+type EmptyOf<D, T> = null extends T
+  ? T
+  : [BrandType<D>] extends ["enum"]
+    ? BrandOpts<D> extends { array: true } ? T : T | ""
+    : T;
 
 /** A query's `{param}` names — a path param is always present, whatever its `required`. */
 type QueryPathParams<I> = I extends { verb: string; name: infer N extends string } ? PathParams<N> : never;

@@ -1153,7 +1153,10 @@ const dbTransaction: SpecialDecoder = (a) => {
 
 /**
  * Decode a stored `where`: an `{expression: […]}` tree through the shared
- * boolean-expression inverse, or a raw `Value` escape hatch passed through.
+ * boolean-expression inverse. Anything else declines, so the statement keeps its
+ * bytes through `raw()`: the engine runs a stored search in any other shape (a
+ * tagged value included) as NO filter, and `where` refuses every value at build
+ * time, so source spelling it would not compile.
  *
  * Null is always fatal for a caller (a search filter cannot be dropped), so the
  * decline is recorded here rather than at each call site.
@@ -1170,12 +1173,11 @@ function decodeWhere(
 ): { expr: Expr; runtime: unknown } | null {
   const condition = decodeCondition(a.ctx, stored, { sqlWhere: true });
   if (condition) return { expr: condition.expr, runtime: condition.runtime };
-  const value = toValue(stored);
-  if (!value)
-    return declineHere(
-      `where (${site}): neither a decodable condition tree nor a tagged value — stored ${JSON.stringify(stored).slice(0, 80)}`,
-    );
-  return { expr: decodeValue(a.ctx, value), runtime: value };
+  return declineHere(
+    toValue(stored)
+      ? `where (${site}): a tagged value, which the engine runs as no filter and \`where\` refuses — stored ${JSON.stringify(stored).slice(0, 80)}`
+      : `where (${site}): not a decodable condition tree — stored ${JSON.stringify(stored).slice(0, 80)}`,
+  );
 }
 
 /** A persisted int, whether serialized as a number or as a numeric string. */

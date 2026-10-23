@@ -10,6 +10,17 @@
 import type { FieldRule, StatementSpec } from "./interpret.js";
 
 /**
+ * The range of a `static:int` field, which the transform schema can't state.
+ * The engine class declares it (`int|min(..)|max(..)` in its context schema)
+ * and re-checks it at run time, where a bad value 500s every request, so the
+ * encoder refuses it at build time instead.
+ */
+const NUMBER_RANGE: Readonly<Record<string, Readonly<Record<string, readonly [number, number]>>>> = {
+  // ThrowError: the HTTP status an uncaught throw answers with.
+  "mvp:throw_error": { status: [100, 599] },
+};
+
+/**
  * Apply every known upstream-schema correction to `spec` in place.
  *
  * - `mvp:mcp_call_tool` (`s.ai.external.mcp.tool.run`): the upstream engine
@@ -53,6 +64,13 @@ import type { FieldRule, StatementSpec } from "./interpret.js";
  *   workspace cannot reproduce it.
  */
 export function applySpecOverrides(spec: StatementSpec): void {
+  for (const [field, range] of Object.entries(NUMBER_RANGE[spec.name] ?? {})) {
+    const rule = spec.rules.find((r) => r.field === field);
+    if (!rule || rule.type !== "number") {
+      throw new Error(`NUMBER_RANGE: ${spec.name} has no number field "${field}" — the upstream schema changed.`);
+    }
+    rule.range = range;
+  }
   if (spec.name === "mvp:mcp_call_tool") {
     const args = spec.rules.find((r) => r.field === "args");
     if (args && args.default === "sse") delete args.default;

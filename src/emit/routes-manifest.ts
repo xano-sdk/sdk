@@ -392,7 +392,7 @@ export const ROUTES = ${objectLiteral(entries)} as const;
 export type RouteName = keyof typeof ROUTES;
 ${rows.length > 1 ? MANY_ROUTES : ""}
 ${rows.length > 1 ? UNION_OVERLOAD : ""}${ambiguousOverloads ? `${ambiguousOverloads}\n` : ""}${overloadsFor("routePath", rows.map((r) => ({ name: r.key, params: r.params })))}
-${implementation(ambiguousKeys.length > 0)}${realtimeSection}${mcp.length > 0 ? renderMcp(mcp) : ""}${renderRouteInputTypes(inputs)}`;
+${implementation(ambiguousKeys.length > 0)}${rows.length > 0 ? ROUTE_QUERY : ""}${realtimeSection}${mcp.length > 0 ? renderMcp(mcp) : ""}${renderRouteInputTypes(inputs)}`;
 }
 
 /**
@@ -513,6 +513,87 @@ function fillParams(
     }
   }
   return filled;
+}
+`;
+
+/**
+ * The emitted `routeQuery`: a GET query string from a route's inputs. Mirrors
+ * `toSearchParams` (src/kinds/query.ts) rule for rule — inlined, because
+ * importing it is the 85 kB this file exists to avoid — and returns a string
+ * rather than `URLSearchParams`, which a frontend tsconfig on `lib: es2022`
+ * does not declare. The round-trip tests pin it to `toSearchParams` byte for
+ * byte, and to a handle's dropping of `{param}` inputs.
+ */
+const ROUTE_QUERY = `
+/**
+ * The GET query string for a route's inputs, without the leading "?" —
+ * \`routePath(name, params) + "?" + routeQuery(name, input)\`. The same encoding
+ * as the SDK's \`query.toSearchParams\`, inlined so a frontend needs no SDK
+ * import: a list of scalars sends \`k[]=a&k[]=b\`, an object \`k[sub]=v\`, a list
+ * of objects \`k[0][sub]=v\`, a list holding a list one JSON value; \`null\`,
+ * \`undefined\` and an empty list or object are left out. The route's \`{param}\`
+ * inputs are dropped — they ride in the path. Throws on a value with no
+ * query-string form (a non-finite number, a non-plain object, a cycle).
+ */
+export function routeQuery<N extends RouteName>(
+  name: N,
+  input: N extends keyof RouteInputs ? RouteInputs[N] : Record<string, unknown>,
+): string {
+  const route = own(ROUTES as Record<string, { verb: string; path: string }>, name as string);
+  if (route === undefined) throw new Error(\`routeQuery: unknown route "\${String(name)}".\`);
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new TypeError(\`routeQuery("\${String(name)}") takes the inputs as a { name: value } record.\`);
+  }
+  const pathParams = new Set((route.path.match(/\\{[^}]+\\}/g) ?? []).map((p) => p.slice(1, -1)));
+  const pairs: string[] = [];
+  // The containers on the path to the value being encoded: a value holding one is a cycle.
+  const ancestors: unknown[] = [];
+  // application/x-www-form-urlencoded, byte for byte what URLSearchParams writes.
+  const form = (s: string): string =>
+    encodeURIComponent(s).replace(/%20/g, "+").replace(/[!'()~]/g, (ch) => \`%\${ch.charCodeAt(0).toString(16).toUpperCase()}\`);
+  const fail = (path: string, why: string): never => {
+    throw new TypeError(\`routeQuery: param "\${path}" \${why}\`);
+  };
+  const isScalar = (v: unknown): v is string | number | boolean =>
+    typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+  const encode = (path: string, value: unknown, out: string[]): boolean => {
+    if (value === null || value === undefined) return false;
+    if (isScalar(value)) {
+      if (typeof value === "number" && !Number.isFinite(value)) fail(path, \`is \${value} — not a finite value\`);
+      out.push(\`\${form(path)}=\${form(String(value))}\`);
+      return true;
+    }
+    const proto: unknown = typeof value === "object" ? Object.getPrototypeOf(value) : 0;
+    if (path !== "" && !Array.isArray(value) && proto !== Object.prototype && proto !== null) {
+      fail(path, "is not a scalar, list or plain object");
+    }
+    if (ancestors.includes(value)) fail(path, "contains itself — a cycle has no query-string encoding");
+    ancestors.push(value);
+    let sent = false;
+    if (Array.isArray(value) && value.some(Array.isArray)) {
+      value.forEach((item: unknown, index) => encode(\`\${path}[\${index}]\`, item, []));
+      out.push(\`\${form(path)}=\${form(JSON.stringify(value))}\`);
+      sent = true;
+    } else if (Array.isArray(value)) {
+      const plain = value.every(isScalar);
+      value.forEach((item: unknown, index) => {
+        if (!encode(\`\${path}[\${plain ? "" : index}]\`, item, out)) {
+          fail(\`\${path}[\${index}]\`, \`is \${item === null || item === undefined ? String(item) : "empty"}: a list item that sends nothing would move every later one up. Remove it, or give it a value\`);
+        }
+        sent = true;
+      });
+    } else {
+      for (const [key, member] of Object.entries(value as Record<string, unknown>)) {
+        if (path === "" && pathParams.has(key)) continue;
+        if (key === "" || /[[\\]]/.test(key)) fail(path !== "" ? \`\${path}[\${key}]\` : key, "is empty or holds \`[\`/\`]\` — a query string cannot carry that name");
+        if (encode(path !== "" ? \`\${path}[\${key}]\` : key, member, out)) sent = true;
+      }
+    }
+    ancestors.pop();
+    return sent;
+  };
+  encode("", input, pairs);
+  return pairs.join("&");
 }
 `;
 
@@ -710,9 +791,9 @@ export function mcpPath(
  * on the base URL is lifted to after \`/x2/mcp\`, where the endpoint registers it,
  * so \`mcpUrl(name, window.XANO_HOST)\` is right as-is.
  *
- * Give it to an MCP client or show it to a user. The endpoint refuses any
- * request carrying a browser \`Origin\` (403 "Forbidden: Origin not allowed"), so
- * page JS cannot call it directly.
+ * Give it to an MCP client or show it to a user. The endpoint is CORS-open on
+ * both backends — it serves every browser \`Origin\` — so do not treat the URL as
+ * a browser boundary; gate each tool with \`auth\`/\`oauth\`.
  */
 export function mcpUrl(
   server: McpServerName,

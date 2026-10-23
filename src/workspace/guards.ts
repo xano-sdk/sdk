@@ -35,10 +35,11 @@ import { isQueryExpressionFilter } from "../values/query-filters.js";
 import { PAGING_ENVELOPE_ROOTS } from "../statements/special/output-select.js";
 import { FILTER_NAMES } from "../values/generated/filters.generated.js";
 import { reversedRegexOperands, sys } from "../values/value.js";
+import { obj as obj_ } from "../values/obj.js";
 import { LAMBDA_CODE_FILTERS, maskNonCode } from "../values/lambda.js";
 import { unguardedArgPlaceholders } from "./template-args.js";
 import type { TableDef } from "../kinds/table.js";
-import type { TaggedValue } from "../types/xdo.js";
+import type { StackItemXdo, TaggedValue } from "../types/xdo.js";
 import {
   apiGroupScope,
   documentationScopeLabel,
@@ -58,6 +59,7 @@ import { CORS_UNMATCHABLE, describeUnmatchableOrigins, unmatchableOrigins } from
 import { findNonJson, nonJsonMessage } from "./non-json.js";
 import { toolsetTargetField } from "../kinds/toolset-target.js";
 import { DiagnosticError, type DiagnosticBag } from "./diagnostics.js";
+import { subStacks } from "../bundle/walk.js";
 
 // --- stack warnings: shapes that succeed with HTTP 200 and the wrong result ---
 
@@ -559,8 +561,9 @@ function checkInputScope(
         : "";
       const near = didYouMean(missing[0]!, declared);
       // A dbLink input's own name binds nothing: its COLUMNS are the inputs.
+      // A task or workflow test payload has no `input` key at all, so default it.
       const links = new Set(
-        (record.input as Array<{ name?: unknown; type?: unknown }>).flatMap((e) =>
+        ((record.input ?? []) as Array<{ name?: unknown; type?: unknown }>).flatMap((e) =>
           typeof e?.type === "string" && e.type.endsWith("_mvpschema") && typeof e.name === "string" ? [e.name] : [],
         ),
       );
@@ -574,7 +577,10 @@ function checkInputScope(
         payloadKey === "trigger"
           ? `read it with \`ref("<var>.${missing[0]}")\`; a trigger's own inputs are fixed, so read them through the ` +
             `\`(t) => [...]\` stack callback's accessor (\`t.new\`, \`t.action\`, …).`
-          : `read it with \`ref("<var>.${missing[0]}")\`; if it really is a request input, declare it in this def's \`input\`.`;
+          : payloadKey === "task" || payloadKey === "workflow_test"
+            ? `read it with \`ref("<var>.${missing[0]}")\`; a ${sdkKindName(payloadKey, record)} has no request inputs, ` +
+              `so the value must come from a table read, \`env()\`, or an earlier \`ref()\`.`
+            : `read it with \`ref("<var>.${missing[0]}")\`; if it really is a request input, declare it in this def's \`input\`.`;
       bag.warn(
         "stack.inp-undeclared",
         `${sdkKindName(payloadKey, record)} "${name}" reads ${missing.map((r) => `\`inp("${r}")\``).join(", ")}, ` +
@@ -783,6 +789,122 @@ function envReads(record: Record<string, unknown>): EnvRead[] {
   }
   const seen = new Set<string>();
   return read.filter((r) => (seen.has(r.name) ? false : (seen.add(r.name), true)));
+}
+
+/**
+ * A `s.util.get_env` binding (its `as`) read back in the response.
+ *
+ * `s.util.get_env` returns EVERY declared and dashboard environment variable as
+ * one object — `{ GREETING: "...", API_KEY: "sk_...", … }` — on both backends.
+ * It is the get-ALL statement (`env("X")` fetches a single variable); returning
+ * everything is its contract, not a bug. So binding it with `as:` and letting
+ * that binding reach a response ships every secret the workspace holds to the
+ * caller.
+ *
+ * Statically unambiguous (the bound name is read in `result`), and a real secret
+ * leak rather than a style issue, so it warns even though the shape deploys and
+ * runs. Scoped to the direct `as -> response` edge: a binding consumed only in
+ * the stack — the normal use, read one key and return that — is left alone.
+ */
+function checkEnvSecretResponse(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const [payloadKey, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const record = obj as Record<string, unknown>;
+      // Names bound by a `get_env` in this object's own stack.
+      const bound = new Set<string>();
+      walkNodes(record.run, (node) => {
+        if (node.name === "mvp:get_env" && typeof node.as === "string" && node.as !== "") bound.add(node.as);
+      });
+      if (bound.size === 0) continue;
+      // Which of those bindings a response returns WHOLE — a bare `ref("e")`, no
+      // member path. Returning the whole object leaks every variable; picking a
+      // key off it (`ref("e.GREETING")`) is the recommended mitigation, so a
+      // member read is deliberately left alone.
+      const refs: string[] = [];
+      collectVarRefs(record.result, refs);
+      const leaked = new Set<string>();
+      for (const path of refs) if (!path.includes(".") && bound.has(path)) leaked.add(path);
+      if (leaked.size === 0) continue;
+      const name = (record as { name?: unknown }).name;
+      const owner = `${sdkKindName(payloadKey, record as { type?: unknown })} "${typeof name === "string" ? name : "?"}"`;
+      const names = [...leaked].map((n) => `\`${n}\``).join(", ");
+      const one = leaked.size === 1;
+      bag.warn(
+        "stack.env-secret-in-response",
+        `${owner}: the \`s.util.get_env\` binding ${names} ${one ? "is" : "are"} returned in the response. ` +
+          `\`get_env\` returns EVERY environment variable as one object — secrets like \`API_KEY\` included — ` +
+          `so this ships all of them to the caller. Read just the value you need with \`env("NAME")\` and ` +
+          `return that, or pick the needed keys off the binding before it reaches the response.`,
+        record,
+      );
+    }
+  }
+}
+
+/**
+ * A crypto statement that leans on a weak or surprising engine DEFAULT.
+ *
+ * Each default is deliberate and stays (changing it breaks data at rest or makes
+ * eternal tokens expire), so this is a warning, not an error — and all three
+ * have a legitimate use, so each is independently acceptable per def:
+ *
+ * - `s.security.encrypt`/`decrypt` with no `algorithm` runs `aes-128-cbc`, so a
+ *   256-bit key silently encrypts at AES-128 (live-verified). Encrypt and decrypt
+ *   must name the SAME algorithm, so an implicit one on either side is a hazard.
+ * - `s.security.jws_encode`/`jwe_encode` with no `ttl` mints a token with no
+ *   `exp` — it never expires.
+ * - `s.security.create_rsa_key` with no `bits` generates a 1024-bit key, below
+ *   the 2048-bit minimum now considered safe.
+ */
+function checkCryptoWeakDefaults(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const [payloadKey, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const record = obj as Record<string, unknown>;
+      const statements: EncodedStatement[] = [];
+      collectStatements(record, statements);
+      if (statements.length === 0) continue;
+      let ownerCache: string | undefined;
+      const owner = (): string =>
+        (ownerCache ??= `${sdkKindName(payloadKey, record as { type?: unknown })} "${typeof record.name === "string" ? record.name : "?"}"`);
+      for (const st of statements) {
+        if ((st.name === "mvp:crypto_encrypt" || st.name === "mvp:crypto_decrypt") && statementInput(st, "algorithm") === undefined) {
+          const verb = st.name === "mvp:crypto_encrypt" ? "encrypt" : "decrypt";
+          bag.warn(
+            "security.encrypt-default-algorithm",
+            `${owner()}: \`s.security.${verb}\` sets no \`algorithm\`, so the engine uses \`aes-128-cbc\` — ` +
+              `even a 256-bit key then runs AES-128. Pass \`algorithm\` explicitly (e.g. \`"aes-256-gcm"\`); ` +
+              `encrypt and decrypt must name the same one.`,
+            record,
+          );
+        }
+        if ((st.name === "mvp:crypto_jws_encode2" || st.name === "mvp:crypto_jwe_encode3") && statementInput(st, "ttl") === undefined) {
+          const verb = st.name === "mvp:crypto_jws_encode2" ? "jws_encode" : "jwe_encode";
+          bag.warn(
+            "security.jwt-no-ttl",
+            `${owner()}: \`s.security.${verb}\` sets no \`ttl\`, so the token carries no \`exp\` and never ` +
+              `expires. Pass a \`ttl\` in seconds, unless a non-expiring token is intended.`,
+            record,
+          );
+        }
+        if (st.name === "mvp:crypto_create_rsa_key" && statementInput(st, "bits") === undefined) {
+          bag.warn(
+            "security.rsa-default-bits",
+            `${owner()}: \`s.security.create_rsa_key\` sets no \`bits\`, so the engine generates a 1024-bit ` +
+              `key — below the 2048-bit minimum now considered safe. Pass \`bits\` (e.g. \`2048\`).`,
+            record,
+          );
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -1109,6 +1231,82 @@ function checkPostMergeOnList(
         `(\`response: { items: ${wrapped} }\`).`,
       q as object,
     );
+  }
+}
+
+/**
+ * A `pre` middleware with `resultStrategy: "replace"` whose response is a
+ * literal record REPLACES the caller's inputs with exactly those keys. A host
+ * that reads one of its own declared inputs the record leaves out 500s on every
+ * request ("Unable to locate input: other", #153, both backends). Attached on
+ * the query, on its api group, or on the workspace tier the query inherits
+ * when neither overrides `pre`. A non-literal response is left alone.
+ */
+function checkPreReplaceDropsInput(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+  workspaceConfig: Readonly<Record<string, unknown>> = {},
+): void {
+  const replacing = new Map<string, { name: string; keys: Set<string> }>();
+  for (const mw of sections.middleware ?? []) {
+    const rec = (mw ?? {}) as { guid?: unknown; name?: unknown; result_type?: unknown; result?: unknown };
+    if (typeof rec.guid !== "string" || rec.result_type !== "replace" || !Array.isArray(rec.result)) continue;
+    const entries = rec.result as Array<{ name?: unknown }>;
+    if (entries.some((e) => typeof e?.name !== "string" || e.name === "")) continue;
+    replacing.set(rec.guid, { name: typeof rec.name === "string" ? rec.name : "?", keys: new Set(entries.map((e) => String(e.name))) });
+  }
+  if (replacing.size === 0) return;
+  const preIds = (host: unknown): string[] => {
+    const pre = (host as { middleware?: { pre?: unknown } } | null)?.middleware?.pre;
+    if (!Array.isArray(pre)) return [];
+    return pre
+      .map((st) => st as { name?: unknown; disabled?: unknown; context?: { middleware?: { id?: unknown } } } | null)
+      .filter((st) => st?.name === "mvp:middleware" && st.disabled !== true)
+      .map((st) => st!.context?.middleware?.id)
+      .filter((id): id is string => typeof id === "string" && replacing.has(id));
+  };
+  const groups = new Map<string, unknown>();
+  for (const g of sections.app ?? []) {
+    const guid = (g as { guid?: unknown } | null)?.guid;
+    if (typeof guid === "string") groups.set(guid, g);
+  }
+  const workspacePre = (workspaceConfig as { middleware?: { query_pre?: unknown } }).middleware?.query_pre;
+  const overridesPre = (host: unknown): boolean =>
+    (host as { middleware?: { pre_customize?: unknown } } | null | undefined)?.middleware?.pre_customize === true;
+  for (const q of sections.query ?? []) {
+    const rec = (q ?? {}) as { name?: unknown; verb?: unknown; app?: { id?: unknown }; input?: unknown };
+    const group = typeof rec.app?.id === "string" ? groups.get(rec.app.id) : undefined;
+    const inherited = overridesPre(q) || overridesPre(group) ? [] : preIds({ middleware: { pre: workspacePre } });
+    const ids = [...new Set([...preIds(q), ...preIds(group), ...inherited])];
+    if (ids.length === 0) continue;
+    const declared = new Set(
+      (Array.isArray(rec.input) ? (rec.input as Array<{ name?: unknown }>) : [])
+        .map((i) => i?.name)
+        .filter((n): n is string => typeof n === "string"),
+    );
+    const read = new Set<string>();
+    const { middleware: _mw, input: _in, ...body } = q as Record<string, unknown>;
+    walkNodes(body, (record) => {
+      if (record.tag !== "input") return;
+      const path = typeof record.value === "string" ? record.value : typeof record.operand === "string" ? record.operand : undefined;
+      const root = path?.split(".")[0];
+      if (root !== undefined && declared.has(root)) read.add(root);
+    });
+    for (const id of ids) {
+      const mw = replacing.get(id)!;
+      const dropped = [...read].filter((n) => !mw.keys.has(n));
+      if (dropped.length === 0) continue;
+      const one = dropped.length === 1;
+      bag.warn(
+        "middleware.pre-replace-drops-input",
+        `query "${typeof rec.verb === "string" ? `${rec.verb} ` : ""}${typeof rec.name === "string" ? rec.name : "?"}" ` +
+          `reads ${one ? "input" : "inputs"} ${dropped.map((n) => `"${n}"`).join(", ")}, which the pre middleware "${mw.name}" ` +
+          `(\`resultStrategy: "replace"\`) does not re-emit: a replace swaps the caller's inputs for its response ` +
+          `(${[...mw.keys].map((k) => `"${k}"`).join(", ")}), so every request 500s "Unable to locate input". ` +
+          `Re-emit ${one ? "it" : "them"} in the middleware's response, or use \`resultStrategy: "merge"\`.`,
+        q as object,
+      );
+    }
   }
 }
 
@@ -1569,12 +1767,38 @@ function checkRowSelection(
   if (!columns) return;
   const known = new Set(columns);
   const aliases = new Set<string>();
-  for (const list of [context?.eval, (statement as { addon?: unknown }).addon]) {
+  const evalAliases = new Set<string>();
+  for (const [i, list] of [context?.eval, (statement as { addon?: unknown }).addon].entries()) {
     for (const e of Array.isArray(list) ? list : []) {
       const as = (e as { as?: unknown })?.as;
       if (typeof as !== "string") continue;
       known.add(as);
       aliases.add(as);
+      if (i === 0) evalAliases.add(as); // the `eval` list, not `addon`
+    }
+  }
+  // `output` is applied to the eval columns too, so an alias computed but not
+  // SELECTED is dropped from the result (an addon alias survives, so this is
+  // eval-only). The typed shape otherwise grafts a key the server never sends.
+  // `selected` empty means a whole-row/whole-`items` selection (no column list),
+  // which returns every eval alias — nothing to warn about.
+  if (statement.name === DB_QUERY && evalAliases.size > 0 && selected.length > 0) {
+    const selectedNames = new Set(
+      selected
+        .map((node) => (node as { name?: unknown })?.name)
+        .filter((n): n is string => typeof n === "string"),
+    );
+    const unselected = [...evalAliases].filter((alias) => !selectedNames.has(alias));
+    if (unselected.length > 0) {
+      bag.warn(
+        "db.eval-unselected",
+        `${owner}: \`eval\` computes ${unselected.map((n) => `"${n}"`).join(", ")}, but \`output\` does not ` +
+          `select ${unselected.length > 1 ? "them" : "it"} — \`output\` applies to the eval columns too, so ` +
+          `${unselected.length > 1 ? "they are" : "it is"} dropped from the result with no error (and ` +
+          `\`InferResponse\` no longer types ${unselected.length > 1 ? "them" : "it"}). List the alias in ` +
+          `\`output\` (\`"${prefix}${unselected[0]}"\`) to return it, or drop it from \`eval\`.`,
+        subject,
+      );
     }
   }
   // A joined table's alias: its `as`, else the table's own name.
@@ -1930,12 +2154,15 @@ export function checkStacks(
 ): void {
   checkMiddleware(sections, bag, workspaceConfig);
   checkPostMergeOnList(sections, bag, workspaceConfig);
+  checkPreReplaceDropsInput(sections, bag, workspaceConfig);
   checkStoreFromStoredFileInput(sections, bag);
   checkInputScope(sections, bag);
   checkColumnScope(sections, bag);
   // The env counterpart of `stack.inp-undeclared` — checkable only against a
   // config that declares names, which is why it takes one.
   checkEnvNames(workspaceConfig, sections, bag, envSource);
+  checkEnvSecretResponse(sections, bag);
+  checkCryptoWeakDefaults(sections, bag);
   // Needs no table definition — the selection and the paging flag are both on
   // the statement — so it runs before the `tables.length === 0` bail below.
   checkPagedOutputRoot(sections, bag);
@@ -2254,6 +2481,374 @@ export function checkRegexOperandOrder(
           `filter — so this answers false for every input with HTTP 200 and no error, and a ` +
           `precondition built on it lets through the values it exists to refuse. Swap the ` +
           `operands: \`withFilters(c.regex(…), fl.regex_test(subject))\`.`,
+        obj,
+      );
+    }
+  }
+}
+
+/** The `s.text.*` predicates: they read `name` and bind a bool to `as`, and change nothing else. */
+const TEXT_PREDICATES: Readonly<Record<string, string>> = {
+  "mvp:text_contains": "contains",
+  "mvp:text_icontains": "icontains",
+  "mvp:text_starts_with": "starts_with",
+  "mvp:text_istarts_with": "istarts_with",
+  "mvp:text_ends_with": "ends_with",
+  "mvp:text_iends_with": "iends_with",
+};
+
+/**
+ * An `s.text.*` predicate with no `as`. Its only effect is the bool it binds,
+ * so without `as` it does nothing: the variable it reads is unchanged (unlike
+ * the trims, which write back) and the answer is dropped, with HTTP 200.
+ */
+export function checkUnboundPredicates(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const [payloadKey, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const found = new Set<string>();
+      walkNodes(obj, (record) => {
+        const op =
+          typeof record.name === "string" && Object.hasOwn(TEXT_PREDICATES, record.name) ? TEXT_PREDICATES[record.name] : undefined;
+        if (op === undefined || record.disabled === true) return;
+        if (typeof record.as === "string" && record.as !== "") return;
+        found.add(`s.text.${op}`);
+      });
+      if (found.size === 0) continue;
+      const name = (obj as { name?: unknown }).name;
+      const owner = `${sdkKindName(payloadKey, obj as { type?: unknown })} "${typeof name === "string" ? name : "?"}"`;
+      for (const st of found) {
+        bag.warn(
+          "stack.predicate-unbound",
+          `${owner}: \`${st}\` has no \`as\`, so it does nothing. Unlike the trims, a predicate does not write ` +
+            `back into \`name\`: the bool it computes is dropped. Bind it: ` +
+            `\`${st}({ name, value, as: "matches" })\`, then read \`ref("matches")\`.`,
+          obj,
+        );
+      }
+    }
+  }
+}
+
+/** The array statements whose key (`by`, or union's `transform`) is evaluated per item with `$this` bound. */
+const PER_ITEM_KEY: Readonly<Record<string, { factory: string; arg: string }>> = {
+  "mvp:array_group_by": { factory: "s.array.group_by", arg: "by" },
+  "mvp:array_difference": { factory: "s.array.difference", arg: "by" },
+  "mvp:array_intersection": { factory: "s.array.intersection", arg: "by" },
+  "mvp:array_union": { factory: "s.array.union", arg: "transform" },
+};
+
+/** Whether a stored value is the same for every item: a constant, through filters whose arguments are constants too. */
+function constantForEveryItem(v: unknown): boolean {
+  if (!v || typeof v !== "object") return false;
+  const { tag, filters } = v as { tag?: unknown; filters?: unknown };
+  if (typeof tag !== "string" || !tag.startsWith("const") || tag.startsWith("const:expr")) return false;
+  if (filters === undefined) return true;
+  if (!Array.isArray(filters)) return false;
+  return filters.every((f) => {
+    const arg = (f as { arg?: unknown } | null)?.arg;
+    return arg === undefined || (Array.isArray(arg) && arg.every(constantForEveryItem));
+  });
+}
+
+/**
+ * An array group/set statement keyed by a constant. The key is an EXPRESSION
+ * evaluated per item with `$this` bound, not a column name, so `by: c.text("id")`
+ * keys every item by the text "id": group_by puts everything in one group, and
+ * difference/intersection/union compare one key against itself — wrong data at
+ * HTTP 200.
+ */
+export function checkConstantArrayKeys(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const [payloadKey, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const found = new Map<string, string>();
+      walkNodes(obj, (record) => {
+        if (typeof record.name !== "string" || !Object.hasOwn(PER_ITEM_KEY, record.name) || record.disabled === true) return;
+        const key = (record.context as { transform_value?: unknown } | undefined)?.transform_value;
+        if (!constantForEveryItem(key)) return;
+        const { factory, arg } = PER_ITEM_KEY[record.name]!;
+        found.set(factory, arg);
+      });
+      if (found.size === 0) continue;
+      const name = (obj as { name?: unknown }).name;
+      const owner = `${sdkKindName(payloadKey, obj as { type?: unknown })} "${typeof name === "string" ? name : "?"}"`;
+      for (const [factory, arg] of found) {
+        bag.warn(
+          "stack.array-key-constant",
+          `${owner}: \`${factory}\`'s \`${arg}\` is a constant, so every item gets the same key. \`${arg}\` is an ` +
+            `expression evaluated per item, not a column name: read the item with \`ref("$this.<path>")\` ` +
+            `(\`${arg}: ref("$this.id")\`). A constant returns wrong data with HTTP 200.`,
+          obj,
+        );
+      }
+    }
+  }
+}
+
+/** The array predicates that bind `$this` but NOT `$index` while their `if` runs (partition binds both). */
+const PREDICATES_WITHOUT_INDEX: Readonly<Record<string, string>> = {
+  "mvp:array_filter": "s.array.filter",
+  "mvp:array_find": "s.array.find",
+  "mvp:array_find_index": "s.array.find_index",
+  "mvp:array_has": "s.array.has",
+  "mvp:array_every": "s.array.every",
+  "mvp:array_filter_count": "s.array.filter_count",
+};
+
+/**
+ * `$index` read inside the `if` of an array predicate that does not bind it.
+ * Every non-empty request 500s `Missing var entry: $index`; an empty list never
+ * evaluates the condition, so a test on `[]` passes.
+ */
+export function checkPredicateIndexReads(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const [payloadKey, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const found = new Set<string>();
+      walkNodes(obj, (record) => {
+        if (typeof record.name !== "string" || !Object.hasOwn(PREDICATES_WITHOUT_INDEX, record.name)) return;
+        if (record.disabled === true) return;
+        let reads = false;
+        walkNodes((record.context as { expr?: unknown } | undefined)?.expr, (node) => {
+          // A comparison side stores the name as `operand`; a filter argument as `value`.
+          const read = node.operand ?? node.value;
+          if (node.tag === "var" && typeof read === "string" && /^\$index(?:$|[.[])/.test(read)) reads = true;
+        });
+        if (reads) found.add(PREDICATES_WITHOUT_INDEX[record.name]!);
+      });
+      if (found.size === 0) continue;
+      const name = (obj as { name?: unknown }).name;
+      const owner = `${sdkKindName(payloadKey, obj as { type?: unknown })} "${typeof name === "string" ? name : "?"}"`;
+      for (const st of found) {
+        bag.warn(
+          "stack.array-index-unbound",
+          `${owner}: \`${st}\`'s \`if\` reads \`$index\`, which it does not bind (only \`$this\`), so every non-empty ` +
+            `request fails with 500 "Missing var entry: $index". \`s.array.partition\` and \`s.array.map\` bind it: map ` +
+            `each item to \`{ v: $this, i: $index }\` first, then test \`$this.i\`.`,
+          obj,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * An `s.precondition` whose `error` is a bare string. The engine reads it as a
+ * tagged value, so an untagged string is dropped and the client gets the
+ * generic "Precondition failed." instead of the message written. Accepted (a
+ * pulled workspace can store one), but never what the author meant.
+ */
+export function checkPreconditionBareErrors(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const [payloadKey, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const messages: string[] = [];
+      walkNodes(obj, (record) => {
+        if (record.name !== "mvp:precondition" || record.disabled === true) return;
+        const error = (record.context as { error?: unknown } | undefined)?.error;
+        if (typeof error === "string" && error !== "") messages.push(error);
+      });
+      if (messages.length === 0) continue;
+      const name = (obj as { name?: unknown }).name;
+      const owner = `${sdkKindName(payloadKey, obj as { type?: unknown })} "${typeof name === "string" ? name : "?"}"`;
+      for (const message of new Set(messages)) {
+        bag.warn(
+          "stack.precondition-bare-error",
+          `${owner}: \`s.precondition\`'s \`error\` is a bare string (${JSON.stringify(message)}), which the engine ` +
+            `drops: the client gets "Precondition failed." instead. Wrap it: \`error: c.text(${JSON.stringify(message)})\`.`,
+          obj,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * A `returnType: "stream"` query whose binding is returned. A stream binds a
+ * lazy cursor the engine renders as the placeholder text `"@stream"`; its rows
+ * exist only to an `s.foreach` over it. Returned as-is (the response, or
+ * `s.return`), the client gets `"@stream"` with HTTP 200.
+ */
+export function checkReturnedStreams(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  const readsVar = (root: unknown, names: ReadonlySet<string>, hit: Set<string>): void => {
+    walkNodes(root, (node) => {
+      if (node.tag !== "var" || typeof node.value !== "string") return;
+      const head = /^[^.[]+/.exec(node.value)?.[0];
+      if (head !== undefined && names.has(head)) hit.add(head);
+    });
+  };
+  for (const [payloadKey, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const streams = new Set<string>();
+      walkNodes(obj, (record) => {
+        if (record.name !== "mvp:dbo_view" || typeof record.as !== "string" || record.as === "") return;
+        const type = (record.context as { return?: { type?: unknown } } | undefined)?.return?.type;
+        if (type === "stream") streams.add(record.as);
+      });
+      if (streams.size === 0) continue;
+      const hit = new Set<string>();
+      readsVar((obj as { result?: unknown }).result, streams, hit);
+      walkNodes(obj, (record) => {
+        if (record.name === "mvp:return") readsVar(record.context, streams, hit);
+      });
+      if (hit.size === 0) continue;
+      const name = (obj as { name?: unknown }).name;
+      const owner = `${sdkKindName(payloadKey, obj as { type?: unknown })} "${typeof name === "string" ? name : "?"}"`;
+      for (const v of hit) {
+        bag.warn(
+          "db.stream-returned",
+          `${owner} returns \`${v}\`, a \`returnType: "stream"\` binding. A stream is a cursor, not rows: returned, ` +
+            `the client gets the text "@stream" with HTTP 200. Consume it with \`s.foreach({ list: ref("${v}"), … })\`, ` +
+            `or query with \`returnType: "list"\` to return rows.`,
+          obj,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * The members an `include_meta` record shares with the file value. A drill into
+ * one of these returns what the default binding would have, so it stays quiet.
+ */
+const FILE_VALUE_MEMBERS: ReadonlySet<string> = new Set(["access", "path", "name", "type", "size", "mime", "meta"]);
+
+/**
+ * An `s.storage.create_attachment({ include_meta: true })` binding that is
+ * returned. The flag binds the engine's internal file record, not the file
+ * value: `sig`, `guid`, `canonical`, owner ids, and `storage` with the cloud
+ * provider, bucket and region. Returned (the response, or `s.return`), the
+ * whole record, or one of its internal members, reaches the client. A drill
+ * into a member the file value also carries (`ref("att.path")`) is quiet, as is
+ * any read outside a return (a db write of `ref("att.path")`).
+ */
+export function checkReturnedIncludeMeta(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  const readsVar = (root: unknown, names: ReadonlySet<string>, hit: Map<string, string>): void => {
+    walkNodes(root, (node) => {
+      if (node.tag !== "var" || typeof node.value !== "string") return;
+      const m = /^([^.[]+)(?:\.([^.[]+))?/.exec(node.value);
+      const head = m?.[1];
+      if (head === undefined || !names.has(head)) return;
+      const member = m?.[2];
+      // `att.path` returns what the file value carries; `att[0]`, `att.sig` do not.
+      if (member !== undefined && FILE_VALUE_MEMBERS.has(member)) return;
+      if (!hit.has(head) || node.value === head) hit.set(head, node.value);
+    });
+  };
+  for (const [payloadKey, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const records = new Set<string>();
+      walkNodes(obj, (record) => {
+        if (record.name !== "mvp:create_attachment" || typeof record.as !== "string" || record.as === "") return;
+        if ((record.context as { include_meta?: unknown } | undefined)?.include_meta === true) records.add(record.as);
+      });
+      if (records.size === 0) continue;
+      const hit = new Map<string, string>();
+      readsVar((obj as { result?: unknown }).result, records, hit);
+      walkNodes(obj, (record) => {
+        if (record.name === "mvp:return") readsVar(record.context, records, hit);
+      });
+      if (hit.size === 0) continue;
+      const name = (obj as { name?: unknown }).name;
+      const owner = `${sdkKindName(payloadKey, obj as { type?: unknown })} "${typeof name === "string" ? name : "?"}"`;
+      for (const [v, read] of hit) {
+        bag.warn(
+          "storage.include-meta-returned",
+          `${owner} returns \`${read}\`, from an \`s.storage.create_attachment({ include_meta: true })\` binding. ` +
+            `\`include_meta: true\` binds the engine's internal file record, not the file value: returned, it exposes ` +
+            `storage internals (\`sig\`, \`guid\`, and \`storage\` with the bucket name) to the client. Return only the ` +
+            `fields you need (\`ref("${v}.path")\`, \`ref("${v}.name")\`, …), or drop \`include_meta\` to bind the file value.`,
+          obj,
+        );
+      }
+    }
+  }
+}
+
+/** The sections whose defs carry a stack, a `response` and an `InferResponse` type (with a `responseShape` override). */
+const INFERRED_RESPONSE_SECTIONS = ["query", "function", "tool", "middleware", "prompt", "resource", "trigger", "message"];
+
+/**
+ * A def whose stack has an enabled `s.return` serving a body other than its
+ * `response`, with no `responseShape`. `InferResponse` types a def from
+ * `response` alone, so the early-return body is missing from the inferred type
+ * and a typed client reads fields that path never sends.
+ *
+ * Quiet when the def declares `responseShape` (the caller says which do — it is
+ * type-only and never encoded), when it declares no `response` (that is
+ * `response.unbound-return`'s), and when every return encodes byte-for-byte as
+ * the `response` does. A return inside a disabled statement never runs, so it
+ * is not read.
+ */
+export function checkReturnsOutsideInferredType(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+  declaresShape: (encoded: object) => boolean,
+): void {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  for (const payloadKey of INFERRED_RESPONSE_SECTIONS) {
+    for (const obj of sections[payloadKey] ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const o = obj as { name?: unknown; type?: unknown; result?: unknown; run?: unknown };
+      if (!Array.isArray(o.result) || o.result.length === 0 || declaresShape(obj)) continue;
+      const items = o.result as Array<{ name?: unknown; tag?: unknown; value?: unknown; filters?: unknown }>;
+      // The body `response` serves, as an `s.return` of it would encode.
+      let body: unknown;
+      if (items.length === 1 && items[0]!.name === "") {
+        body = { value: items[0]!.value, tag: items[0]!.tag, filters: items[0]!.filters };
+      } else {
+        try {
+          const record = obj_(Object.fromEntries(items.map((i) => [String(i.name), { tag: i.tag, value: i.value, filters: i.filters }])) as never);
+          body = { value: record.value, tag: record.tag, filters: record.filters };
+        } catch {
+          body = undefined;
+        }
+      }
+      let other = false;
+      const visit = (node: unknown): void => {
+        if (other) return;
+        if (Array.isArray(node)) return node.forEach(visit);
+        if (!node || typeof node !== "object") return;
+        const record = node as Record<string, unknown>;
+        if (typeof record.name === "string" && record.name.startsWith("mvp:") && record.disabled === true) return;
+        if (record.name === "mvp:return") {
+          const ctx = (record.context ?? {}) as { value?: unknown; tag?: unknown; filters?: unknown };
+          if (!same({ value: ctx.value, tag: ctx.tag, filters: ctx.filters }, body)) other = true;
+          return;
+        }
+        Object.values(record).forEach(visit);
+      };
+      visit(o.run);
+      if (!other) continue;
+      const owner = `${sdkKindName(payloadKey, o)} "${typeof o.name === "string" ? o.name : "?"}"`;
+      bag.warn(
+        "response.return-outside-type",
+        `${owner}: an \`s.return\` in its stack serves a body other than \`response\`, and \`InferResponse\` types ` +
+          `this def from \`response\` only, so the early-return body is missing from the inferred type and a typed ` +
+          `client reads fields that path never sends. Declare \`responseShape\` as the union of every body it serves: ` +
+          `\`responseShape: null as A | B\`. If no typed client reads it, accept it: ` +
+          `\`diagnostics: { allow: ["response.return-outside-type"] }\`.`,
         obj,
       );
     }
@@ -3314,6 +3909,23 @@ export function checkRealtimeSilentShapes(
       obj,
     );
   }
+  // A guard that refuses by THROWING fails the message OPEN: the engine
+  // broadcasts the sender's original payload when the handler crashes, so an
+  // `s.precondition`/`guard.*` here never blocks anything (local engine).
+  for (const obj of sections.message ?? []) {
+    if (!obj || typeof obj !== "object") continue;
+    const statements: EncodedStatement[] = [];
+    collectStatements((obj as { run?: unknown }).run, statements);
+    if (!statements.some((st) => st.name === "mvp:precondition" && (st as { disabled?: unknown }).disabled !== true)) continue;
+    bag.warn(
+      "realtime.precondition-fails-open",
+      `realtimeMessage "${nameOf(obj as { name?: unknown })}" guards with \`s.precondition\`/\`guard.*\`, which cannot ` +
+        "block a realtime message: a failing one crashes the handler, and a crashed handler FAILS OPEN — the " +
+        "sender's original, unvalidated payload is broadcast to the channel. Veto instead: branch with " +
+        "`s.conditional` and set the response var to `c.null()` (a null response delivers nothing).",
+      obj,
+    );
+  }
   for (const obj of sections.trigger ?? []) {
     if (!obj || typeof obj !== "object") continue;
     const t = obj as { name?: unknown; obj_type?: unknown; active?: unknown; meta?: unknown; result?: unknown };
@@ -3558,28 +4170,69 @@ function tail(path: string): string {
 }
 
 /**
+ * The statements that act on an EXISTING variable named by `context.name`: the
+ * update-var family. They declare nothing — on a name nothing bound, the engine
+ * raises `Missing var entry` (HTTP 500), measured for `update_var` and
+ * `math_add` on both backends — so their `context.name` is a READ.
+ */
+const MUTATES_EXISTING_VAR_FACTORY: Readonly<Record<string, string>> = {
+  "mvp:update_var": "s.update_var",
+  ...Object.fromEntries(
+    [
+      "math.add", "math.sub", "math.mul", "math.div", "math.mod",
+      "text.append", "text.prepend", "text.trim", "text.ltrim", "text.rtrim",
+      "text.contains", "text.icontains", "text.starts_with", "text.istarts_with", "text.ends_with", "text.iends_with",
+      "array.push", "array.pop", "array.shift", "array.unshift", "array.merge",
+    ].map((path) => [`mvp:${path.replace(".", "_")}`, `s.${path}`]),
+  ),
+  "mvp:bitwise_and": "s.math.bitwise.and",
+  "mvp:bitwise_or": "s.math.bitwise.or",
+  "mvp:bitwise_xor": "s.math.bitwise.xor",
+};
+const MUTATES_EXISTING_VAR: ReadonlySet<string> = new Set(Object.keys(MUTATES_EXISTING_VAR_FACTORY));
+
+/**
  * Every stack variable an object binds: a statement's top-level `as`, the loop
  * variable a `for`/`foreach` binds in `context.as`, and `context.name` — the
- * variable the mutation family (`s.math.*`, `s.text.append`, `s.array.push`,
- * `s.update_var`, …) writes THROUGH rather than binding with `as`.
+ * variable the update-var family writes THROUGH (a re-binding of its value, which
+ * the envelope and branch guards need to see). With `declarationsOnly`, the
+ * update-var family's `context.name` is left out: it declares nothing, so for
+ * "is this name ever bound" it is a read (see {@link MUTATES_EXISTING_VAR}).
+ * Elsewhere `context.name` is read off every statement, since on one where the
+ * key means something else the cost is one unreported typo.
  *
  * Deliberately flat rather than scoped. A loop variable is only readable inside
  * its own body, but treating it as visible everywhere costs one missed typo and
  * buys immunity to every scoping subtlety the encoder might grow — the trade a
  * warning wants, since a check that cries wolf is a check people learn to skip.
- * For the same reason `context.name` is read off EVERY statement rather than
- * only the mutation family: on a statement where that key means something else,
- * the cost is one unreported typo, not a false accusation.
  */
-function collectBindings(statements: readonly EncodedStatement[]): Set<string> {
+function collectBindings(
+  statements: readonly EncodedStatement[],
+  /** Only names a statement DECLARES: leave out what the update-var family writes through. */
+  declarationsOnly = false,
+): Set<string> {
   const bound = new Set<string>();
   for (const statement of statements) {
     if (typeof statement.as === "string" && statement.as !== "") bound.add(statement.as);
     const context = statement.context as { as?: unknown; name?: unknown } | undefined;
     if (typeof context?.as === "string" && context.as !== "") bound.add(context.as);
+    if (declarationsOnly && MUTATES_EXISTING_VAR.has(statement.name)) continue;
     if (typeof context?.name === "string" && context.name !== "") bound.add(context.name);
   }
   return bound;
+}
+
+/** The variables the update-var family acts on, each with the factory that names it. */
+function collectMutatedVars(statements: readonly EncodedStatement[]): Array<{ path: string; statement: string }> {
+  const out: Array<{ path: string; statement: string }> = [];
+  for (const statement of statements) {
+    if (!MUTATES_EXISTING_VAR.has(statement.name) || (statement as { disabled?: unknown }).disabled === true) continue;
+    const name = (statement.context as { name?: unknown } | undefined)?.name;
+    if (typeof name === "string" && name !== "") {
+      out.push({ path: name, statement: MUTATES_EXISTING_VAR_FACTORY[statement.name] ?? statement.name });
+    }
+  }
+  return out;
 }
 
 /**
@@ -3668,6 +4321,9 @@ function sysAccessorFor(name: string): string | undefined {
  * is checked on the same base as everything else — which is the point: the
  * escape hatch was never meant to hide a name that binds nothing.
  */
+/** The update-var family's stored names mapped to the factories that author them — exported for a test. */
+export const UPDATE_VAR_FACTORIES = MUTATES_EXISTING_VAR_FACTORY;
+
 export function checkUnboundVarRefs(
   sections: Readonly<Record<string, unknown[] | undefined>>,
   bag: DiagnosticBag,
@@ -3683,7 +4339,7 @@ export function checkUnboundVarRefs(
       collectStatements(obj, statements);
       // No early exit on an empty stack: `response: ref("nothing")` with no
       // statement binds nothing and 500s just the same.
-      const bound = collectBindings(statements);
+      const bound = collectBindings(statements, true);
       const subjects = existenceSubjects(statements);
       const refs: string[] = [];
       collectVarRefs(obj, refs, new Set(subjects.keys()));
@@ -3696,6 +4352,23 @@ export function checkUnboundVarRefs(
         if (role === "never-bound" && typeof value === "string") assertedOnly.push(value);
       }
       const reported = new Set<string>();
+      // The update-var family on a name nothing binds: the same 500 as a bare
+      // read, so reported the same way, naming the statement rather than a ref.
+      for (const { path, statement } of collectMutatedVars(statements)) {
+        const dot = path.indexOf(".");
+        const base = dot === -1 ? path : path.slice(0, dot);
+        if (base === "" || base.startsWith("$") || bound.has(base) || reported.has(base)) continue;
+        reported.add(base);
+        const suggestion = didYouMean(base, bound);
+        bag.warn(
+          "stack.unbound-var",
+          `${owner}: \`${statement}\` updates \`${path}\`, but nothing in this stack binds \`${base}\` — this ` +
+            `statement changes an EXISTING variable and declares nothing, so at runtime it raises ` +
+            `\`Missing var entry: ${base}\` (HTTP 500).${suggestion ? ` Did you mean "${suggestion}"?` : ""} ` +
+            `Declare it first: \`s.set_var("${base}", …)\`.`,
+          obj,
+        );
+      }
       const reads = [
         ...refs.map((path) => ({ path, asserted: false })),
         ...assertedOnly.map((path) => ({ path, asserted: true })),
@@ -3966,6 +4639,369 @@ export function checkToThrowScope(
           );
         }
       }
+    }
+  }
+}
+
+/**
+ * The set of names DEFINITELY bound at a point in a stack, or `null` when the
+ * point is unreachable (every path into it ended in a `return`, a throw, a
+ * `debug.stop` or a loop-control statement). Unreachable is the top of the
+ * lattice: it intersects as the identity, so a branch that never falls through
+ * cannot make a name look maybe-unbound after the block.
+ */
+type DefiniteVars = Set<string> | null;
+
+/** The statements that end the path they sit on: nothing after them in the same stack runs. */
+const PATH_TERMINATORS: ReadonlySet<string> = new Set([
+  "mvp:return",
+  "mvp:throw_error",
+  "mvp:die",
+  "mvp:foreach_break",
+  "mvp:foreach_continue",
+]);
+
+/** The authoring name of each loop, for the message. */
+const LOOP_FACTORIES: Readonly<Record<string, string>> = {
+  "mvp:for": "s.for",
+  "mvp:foreach": "s.foreach",
+  "mvp:while": "s.while",
+};
+
+/** Sub-stacks that always run, start to end, when the statement does. */
+const ALWAYS_RUNS: ReadonlySet<string> = new Set(["mvp:group", "mvp:db_transaction"]);
+
+function intersectDefinite(states: readonly DefiniteVars[]): DefiniteVars {
+  let out: Set<string> | null = null;
+  for (const state of states) {
+    if (state === null) continue;
+    if (out === null) out = new Set(state);
+    else for (const name of out) if (!state.has(name)) out.delete(name);
+  }
+  return out;
+}
+
+function unionDefinite(a: DefiniteVars, b: DefiniteVars): DefiniteVars {
+  if (a === null || b === null) return null;
+  return new Set([...a, ...b]);
+}
+
+/** The `run[]` under `context[key]` (`{ run: [...] }`), or `undefined`. */
+function branchRun(context: Record<string, unknown>, key: string): unknown[] | undefined {
+  const value = context[key] as { run?: unknown } | undefined;
+  return Array.isArray(value?.run) ? value.run : undefined;
+}
+
+/** A shallow copy of a statement with the named `context` keys removed — its own arguments, minus its sub-stacks. */
+function withoutContextKeys(statement: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const context = statement.context;
+  if (!context || typeof context !== "object") return statement;
+  const rest = { ...(context as Record<string, unknown>) };
+  for (const key of keys) delete rest[key];
+  return { ...statement, context: rest };
+}
+
+/** Whether a loop body holds a break/continue anywhere, which can end an iteration before a binding. */
+function hasLoopControl(body: unknown): boolean {
+  let found = false;
+  walkNodes(body, (record) => {
+    if (record.name === "mvp:foreach_break" || record.name === "mvp:foreach_continue") found = true;
+  });
+  return found;
+}
+
+/**
+ * A variable bound only on SOME paths through a block, then read after the
+ * block where the path that binds it may have been skipped.
+ *
+ * The engine keeps one flat var table and raises `Missing var entry: <name>`
+ * (ERROR_FATAL, HTTP 500) for any name not set at read time. A var bound only
+ * inside an `s.conditional` arm, a `switch` case, a loop body (which may run
+ * zero times) or a `try` block is therefore not bound at all when that path did
+ * not run. {@link checkUnboundVarRefs} cannot see it: it counts a binding
+ * anywhere in the stack as a binding on every path. `{ safe: true }` does not
+ * help — it guards a drill into a null value, not a missing base.
+ *
+ * Path-sensitive, walking each stack in run order and tracking the names that
+ * are DEFINITELY bound:
+ *  - a plain statement adds what it declares (as {@link collectBindings} with
+ *    `declarationsOnly`);
+ *  - `s.conditional`: the intersection over then / each elif / else; with no
+ *    else the skip path keeps the incoming set;
+ *  - `s.switch`: the intersection over every case (a case without `break`
+ *    falls through into the next, and the last into `default`) and `default`;
+ *    with no default, the no-match path keeps the incoming set;
+ *  - `s.try_catch`: what both try and catch bind, plus all of finally;
+ *  - a loop: nothing its body binds, loop variable included — except an
+ *    `s.for` over a literal positive count with no break/continue in it;
+ *  - group / transaction: everything; any other sub-stack (post-process, an
+ *    unrecognised one): everything, the conservative reading;
+ *  - `s.expect.to_throw`: nothing — its body runs in an isolated var stack,
+ *    which {@link checkToThrowScope} owns;
+ *  - a branch ending in return / throw / `debug.stop` / break / continue never
+ *    falls through, so it does not count against the names after the block.
+ *
+ * Scoped hard against false positives, since a check that cries wolf gets
+ * skipped:
+ *  - only a name some EARLIER block bound and then dropped — a name bound
+ *    nowhere is `stack.unbound-var`'s, a name bound only later is not this;
+ *  - only a read in the same branch scope as the block that dropped it. A read
+ *    inside a LATER branch (`if (a) { x = … }` … `if (a) { read x }`) is often
+ *    guarded by the same condition, which nothing here can prove, so it is left
+ *    alone;
+ *  - disabled statements neither bind nor read; existence-assertion subjects are
+ *    exempt, as they are for the unbound check;
+ *  - a warning, never an error, and one per (object, name).
+ */
+export function checkConditionallyBoundVars(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const [payloadKey, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const record = obj as Record<string, unknown>;
+      if (!Array.isArray(record.run)) continue;
+      const name = record.name;
+      // The SDK's kind name (`table`, `workflowTest`) — the author wrote
+      // `table()`, not the bundle's `dbo` payload key.
+      const owner = `${sdkKindName(payloadKey, obj as { type?: unknown })} "${typeof name === "string" ? name : "?"}"`;
+
+      const all: EncodedStatement[] = [];
+      collectStatements(record.run, all);
+      const skip = new Set(existenceSubjects(all).keys());
+
+      // name → the block that last left it maybe-unbound, and the branch scope
+      // that block sits in. A read reports only from that same scope.
+      const dropped = new Map<string, { block: string; scope: number }>();
+      const reported = new Set<string>();
+      let nextScope = 1;
+
+      const report = (base: string, spelling: string, block: string): void => {
+        reported.add(base);
+        bag.warn(
+          "stack.var-conditionally-bound",
+          `${owner}: ${spelling} reads \`${base}\`, which is bound only ${block}. On a path that ` +
+            `skips that binding \`${base}\` is never set, and the read raises \`Missing var ` +
+            `entry: ${base}\` (ERROR_FATAL, HTTP 500) — \`{ safe: true }\` does not help a missing ` +
+            `base. Declare it on the enclosing path before the block: ` +
+            `\`s.set_var("${base}", c.null())\`.`,
+          obj,
+        );
+      };
+
+      const readBase = (path: string, spelling: string, state: Set<string>, scope: number): void => {
+        const dot = path.indexOf(".");
+        const base = dot === -1 ? path : path.slice(0, dot);
+        if (base === "" || base.startsWith("$") || Object.hasOwn(RESERVED_VAR_NAMESPACES, base)) return;
+        if (state.has(base) || reported.has(base)) return;
+        const drop = dropped.get(base);
+        if (drop === undefined || drop.scope !== scope) return;
+        report(base, spelling, drop.block);
+      };
+
+      const reads = (node: unknown, state: Set<string>, scope: number): void => {
+        const refs: string[] = [];
+        collectVarRefs(node, refs, skip);
+        for (const path of refs) readBase(path, `\`ref("${path}")\``, state, scope);
+      };
+
+      /**
+       * Close a block: every name an arm bound (or an arm's own nested block
+       * left maybe-unbound) that is not definite after the block is recorded as
+       * dropped BY this block, in the scope the block sits in.
+       */
+      const closeBlock = (
+        incoming: Set<string>,
+        arms: ReadonlyArray<{ state: DefiniteVars; scope: number; block: string }>,
+        out: DefiniteVars,
+        scope: number,
+      ): void => {
+        if (out === null) return;
+        const armScopes = new Set(arms.map((arm) => arm.scope));
+        for (const [base, drop] of dropped) {
+          if (!armScopes.has(drop.scope) || out.has(base)) continue;
+          const arm = arms.find((a) => a.scope === drop.scope)!;
+          dropped.set(base, { block: arm.block, scope });
+        }
+        for (const arm of arms) {
+          if (arm.state === null) continue;
+          for (const base of arm.state) {
+            if (incoming.has(base) || out.has(base)) continue;
+            dropped.set(base, { block: arm.block, scope });
+          }
+        }
+      };
+
+      const runStack = (run: unknown, state: DefiniteVars, scope: number): DefiniteVars => {
+        if (!Array.isArray(run)) return state;
+        for (const item of run) {
+          if (state === null) return null;
+          state = step(item, state, scope);
+        }
+        return state;
+      };
+
+      const arm = (run: unknown, state: Set<string>): { state: DefiniteVars; scope: number } => {
+        const scope = nextScope++;
+        return { state: runStack(run, new Set(state), scope), scope };
+      };
+
+      const step = (item: unknown, state: Set<string>, scope: number): DefiniteVars => {
+        if (!item || typeof item !== "object") return state;
+        const statement = item as Record<string, unknown>;
+        if (typeof statement.name !== "string" || !statement.name.startsWith("mvp:")) return state;
+        if (statement.disabled === true) return state;
+        const context = (statement.context && typeof statement.context === "object"
+          ? statement.context
+          : {}) as Record<string, unknown>;
+
+        switch (statement.name) {
+          case "mvp:conditional": {
+            reads(withoutContextKeys(statement, ["if", "elif", "else"]), state, scope);
+            const block = "inside some branches of an `s.conditional`";
+            const arms = [{ ...arm(branchRun(context, "if"), state), block }];
+            for (const elif of branchRun(context, "elif") ?? []) {
+              const e = elif as Record<string, unknown> | null;
+              if (!e || typeof e !== "object" || e.disabled === true) continue;
+              reads(withoutContextKeys(e, ["if"]), state, scope);
+              const ec = (e.context && typeof e.context === "object" ? e.context : {}) as Record<string, unknown>;
+              arms.push({ ...arm(branchRun(ec, "if"), state), block });
+            }
+            const elseRun = branchRun(context, "else");
+            const paths: DefiniteVars[] = arms.map((a) => a.state);
+            if (elseRun && elseRun.length > 0) {
+              const e = { ...arm(elseRun, state), block };
+              arms.push(e);
+              paths.push(e.state);
+            } else {
+              paths.push(state);
+            }
+            const out = intersectDefinite(paths);
+            closeBlock(state, arms, out, scope);
+            return out;
+          }
+          case "mvp:switch": {
+            reads(withoutContextKeys(statement, ["elif", "else"]), state, scope);
+            const defaultRun = branchRun(context, "else");
+            const hasDefault = defaultRun !== undefined && defaultRun.length > 0;
+            const block = `inside some cases of an \`s.switch\`${hasDefault ? "" : " with no `default`"}`;
+            const arms: Array<{ state: DefiniteVars; scope: number; block: string }> = [];
+            const cases: Array<{ state: DefiniteVars; brk: boolean }> = [];
+            for (const entry of branchRun(context, "elif") ?? []) {
+              const c = entry as Record<string, unknown> | null;
+              if (!c || typeof c !== "object" || c.disabled === true) continue;
+              reads(withoutContextKeys(c, ["if"]), state, scope);
+              const cc = (c.context && typeof c.context === "object" ? c.context : {}) as Record<string, unknown>;
+              const a = { ...arm(branchRun(cc, "if"), state), block };
+              arms.push(a);
+              cases.push({ state: a.state, brk: cc.break === true });
+            }
+            let next: DefiniteVars = state;
+            if (hasDefault) {
+              const d = { ...arm(defaultRun, state), block };
+              arms.push(d);
+              next = d.state;
+            }
+            // The no-match path, then each case walked back to front: a case
+            // without `break` also runs everything it falls into.
+            const paths: DefiniteVars[] = [next];
+            for (let i = cases.length - 1; i >= 0; i--) {
+              const { state: body, brk } = cases[i]!;
+              const effective = body === null ? null : brk ? body : unionDefinite(body, next);
+              paths.push(effective);
+              next = effective;
+            }
+            const out = intersectDefinite(paths);
+            closeBlock(state, arms, out, scope);
+            return out;
+          }
+          case "mvp:try_catch": {
+            reads(withoutContextKeys(statement, ["if", "else", "then"]), state, scope);
+            // The try block always starts, so it runs (and reads) in the
+            // enclosing scope; the catch runs only on a throw. Its arm carries no
+            // scope of its own (-1), so closing the block relabels nothing that
+            // was dropped before it.
+            const t = {
+              state: runStack(branchRun(context, "if"), new Set(state), scope),
+              scope: -1,
+              block: "inside the `try` block of an `s.try_catch` (a throw before it skips to `catch`)",
+            };
+            const k = { ...arm(branchRun(context, "else"), state), block: "inside the `catch` block of an `s.try_catch`" };
+            const mid = intersectDefinite([t.state, k.state]);
+            closeBlock(state, [t, k], mid, scope);
+            const finallyRun = branchRun(context, "then");
+            if (mid === null) {
+              runStack(finallyRun, new Set(state), scope);
+              return null;
+            }
+            return runStack(finallyRun, mid, scope);
+          }
+          case "mvp:for":
+          case "mvp:foreach":
+          case "mvp:while": {
+            reads(withoutContextKeys(statement, ["run"]), state, scope);
+            const entry = new Set(state);
+            const loopVar = statement.name !== "mvp:while" && typeof context.as === "string" && context.as !== ""
+              ? context.as
+              : undefined;
+            if (loopVar !== undefined) entry.add(loopVar);
+            const count = context.cnt as { tag?: unknown; value?: unknown } | undefined;
+            if (
+              statement.name === "mvp:for" &&
+              count?.tag === "const:int" &&
+              Number(count.value) > 0 &&
+              !hasLoopControl(context.run)
+            ) {
+              // A literal positive count with no break/continue: the body runs,
+              // so it reads and binds as a group does.
+              return runStack(context.run, entry, scope);
+            }
+            const scopeId = nextScope++;
+            const body = runStack(context.run, entry, scopeId);
+            const factory = LOOP_FACTORIES[statement.name]!;
+            const block = `inside an \`${factory}\` body, which may run zero times`;
+            closeBlock(state, [{ state: body, scope: scopeId, block }], state, scope);
+            return state;
+          }
+          case "mvp:test_expect_to_throw":
+            // An isolated var stack: nothing bound inside escapes, and reads
+            // inside are {@link checkToThrowScope}'s.
+            reads(withoutContextKeys(statement, ["run"]), state, scope);
+            return state;
+          default: {
+            const nested = subStacks(statement as unknown as StackItemXdo);
+            if (nested.length === 0) {
+              reads(statement, state, scope);
+              if (MUTATES_EXISTING_VAR.has(statement.name) && typeof context.name === "string") {
+                readBase(context.name, `\`${MUTATES_EXISTING_VAR_FACTORY[statement.name]}\` of \`${context.name}\``, state, scope);
+              }
+              if (PATH_TERMINATORS.has(statement.name)) return null;
+              const out = new Set(state);
+              for (const bound of collectBindings([statement as unknown as EncodedStatement], true)) out.add(bound);
+              return out;
+            }
+            reads(withoutContextKeys(statement, nested.map((n) => n.key)), state, scope);
+            if (ALWAYS_RUNS.has(statement.name) && nested.length === 1) {
+              // Group / transaction: the body runs start to end, in this scope.
+              return runStack(nested[0]!.run, state, scope);
+            }
+            // Anything else with a sub-stack: read in a scope of its own, and
+            // count every name it binds as bound — the reading that cannot
+            // cry wolf.
+            const out = new Set(state);
+            for (const n of nested) {
+              const inner = runStack(n.run, new Set(state), nextScope++);
+              for (const bound of inner ?? []) out.add(bound);
+            }
+            for (const bound of collectBindings([statement as unknown as EncodedStatement], true)) out.add(bound);
+            return out;
+          }
+        }
+      };
+
+      const final = runStack(record.run, new Set(), 0);
+      if (final !== null) reads(record.result, final, 0);
     }
   }
 }
@@ -4791,6 +5827,94 @@ export function checkTriggerBindings(
   }
 }
 
+/** The blocks whose bodies a trigger may not run on every action: a branch, or a catch. */
+const ACTION_GUARDS = new Set(["mvp:conditional", "mvp:switch", "mvp:try_catch"]);
+
+/**
+ * A table trigger reading a column of the side its action leaves empty. An
+ * insert's `old` and a delete's `new` are `{}`, and a drill into one
+ * (`t.old("status")` → `$input.old.status`) RAISES `Unable to locate input`,
+ * which aborts that trigger run, logged nowhere with history off. Only a
+ * read outside every branch is flagged: one inside an `s.conditional` on
+ * `t.action` is the documented shape, and the guard cannot tell which branch
+ * tests what.
+ */
+export function checkTriggerAbsentSideReads(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const obj of sections.trigger ?? []) {
+    const t = obj as { name?: unknown; obj_type?: unknown; meta?: unknown; run?: unknown } | null;
+    if (!t || typeof t !== "object" || t.obj_type !== "database") continue;
+    const flags = (t.meta as { database?: { action?: Record<string, unknown> } } | undefined)?.database?.action ?? {};
+    const absent = [
+      ...(flags.insert === true ? [["old", "insert"] as const] : []),
+      ...(flags.delete === true ? [["new", "delete"] as const] : []),
+    ];
+    if (absent.length === 0) continue;
+    const reads: string[] = [];
+    const visit = (node: unknown): void => {
+      if (Array.isArray(node)) return node.forEach(visit);
+      if (!node || typeof node !== "object") return;
+      const record = node as Record<string, unknown>;
+      if (typeof record.name === "string" && ACTION_GUARDS.has(record.name)) return;
+      if (record.disabled === true && typeof record.name === "string" && record.name.startsWith("mvp:")) return;
+      if (record.tag === "input") {
+        for (const v of [record.value, record.operand]) if (typeof v === "string") reads.push(v);
+      }
+      exprReads(record, "input", reads);
+      Object.values(record).forEach(visit);
+    };
+    visit(t.run);
+    for (const [side, action] of absent) {
+      const hit = reads.find((r) => r.startsWith(`${side}.`));
+      if (hit === undefined) continue;
+      const col = hit.slice(side.length + 1);
+      bag.warn(
+        "trigger.absent-side-read",
+        `tableTrigger "${typeof t.name === "string" ? t.name : "?"}" reads \`t.${side}("${col}")\` outside any ` +
+          `branch, but on ${action === "insert" ? "an" : "a"} ${action} \`${side}\` is \`{}\`: the read RAISES \`Unable to locate input: ${hit}\` and ` +
+          `silently aborts that run (nothing is logged with history off). Read it only inside ` +
+          `\`s.conditional({ when: expr(t.action, "!=", c.text("${action}")), then: [...] })\`.`,
+        t,
+      );
+    }
+  }
+}
+
+/**
+ * An MCP server connection trigger whose keyed response leaves out `toolset` or
+ * `tools`. The engine reads `toolset.instructions` and loops over `tools` with
+ * no absent-key check (only `prompts`/`resources` treat an absent key as
+ * unfiltered), so the server breaks for every client: an ephemeral answers each
+ * JSON-RPC request with an empty event stream, the local engine lists no tools
+ * and no prompts. Measured on both backends.
+ */
+export function checkMcpTriggerResponseKeys(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const obj of sections.trigger ?? []) {
+    const t = obj as { name?: unknown; obj_type?: unknown; input?: unknown; result?: unknown } | null;
+    if (!t || typeof t !== "object" || t.obj_type !== "toolset") continue;
+    const inputs = Array.isArray(t.input) ? t.input.map((i) => (i as { name?: unknown } | null)?.name) : [];
+    if (!inputs.includes("prompts")) continue;
+    const result = Array.isArray(t.result) ? (t.result as Array<{ name?: unknown } | null>) : [];
+    const names = result.map((m) => m?.name);
+    if (names.length === 0 || names.some((n) => typeof n !== "string" || n === "")) continue;
+    const missing = ["toolset", "tools"].filter((k) => !names.includes(k));
+    if (missing.length === 0) continue;
+    bag.warn(
+      "trigger.mcp-response-missing-key",
+      `mcpServerTrigger "${typeof t.name === "string" ? t.name : "?"}": its response has no ` +
+        `${missing.map((k) => `\`${k}\``).join(" or ")} key. The server reads both unconditionally, so it breaks for ` +
+        "EVERY client (an empty event stream, or no tools and no prompts listed). Only `prompts`/`resources` " +
+        "may be omitted to list all. Return them: `response: (t) => ({ toolset: t.toolset, tools: t.tools, prompts: ref(\"p\") })`.",
+      t,
+    );
+  }
+}
+
 /**
  * Refuse a bundle carrying a statement the engine will not read back.
  *
@@ -5236,6 +6360,23 @@ export function checkNonJsonValues(
           obj,
         );
       }
+      for (const off of payloadKey === "trigger" ? [] : findNeverOmittableInputs(obj)) {
+        bag.warn(
+          "field.input-never-omittable",
+          `${owner}, input "${off.name}" is optional, but it can never be omitted: an omitted input binds ${off.binds}, ` +
+            `and ${off.why}, so every request that leaves it out is refused with a 400. ${off.fix}`,
+          obj,
+        );
+      }
+      for (const off of payloadKey === "trigger" ? [] : findListInputDefaults(obj)) {
+        bag.warn(
+          "field.list-default-ignored",
+          `The \`default\` at ${owner}, input "${off.name}" is ${JSON.stringify(off.text)}, but the input is a list, and ` +
+            `the engine replaces any default on a list input with \`[]\`: an omitted list binds \`[]\`, not this. Drop ` +
+            `the \`default\` and fill the list in the stack when it arrives empty.`,
+          obj,
+        );
+      }
       // A trigger's inputs are the engine's own implied set, which it supplies on every run.
       for (const off of payloadKey === "trigger" ? [] : findRequiredInputDefaults(obj)) {
         bag.warn(
@@ -5246,6 +6387,15 @@ export function checkNonJsonValues(
           obj,
         );
       }
+    }
+    for (const off of findListBoundsOnScalars(obj, payloadKey === "dbo" ? "schema" : "input")) {
+      bag.warn(
+        "field.list-bounds-on-scalar",
+        `${owner}, ${payloadKey === "dbo" ? "column" : "input"} "${off}" sets \`list\`, but it is a single value: \`list\` ` +
+          `is the length BOUNDS of a list and does not make the field one, so it is ignored. For a list, use ` +
+          `${payloadKey === "dbo" ? "`array: true`" : "`input.list(...)` or `array: true`"}; otherwise drop \`list\`.`,
+        obj,
+      );
     }
     const found = findNonJson(obj);
     if (found === undefined) continue;
@@ -5315,6 +6465,73 @@ function findEmailDefaultsMalformed(root: unknown): Array<{ path: string; text: 
  * `startsWith`. Dates, timestamps and json are left alone — their check reads
  * relative dates, rolls an impossible day over and keeps unparsed JSON as text.
  */
+function findNeverOmittableInputs(root: unknown): Array<{ name: string; binds: string; why: string; fix: string }> {
+  const hits: Array<{ name: string; binds: string; why: string; fix: string }> = [];
+  const inputs = (root as { input?: unknown } | null)?.input;
+  if (!Array.isArray(inputs)) return hits;
+  const passFix = "Mark it `required: true`, or give it a `default` that passes.";
+  for (const node of inputs) {
+    const field = node as {
+      name?: unknown; type?: unknown; required?: unknown; nullable?: unknown; default?: unknown;
+      methods?: unknown; style?: { type?: unknown }; list?: { min?: unknown }; children?: unknown;
+    };
+    if (typeof field?.name !== "string" || field.required === true) continue;
+    const name = field.name;
+    if (field.style?.type === "list") {
+      const min = Number(field.list?.min);
+      if (field.list?.min !== "" && field.list?.min !== undefined && Number.isFinite(min) && min >= 1) {
+        hits.push({ name, binds: "`[]`", why: `its \`list.min\` is ${min}`, fix: "Mark it `required: true`, or drop `list.min` (a default on a list is replaced by `[]`)." });
+      }
+      continue;
+    }
+    if (field.type === "obj") {
+      const child = Array.isArray(field.children)
+        ? (field.children as Array<{ name?: unknown; required?: unknown }>).find((c) => c?.required === true)
+        : undefined;
+      if (child !== undefined) {
+        hits.push({ name, binds: "an empty object", why: `its child "${String(child.name)}" is \`required: true\` ("Missing param")`, fix: "Mark it `required: true`, or make its children optional." });
+      }
+      continue;
+    }
+    if (field.nullable === true || (field.default ?? "") !== "" || !Array.isArray(field.methods)) continue;
+    const method = (m: string): unknown[] | undefined => {
+      const found = (field.methods as Array<{ name?: unknown; disabled?: unknown; arg?: unknown }>).find((x) => x.name === m && x.disabled !== true);
+      return found === undefined ? undefined : Array.isArray(found.arg) ? found.arg : [];
+    };
+    const num = (m: string): number | undefined => {
+      const v = method(m)?.[0];
+      return v === undefined || v === "" || !Number.isFinite(Number(v)) ? undefined : Number(v);
+    };
+    if (field.type === "text") {
+      const min = num("min");
+      const prefix = method("startsWith")?.[0];
+      const pattern = method("pattern")?.[0];
+      if (min !== undefined && min > 0) hits.push({ name, binds: '`""`', why: `its \`min\` length is ${min}`, fix: passFix });
+      else if (typeof prefix === "string" && prefix !== "") hits.push({ name, binds: '`""`', why: `its \`startsWith\` is ${JSON.stringify(prefix)}`, fix: passFix });
+      else if (typeof pattern === "string" && !matchesEmpty(pattern)) hits.push({ name, binds: '`""`', why: `its \`pattern\` does not match ""`, fix: passFix });
+    } else if (field.type === "int" || field.type === "decimal") {
+      const [min, max] = [num("min"), num("max")];
+      if (min !== undefined && min > 0) hits.push({ name, binds: "`0`", why: `its \`min\` is ${min}`, fix: passFix });
+      else if (max !== undefined && max < 0) hits.push({ name, binds: "`0`", why: `its \`max\` is ${max}`, fix: passFix });
+    }
+  }
+  return hits;
+}
+
+/**
+ * Whether a stored `pattern` (a PHP-delimited regex, `/^[A-Z]{3}$/`) accepts
+ * `""`. True when it cannot be read as a JS regex: unreadable is not a finding.
+ */
+function matchesEmpty(pattern: string): boolean {
+  const m = /^([^\w\s\\])([\s\S]*)\1([a-zA-Z]*)$/.exec(pattern);
+  if (m === null) return true;
+  try {
+    return new RegExp(m[2]!, (m[3] ?? "").replace(/[^imsu]/g, "")).test("");
+  } catch {
+    return true;
+  }
+}
+
 function findInputDefaultsRefused(root: unknown): Array<{ path: string; text: string; why: string; want: string }> {
   const hits: Array<{ path: string; text: string; why: string; want: string }> = [];
   walkPaths(root, (node, path) => {
@@ -5367,6 +6584,58 @@ function findInputDefaultsRefused(root: unknown): Array<{ path: string; text: st
  * Read from the def's `input` list down through object `children`, so each
  * hit is named by its dotted path (`addr.zip`).
  */
+/**
+ * Fields whose `list` bounds sit on a single (non-list) value. The blank
+ * `{ min: "", max: "" }` every field carries is not a bound; anything else is
+ * one the author set, and on a scalar the engine ignores it.
+ */
+function findListBoundsOnScalars(root: unknown, key: "input" | "schema"): string[] {
+  const hits: string[] = [];
+  const visit = (fields: unknown, prefix: string): void => {
+    if (!Array.isArray(fields)) return;
+    for (const node of fields) {
+      const field = node as { name?: unknown; list?: unknown; style?: { type?: unknown }; children?: unknown };
+      if (typeof field?.name !== "string") continue;
+      const name = `${prefix}${field.name}`;
+      const list = field.list;
+      const blank =
+        list === undefined ||
+        list === "" ||
+        (typeof list === "object" &&
+          list !== null &&
+          Object.keys(list).length === 2 &&
+          (list as { min?: unknown }).min === "" &&
+          (list as { max?: unknown }).max === "");
+      if (field.style?.type === "single" && !blank) hits.push(name);
+      visit(field.children, `${name}.`);
+    }
+  };
+  visit((root as Record<string, unknown> | null)?.[key], "");
+  return hits;
+}
+
+/**
+ * List inputs carrying a default. The engine stores a default as text, and for
+ * a list-style input it replaces any scalar default with `[]` before the
+ * request is read, so no spelling of a list default is ever applied.
+ */
+function findListInputDefaults(root: unknown): Array<{ name: string; text: string }> {
+  const hits: Array<{ name: string; text: string }> = [];
+  const visit = (fields: unknown, prefix: string): void => {
+    if (!Array.isArray(fields)) return;
+    for (const node of fields) {
+      const field = node as { name?: unknown; style?: { type?: unknown }; default?: unknown; children?: unknown };
+      if (typeof field?.name !== "string") continue;
+      const name = `${prefix}${field.name}`;
+      const text = typeof field.default === "string" || typeof field.default === "number" ? String(field.default) : "";
+      if (field.style?.type === "list" && text !== "") hits.push({ name, text });
+      visit(field.children, `${name}.`);
+    }
+  };
+  visit((root as { input?: unknown } | null)?.input, "");
+  return hits;
+}
+
 function findRequiredInputDefaults(root: unknown): Array<{ name: string; text: string }> {
   const hits: Array<{ name: string; text: string }> = [];
   const visit = (fields: unknown, prefix: string): void => {
@@ -6172,6 +7441,40 @@ export function checkLiveDatasourceTests(sections: Readonly<Record<string, unkno
 }
 
 /**
+ * An `s.workflow_test.call` whose result nothing reads. A failing child does
+ * not fail the parent: the call binds the child's `{ code, message }` envelope
+ * to `as` (a passing child binds `null`) and the parent runs on, so a parent
+ * that only chains children reports PASS while one of them fails. Measured on
+ * the local engine and an ephemeral.
+ */
+export function checkUncheckedWorkflowTestCalls(sections: Readonly<Record<string, unknown[] | undefined>>, bag: DiagnosticBag): void {
+  const tests = (sections.workflow_test ?? []).filter((t): t is Record<string, unknown> => !!t && typeof t === "object");
+  const nameOf = (guid: unknown) => {
+    const hit = tests.find((t) => t.guid === guid);
+    return typeof hit?.name === "string" ? `"${hit.name}"` : "a child";
+  };
+  for (const test of tests) {
+    const statements: EncodedStatement[] = [];
+    collectStatements(test, statements);
+    for (const st of statements) {
+      if (st.name !== "mvp:workspace_run_workflow_test" || (st as { disabled?: unknown }).disabled === true) continue;
+      const as = typeof st.as === "string" ? st.as : "";
+      if (as !== "" && statementsRead(test, as, st)) continue;
+      const bind = as === "" ? 'add `as: "child"`, then ' : "";
+      bag.warn(
+        "workflow-test.unchecked-child",
+        `workflowTest "${typeof test.name === "string" ? test.name : "?"}": \`s.workflow_test.call\` runs ` +
+          `${nameOf((st.context as { id?: unknown } | undefined)?.id)} and nothing reads its result. A failing child ` +
+          "does NOT fail this test: it binds its `{ code, message }` error to `as` (a passing child binds `null`) " +
+          `and this test runs on to PASS. To make the child count, ${bind}assert on it: ` +
+          `\`s.expect.to_be_null({ expr: ref("${as || "child"}") })\`.`,
+        test,
+      );
+    }
+  }
+}
+
+/**
  * A `workspace run` statement in a stack that cannot run it.
  *
  * This is a Xano SDK CONTRACT rule, not the "engine currently rejects this" guard
@@ -6393,11 +7696,17 @@ export function checkKnowledge(
  *
  * A toolset entry's `auth` is not only an access gate — it is what gives the
  * tool's stack a CALLER. Without it the stack runs public, and `auth()` there
- * does not resolve to null: the tool call comes back as a NORMAL result whose
- * body is `{"code":"ERROR_FATAL","message":""}`. No throw, no HTTP error, no
- * empty message to read. The model receives what looks like a successful tool
- * result and reports success to the user, while nothing the tool was supposed
- * to write was written.
+ * does not resolve to null: the tool's run binds the NORMAL result
+ * `{"code":"ERROR_FATAL","message":""}`. No throw, no HTTP error, no empty
+ * message to read. How that surfaces then depends on the client: on an
+ * `agent()` the model receives what looks like a successful tool result and
+ * reports success to the user, while nothing the tool was supposed to write was
+ * written. Over an MCP server's `tools/call`, the relay detects the failure and
+ * wraps it as an `isError: true` tool error carrying the generic fallback
+ * `"Unable to get successful response from executing tool"` (its contract is
+ * `e.data.message || e.data.code || <fallback>`, and the bare-entry body
+ * carries neither) — safer than the agent path, but still never the write, and
+ * the authored auth message is lost.
  *
  * Verified on a live instance (`scripts/probe-tool-auth.ts`), against one MCP
  * server whose three tools differ only in their entry:
@@ -6467,12 +7776,20 @@ export function checkToolAuthIdentity(
       if (tool === undefined) continue;
       if (!readsAuth(tool)) continue;
       const toolName = typeof tool.name === "string" ? tool.name : "?";
+      // The bare-entry tool's run binds `{"code":"ERROR_FATAL","message":""}`.
+      // How that reaches the client differs by surface: an agent model reads it
+      // as a successful tool RESULT and answers from it, while an MCP server's
+      // `tools/call` detects the failure and wraps it as an `isError` tool error
+      // with the relay's generic fallback text.
+      const symptom =
+        kind === "agent"
+          ? `so the model reads a successful tool result and reports success while nothing is written`
+          : `so \`tools/call\` answers an \`isError\` tool error with the generic text "Unable to get successful response from executing tool" (never null, never the write)`;
       bag.warn(
         "toolset.tool-reads-auth-ungated",
         `${kind} "${setName}": tool "${toolName}" reads \`auth()\`, but its entry names no auth ` +
           `table, so the tool runs with no caller. \`auth()\` there does not return null — the ` +
-          `call answers a normal result carrying \`{"code":"ERROR_FATAL","message":""}\`, so the ` +
-          `model reads a successful tool result and reports success while nothing is written. A ` +
+          `call binds \`{"code":"ERROR_FATAL","message":""}\`, ${symptom}. A ` +
           `caller token does not rescue it; the entry is the gate. Wrap the entry with the auth ` +
           `table: \`{ tool: <the ${toolName} handle>, auth: <auth table> }\`.`,
         obj,
@@ -6648,8 +7965,17 @@ export function checkAuthNoCaller(
   bag: DiagnosticBag,
 ): void {
   const RT = "read the client's identity from `t.client(\"permissions.row_id\")` or `s.realtime.get_session`";
+  const functions = new Map<string, Record<string, unknown>>();
+  for (const fn of sections.function ?? []) {
+    const guid = (fn as { guid?: unknown } | null)?.guid;
+    if (typeof guid === "string") functions.set(guid, fn as Record<string, unknown>);
+  }
   const hosts: Array<[string, string, string]> = [
-    ["query", "it names no auth table, so no caller is ever resolved", "name an auth table on the query (`auth: <table>`)"],
+    [
+      "query",
+      "it names no auth table, so no caller is ever resolved: every request is refused with HTTP 403 and an empty message",
+      "name an auth table on the query (`auth: <table>`)",
+    ],
     ["task", "a task runs on a schedule with no caller", "carry the user id in the data the task reads"],
     ["trigger", "a realtime lifecycle trigger establishes no auth (it reads 0)", RT],
   ];
@@ -6668,13 +7994,253 @@ export function checkAuthNoCaller(
       walkNodes(host, (record) => {
         if (record.name === "mvp:redis_ratelimit" && readsAuth(record)) ratelimit = true;
       });
-      if (ratelimit || !readsAuth(host)) continue;
+      if (ratelimit) continue;
+      if (readsAuth(host)) {
+        bag.warn(
+          "stack.auth-no-caller",
+          kind === "query"
+            ? `query "${String(host.name)}" reads \`auth()\`, but ${reason}. Fix: ${remedy}.`
+            : `${kind} "${String(host.name)}" reads \`auth()\`, but ${reason}: it deploys clean and never ` +
+                `holds the caller's identity. Fix: ${remedy}.`,
+          obj,
+        );
+        continue;
+      }
+      // A function inherits its caller's identity, so a public query has none to
+      // pass on: one it runs that reads `auth()` refuses the request the same way
+      // (#142). Followed through every run/call, transitively. A background run
+      // inherits it too, but there only the job fails: the request answers 2xx.
+      const reached = kind === "query" ? authReadingCallee(host as Record<string, unknown>, functions) : undefined;
+      if (reached === undefined) continue;
+      const why = reached.async
+        ? "it names no auth table, so no caller is ever resolved: the request answers 2xx with the job id, and " +
+          "the background job fails ACCESS_DENIED"
+        : reason;
       bag.warn(
         "stack.auth-no-caller",
-        `${kind} "${String(host.name)}" reads \`auth()\`, but ${reason}: it deploys clean and never ` +
-          `holds the caller's identity. Fix: ${remedy}.`,
+        `query "${String(host.name)}" runs ${reached.chain}, which reads \`auth()\`, but the query ${why}. ` +
+          `A function inherits its caller's identity, and this caller has none. Fix: ${remedy}.`,
         obj,
       );
+    }
+  }
+}
+
+/**
+ * The first function a host reaches through `s.function.run` or
+ * `s.function.call` (transitively) whose own body reads `auth()`, named as the
+ * chain that reaches it (`function "a" → function "b"`); undefined when none.
+ * An async run inherits its dispatcher's caller like a synchronous one, so it is
+ * followed too; `async` says the chain crosses one, where only the job fails.
+ */
+function authReadingCallee(
+  host: Record<string, unknown>,
+  functions: ReadonlyMap<string, Record<string, unknown>>,
+): { chain: string; async: boolean } | undefined {
+  const seen = new Set<string>();
+  const visit = (
+    node: Record<string, unknown>,
+    chain: string,
+    viaAsync: boolean,
+  ): { chain: string; async: boolean } | undefined => {
+    const targets: Array<{ id: string; async: boolean }> = [];
+    walkNodes(node, (record) => {
+      if (record.name !== "mvp:function" && record.name !== "mvp:workspace_run_function") return;
+      const mode = (record as { runtime?: { mode?: unknown } | null }).runtime?.mode;
+      const ctx = record.context as { function?: { id?: unknown }; id?: unknown } | undefined;
+      const id = record.name === "mvp:function" ? ctx?.function?.id : ctx?.id;
+      if (typeof id === "string") targets.push({ id, async: typeof mode === "string" && mode.startsWith("async") });
+    });
+    for (const target of targets) {
+      if (seen.has(target.id)) continue;
+      seen.add(target.id);
+      const fn = functions.get(target.id);
+      if (fn === undefined) continue;
+      const async = viaAsync || target.async;
+      const here = `${chain}${chain === "" ? "" : " → "}function "${String(fn.name)}"${target.async ? " (async)" : ""}`;
+      if (readsAuth(fn)) return { chain: here, async };
+      const deeper = visit(fn, here, async);
+      if (deeper !== undefined) return deeper;
+    }
+    return undefined;
+  };
+  return visit(host, "", false);
+}
+
+/**
+ * An `s.tool.call` of a tool that reads `auth()`. The call runs the tool with
+ * NO caller, even from an authenticated query whose caller sent a valid token:
+ * `auth()` inside it fails ACCESS_DENIED, the failure is bound to `as`, and the
+ * request answers 200 (#202, both backends). The same tool works over MCP or an
+ * agent run, where a toolset entry's `auth` supplies the caller.
+ */
+export function checkToolCallReadsAuth(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  const tools = new Map<string, Record<string, unknown>>();
+  for (const t of sections.tool ?? []) {
+    const guid = (t as { guid?: unknown } | null)?.guid;
+    if (typeof guid === "string") tools.set(guid, t as Record<string, unknown>);
+  }
+  if (tools.size === 0) return;
+  const functions = new Map<string, Record<string, unknown>>();
+  for (const fn of sections.function ?? []) {
+    const guid = (fn as { guid?: unknown } | null)?.guid;
+    if (typeof guid === "string") functions.set(guid, fn as Record<string, unknown>);
+  }
+  for (const [kind, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const named = new Set<string>();
+      walkNodes(obj, (record) => {
+        if (record.name !== "mvp:workspace_run_tool") return;
+        const id = (record.context as { id?: unknown } | undefined)?.id;
+        const target = typeof id === "string" ? tools.get(id) : undefined;
+        if (target === undefined) return;
+        const via = readsAuth(target) ? "" : authReadingCallee(target, functions)?.chain;
+        if (via === undefined) return;
+        named.add(`"${String(target.name)}"${via === "" ? "" : ` (through ${via})`}`);
+      });
+      if (named.size === 0) continue;
+      const list = [...named].join(", ");
+      bag.warn(
+        "stack.tool-call-reads-auth",
+        `${sdkKindName(kind, obj as { type?: unknown })} "${String((obj as { name?: unknown }).name ?? "?")}": ` +
+          `\`s.tool.call\` runs tool ${list} with NO caller, even from an authenticated query: its \`auth()\` ` +
+          `fails ACCESS_DENIED, the failure is bound to \`as\`, and the request answers 200. Put the logic in a ` +
+          `\`defineFunction\` that takes the user id as an input, and call it from both the tool and this stack.`,
+        obj,
+      );
+    }
+  }
+}
+
+/**
+ * `s.db.patch({ data: inp("patch") })`: the caller's object straight into the
+ * write. The engine writes its keys verbatim, the primary key included, so
+ * `{"id": 50}` renumbers the row and moves the sequence past it (#79, both
+ * backends). Only a bare, unfiltered input is flagged: a `fl.pick` (or any
+ * chain) or an `obj({…})` of named inputs is the author choosing the keys.
+ */
+export function checkPatchRawInput(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const [kind, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const inputs = new Set<string>();
+      walkNodes(obj, (record) => {
+        if (record.name !== "mvp:dbo_patch" || !Array.isArray(record.input)) return;
+        const item = (record.input as Array<{ name?: unknown; tag?: unknown; value?: unknown; filters?: unknown[] }>).find(
+          (e) => e?.name === "item",
+        );
+        if (item?.tag === "input" && typeof item.value === "string" && (item.filters?.length ?? 0) === 0) inputs.add(item.value);
+      });
+      for (const name of inputs) {
+        bag.warn(
+          "db.patch-raw-input",
+          `${sdkKindName(kind, obj as { type?: unknown })} "${String((obj as { name?: unknown }).name ?? "?")}": ` +
+            `\`s.db.patch\` writes \`inp("${name}")\` as sent, so the caller can set ANY column, the primary key ` +
+            `included (\`{"id": 50}\` renumbers the row). Name the writable keys: ` +
+            `\`data: withFilters(inp("${name}"), fl.pick("title,body"))\`.`,
+          obj,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * A `db.edit` / `db.add_or_edit` row cell that is a bare `inp(x)`, where `x` is
+ * optional, not nullable and has no default. An omitted optional input binds
+ * its type's empty value (`""`, `0`), and the edit WRITES it, so the natural
+ * update endpoint blanks every column the caller leaves out (#78, both
+ * backends). "An omitted key keeps its stored value" is true of `row` in the
+ * source, not of a value missing from the request.
+ */
+export function checkEditOptionalInput(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  const EDITS: Readonly<Record<string, string>> = { "mvp:dbo_editby": "s.db.edit", "mvp:dbo_addoreditby": "s.db.add_or_edit" };
+  for (const [kind, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const declared = (obj as { input?: unknown }).input;
+      if (!Array.isArray(declared)) continue;
+      const risky = new Set<string>();
+      for (const d of declared as Array<{ name?: unknown; required?: unknown; nullable?: unknown; default?: unknown }>) {
+        if (typeof d?.name === "string" && d.required !== true && d.nullable !== true && (d.default ?? "") === "") risky.add(d.name);
+      }
+      if (risky.size === 0) continue;
+      const hits = new Map<string, Set<string>>();
+      walkNodes(obj, (record) => {
+        const surface = typeof record.name === "string" ? EDITS[record.name] : undefined;
+        if (surface === undefined || !Array.isArray(record.input)) return;
+        for (const e of record.input as Array<{ name?: unknown; tag?: unknown; value?: unknown; filters?: unknown[]; ignore?: unknown }>) {
+          if (e?.ignore === true || e.name === "field_name" || e.name === "field_value") continue;
+          if (e.tag !== "input" || typeof e.value !== "string" || (e.filters?.length ?? 0) > 0 || !risky.has(e.value)) continue;
+          (hits.get(surface) ?? hits.set(surface, new Set()).get(surface)!).add(`${String(e.name)}: inp("${e.value}")`);
+        }
+      });
+      for (const [surface, cells] of hits) {
+        const list = [...cells];
+        bag.warn(
+          "db.edit-optional-input",
+          `${sdkKindName(kind, obj as { type?: unknown })} "${String((obj as { name?: unknown }).name ?? "?")}": ` +
+            `\`${surface}\` writes ${list.join(", ")} from optional, non-nullable ${list.length === 1 ? "input" : "inputs"}. ` +
+            `An omitted one binds its empty value ("" or 0) and the edit WRITES it, blanking the stored column. ` +
+            `For a partial update, declare the inputs \`nullable: true\` and write ` +
+            `\`s.db.patch({ data: withFilters(obj({ … }), fl.filter_null()) })\`, which writes only the keys that arrived.`,
+          obj,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * `s.security.create_auth_token({ expiration: inp("ttl") })` where `ttl` is
+ * optional, not nullable and has no default. An omitted optional int binds
+ * `0`, and `0` means the token NEVER expires, so a "custom TTL" login mints a
+ * permanent credential whenever the caller leaves it out (#143, both
+ * backends). The statement's own 86400 default only applies when `expiration`
+ * is left out of the call.
+ */
+export function checkAuthTokenOptionalExpiration(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const [kind, arr] of Object.entries(sections)) {
+    for (const obj of arr ?? []) {
+      if (!obj || typeof obj !== "object") continue;
+      const declared = (obj as { input?: unknown }).input;
+      if (!Array.isArray(declared)) continue;
+      const risky = new Set<string>();
+      for (const d of declared as Array<{ name?: unknown; required?: unknown; nullable?: unknown; default?: unknown }>) {
+        if (typeof d?.name === "string" && d.required !== true && d.nullable !== true && (d.default ?? "") === "") risky.add(d.name);
+      }
+      if (risky.size === 0) continue;
+      const hits = new Set<string>();
+      walkNodes(obj, (record) => {
+        if (record.name !== "mvp:create_auth" || !Array.isArray(record.input)) return;
+        const e = (record.input as Array<{ name?: unknown; tag?: unknown; value?: unknown; filters?: unknown[] }>).find(
+          (x) => x?.name === "expiration",
+        );
+        if (e?.tag === "input" && typeof e.value === "string" && (e.filters?.length ?? 0) === 0 && risky.has(e.value)) hits.add(e.value);
+      });
+      for (const name of hits) {
+        bag.warn(
+          "stack.auth-token-optional-expiration",
+          `${sdkKindName(kind, obj as { type?: unknown })} "${String((obj as { name?: unknown }).name ?? "?")}": ` +
+            `\`s.security.create_auth_token\` takes \`expiration\` from \`inp("${name}")\`, an optional, non-nullable input ` +
+            `with no default. An omitted one binds 0, and \`expiration: 0\` mints a token that NEVER expires. ` +
+            `Declare \`input.int({ default: 86400 })\`, or mark it \`required: true\`.`,
+          obj,
+        );
+      }
     }
   }
 }
@@ -7274,6 +8840,31 @@ export function checkToolOutputSchema(
 }
 
 /**
+ * A tool that sets both a `description` and an `instructions`. A set
+ * `instructions` is what `tools/list` sends as the MCP `description` and what
+ * an agent or connection trigger sees, so the tool's own `description` never
+ * reaches a client or a model.
+ */
+export function checkToolDescriptionShadowed(
+  sections: Readonly<Record<string, unknown[] | undefined>>,
+  bag: DiagnosticBag,
+): void {
+  for (const obj of sections.tool ?? []) {
+    const t = (obj ?? {}) as { name?: unknown; description?: unknown; instructions?: unknown };
+    const set = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
+    if (!set(t.description) || !set(t.instructions)) continue;
+    bag.warn(
+      "tool.description-shadowed",
+      `tool "${String(t.name)}" sets both \`description\` and \`instructions\`. A set \`instructions\` is what MCP ` +
+        `clients and the model see as the tool's description (\`tools/list\`, agent tools, connection triggers), so ` +
+        `the \`description\` is never shown. Put the text clients should see in \`instructions\`, or drop ` +
+        `\`instructions\` to let \`description\` through.`,
+      obj as object,
+    );
+  }
+}
+
+/**
  * The top-level keys of an object-literal expression (`{ doc_id: $input.d,
  * "x": 1 }`), or undefined when it is not a plain literal — a spread, a
  * computed key, or anything but `{ … }`.
@@ -7402,11 +8993,11 @@ function forEachAgentRun(
 }
 
 /**
- * An `s.ai.agent.run` of an agent with enabled tools that leaves
- * `allowToolExecution` unset. The statement then stores no
- * `allow_tool_execution` input, and the engine runs the agent with tools off:
- * the agent sees its tools, never calls one, and answers as if it had no data —
- * which reads as a prompt problem, not a missing flag.
+ * An `s.ai.agent.run` of an agent with enabled tools that sets
+ * `allowToolExecution: c.bool(false)`. Unset, the engine runs the tools (the
+ * flag defaults to true). False does not hide them: the model still sees its
+ * tools and emits the call, the call never executes, and the run ends with an
+ * empty `result` at 200 — which reads as a prompt problem, not a flag.
  */
 export function checkAgentToolsOff(
   sections: Readonly<Record<string, unknown[] | undefined>>,
@@ -7427,12 +9018,17 @@ export function checkAgentToolsOff(
   if (withTools.size === 0) return;
   forEachAgentRun(sections, (st, toolsetId, owner, host) => {
     const name = withTools.get(toolsetId);
-    if (name === undefined || statementInput(st, "allow_tool_execution") !== undefined) return;
+    if (name === undefined) return;
+    const flag = statementInput(st, "allow_tool_execution") as { tag?: unknown; value?: unknown; filters?: unknown } | undefined;
+    const literalFalse =
+      flag?.tag === "const:bool" && flag.value === "false" && (!Array.isArray(flag.filters) || flag.filters.length === 0);
+    if (!literalFalse) return;
     bag.warn(
       "stack.agent-tools-off",
-      `${owner}: \`s.ai.agent.run\` of agent "${name}" leaves \`allowToolExecution\` unset, so the agent runs with ` +
-        `its tools off: it sees them but never calls one, and answers as if it had no data. Pass ` +
-        `\`allowToolExecution: c.bool(true)\`, or \`c.bool(false)\` to keep tools off on purpose.`,
+      `${owner}: \`s.ai.agent.run\` of agent "${name}" sets \`allowToolExecution: c.bool(false)\`. The agent still ` +
+        `sees its tools and the model still emits a tool call, but the call never executes, so the run usually ends ` +
+        `with an empty \`result\` at 200. Leave \`allowToolExecution\` unset (it defaults to true), or run an agent ` +
+        `with no tools when it must answer without them.`,
       host,
     );
   });

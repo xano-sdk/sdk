@@ -176,7 +176,14 @@ export function valueArgMessage(statement: string, name: string, v: unknown): st
     `Statement "${label(statement)}": argument "${name}" must be a tagged value (\`c.*\`, \`ref()\`, \`inp()\`, …) — got ${describeArg(v)}.` +
     (plain
       ? " A plain JS value stores an empty slot that deploys clean and then fails every request — " +
-        "an array of rows is `c.array([{ … }])` (plain JSON inside), a record is `c.obj({ … })`."
+        // `c.obj`/`c.array` take plain JSON only and refuse a tagged member, so
+        // pointing a record of `inp()`s at them just trades one error for another.
+        (holdsTaggedMember(v)
+          ? Array.isArray(v)
+            ? "it holds values (`inp()`/`ref()`/…), which `c.array` refuses: build the list inside " +
+              "`obj({ list: [ … ] })`, bind it with `s.set_var`, and pass `ref(\"<var>.list\")`."
+            : "it holds values (`inp()`/`ref()`/…), so wrap it with `obj({ … })` (`c.obj` takes plain JSON only)."
+          : "an array of rows is `c.array([{ … }])` (plain JSON inside), a record is `c.obj({ … })`.")
       : typeof v === "number"
         ? numberRemedy(v)
         : typeof v === "string"
@@ -185,6 +192,13 @@ export function valueArgMessage(statement: string, name: string, v: unknown): st
             ? ` Wrap it: \`c.bool(${v})\`.`
             : "")
   );
+}
+
+/** Whether a plain object/array holds a tagged value anywhere inside it. */
+function holdsTaggedMember(v: unknown, depth = 0): boolean {
+  if (depth > 32 || v === null || typeof v !== "object") return false;
+  const members = Array.isArray(v) ? v : Object.values(v as Record<string, unknown>);
+  return members.some((m) => isTaggedArg(m) || holdsTaggedMember(m, depth + 1));
 }
 
 /**

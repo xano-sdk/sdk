@@ -55,7 +55,7 @@ import {
   type SeedContentFile,
 } from "../workspace/seed.js";
 import { findUnresolvableFilters } from "../validate/filter-names.js";
-import { bundleCapabilities } from "../validate/capabilities.js";
+import { bundleCapabilities, capabilityReport } from "../validate/capabilities.js";
 import type { FunctionDef } from "../function/define.js";
 import { Xano, standaloneDefKind } from "../workspace/xano.js";
 import { DiagnosticError, isDiagnosticError, setDiagnosticSink, type Diagnostic } from "../workspace/diagnostics.js";
@@ -114,8 +114,8 @@ import {
   classifyEnv,
   declaredEnv,
   defaultWorkspaceEnvPath,
-  parseEnvFile,
-  readWorkspaceEnvFile,
+  readEnvFile,
+  readWorkspaceEnvFileContents,
   WORKSPACE_ENV_FILE,
   projectRootFrom,
   safeNames,
@@ -6142,7 +6142,7 @@ export async function compileBundle(
     } else writeLock();
   }
 
-  reportCapabilities(bundle);
+  reportCapabilities(bundle, args);
 
   // Seed content rides in the same lock context as the export it accompanies,
   // so `resolveRef("dbo", def)` inside buildSeedContentFiles yields the same
@@ -6277,8 +6277,9 @@ function resolveWorkspaceEnv(
   // `xano/`.
   const defaultPath = defaultWorkspaceEnvPath(file);
   const defaultLabel = projectRelative(defaultPath, file, WORKSPACE_ENV_FILE);
-  const fileValues =
-    explicit !== undefined ? parseEnvFile(explicit) : readWorkspaceEnvFile(defaultPath);
+  const fileContents =
+    explicit !== undefined ? readEnvFile(explicit) : readWorkspaceEnvFileContents(defaultPath);
+  const fileValues = fileContents?.values;
   // A name no env var can have is refused before it is sent: the import took
   // `bad key` / `1BAD` and landed it, and `env pull` then could not write it
   // back. `--env-var` is refused as it is parsed; these are the other two ways
@@ -6322,7 +6323,23 @@ function resolveWorkspaceEnv(
   // believes the name they meant to type is handled. A usage error — the flag's
   // value was mistyped — but with no usage block: the declared names are the fix.
   // An empty `--env-var NAME=` needs the flag whether or not NAME is declared.
-  const undeclared = [...allowed].filter((n) => !declaredNames.includes(n) && args.envVars[n] !== "");
+  // So does a bare `NAME=` line in the file.
+  const fileBare = (fileContents?.bareEmpty ?? []).filter((n) => !Object.hasOwn(args.envVars, n));
+  // `KEY=abc # note` sends `abc # note`: the file has no inline comments.
+  const inlineHash = (fileContents?.inlineHash ?? []).filter((n) => !Object.hasOwn(args.envVars, n));
+  if (inlineHash.length > 0) {
+    const one = inlineHash.length === 1;
+    exportWarn(
+      "workspace-env.inline-comment",
+      `Workspace env: the value of ${inlineHash.join(", ")} in \`${explicit !== undefined ? displayPath(explicit) : defaultLabel}\` ` +
+        `carries " #", and ${one ? "it is" : "they are"} sent with it: the file has no inline comments, so ` +
+        `\`KEY=abc # note\` sends "abc # note". Move the comment to its own line, or quote the value ` +
+        `(\`KEY="abc # note"\`) if the "#" is meant.`,
+    );
+  }
+  const undeclared = [...allowed].filter(
+    (n) => !declaredNames.includes(n) && args.envVars[n] !== "" && !fileBare.includes(n),
+  );
   if (undeclared.length > 0) {
     throw new UsageError(
       `--allow-empty-env: ${safeNames(undeclared)} ${undeclared.length === 1 ? "is" : "are"} not ` +
@@ -6364,6 +6381,7 @@ function resolveWorkspaceEnv(
     source,
     flagged,
     allowed,
+    fileBare,
     refuses,
     defaultLabel,
     comparesOnly,
@@ -6377,18 +6395,34 @@ function resolveWorkspaceEnv(
     ? unsupplied.filter((n) => !namesInEnvExample(examplePath).includes(n))
     : undefined;
   const dryRun = args.dryRun === true;
-  const refusal = (replaceWhy?: string): string =>
-    unsuppliedEnvError(unsupplied, source ?? defaultLabel, source !== undefined, exampleLacks, {
-      ...(replaceWhy !== undefined ? { replaceWhy } : {}),
-      mode: replaceWhy === undefined && toMerge ? "merge" : "replace",
-      dryRun,
-    });
-  mergeExcusedEnv = merges && unsupplied.length > 0 ? refusal : undefined;
-  if (refuses && !merges && unsupplied.length > 0) {
+  // A bare `NAME=` line clears the live value just as an unsupplied name does,
+  // and it is what an uncommented, unfilled template line looks like. Only a
+  // replace clears: a `--to` merge is add-only, and creating a name empty there
+  // is what `NAME=` asked for.
+  const bare = fileBare.filter((n) => !allowed.has(n));
+  const refusal = (replaceWhy?: string): string | undefined => {
+    const parts: string[] = [];
+    if (unsupplied.length > 0) {
+      parts.push(
+        unsuppliedEnvError(unsupplied, source ?? defaultLabel, source !== undefined, exampleLacks, {
+          ...(replaceWhy !== undefined ? { replaceWhy } : {}),
+          mode: replaceWhy === undefined && toMerge ? "merge" : "replace",
+          dryRun,
+        }),
+      );
+    }
+    if (bare.length > 0 && (replaceWhy !== undefined || !toMerge)) {
+      parts.push(bareEmptyEnvError(bare, source ?? defaultLabel, { ...(replaceWhy !== undefined ? { replaceWhy } : {}), dryRun }));
+    }
+    return parts.length > 0 ? parts.join("\n\n") : undefined;
+  };
+  mergeExcusedEnv = merges && (unsupplied.length > 0 || bare.length > 0) ? (why) => refusal(why) ?? "" : undefined;
+  const refused = refuses && !merges ? refusal() : undefined;
+  if (refused !== undefined) {
     // A dry run reports what the real one would do — the refusal included —
     // and sends nothing, so it has nothing to refuse (E2E pass 29).
-    if (dryRun) warn(refusal(), "workspace-env.unsupplied");
-    else throw new Error(refusal());
+    if (dryRun) warn(refused, "workspace-env.unsupplied");
+    else throw new Error(refused);
   }
   return resolution.values;
 }
@@ -6871,6 +6905,27 @@ async function refineGonePullHint(err: unknown): Promise<void> {
  * fills the file in. It therefore has to name all three of: which variables,
  * which file, and the way out.
  */
+/**
+ * The refusal for a bare `NAME=` line: the same clearing an unsupplied name
+ * causes, written by the author's own file.
+ */
+function bareEmptyEnvError(
+  names: readonly string[],
+  source: string,
+  opts: { replaceWhy?: string; dryRun: boolean },
+): string {
+  const one = names.length === 1;
+  return (
+    (opts.dryRun ? "Dry run — the deploy would refuse: " : "Refusing to deploy: ") +
+    `\`${source}\` leaves ${names.join(", ")} with nothing after the \`=\`.\n` +
+    (opts.replaceWhy !== undefined ? `${opts.replaceWhy}: this deploy REPLACES` : "A deploy REPLACES") +
+    ` the backend's env set, so sending ${one ? "it" : "them"} empty would clear ` +
+    `${one ? "that value" : "those values"} in the target.\n` +
+    `Fill in the value, write \`${names[0]}=""\` to send ${one ? "it" : "each"} empty on purpose, ` +
+    `or pass \`--allow-empty-env=${names.join(",")}\`.`
+  );
+}
+
 function unsuppliedEnvError(
   unsupplied: readonly string[],
   source: string,
@@ -6966,6 +7021,8 @@ function reportWorkspaceEnv(r: {
   flagged: number;
   /** The names `--allow-empty-env` excuses, which partitions `clearing`. */
   allowed: ReadonlySet<string>;
+  /** Bare `NAME=` file lines, which `--allow-empty-env` excuses the same way. */
+  fileBare: readonly string[];
   /** Whether this command refuses on what is left (deploy alone). */
   refuses: boolean;
   /** The default file this run looked for, for the branch that did not find it. */
@@ -6984,7 +7041,7 @@ function reportWorkspaceEnv(r: {
   const sent = Object.keys(r.resolution.values).length;
   // Partitioned HERE rather than passed in twice: one array and one predicate
   // cannot fall out of step with each other the way two arrays can.
-  const cleared = r.resolution.clearing.filter((n) => r.allowed.has(n));
+  const cleared = [...r.resolution.clearing, ...r.fileBare].filter((n) => r.allowed.has(n));
   const unsupplied = r.resolution.clearing.filter((n) => !r.allowed.has(n));
   if (r.declaredNames.length === 0 && sent === 0) {
     info("Workspace env: no env vars are declared and none were supplied.");
@@ -7082,24 +7139,24 @@ function reportWorkspaceEnv(r: {
  * worth doing because the failure it heads off is invisible until production: a
  * `promote` onto a plan that differs from the ephemeral it was built on.
  *
- * Informational, never a warning: on the ephemeral most people deploy to, every
- * line here is already satisfied. It goes to STDERR because stdout may be a
- * piped bundle.
+ * Informational: on the ephemeral most people deploy to, every line here is
+ * already satisfied. The exception is a deploy to the local Xano Engine and a
+ * capability it is known to lack, which is a warning (never a `--strict`
+ * failure: the bundle is fine, the target cannot run that statement). It goes
+ * to STDERR because stdout may be a piped bundle.
  */
-function reportCapabilities(bundle: unknown): void {
-  const needs = bundleCapabilities(bundle);
-  if (needs.length === 0) return;
-  info(`This bundle needs ${needs.length} instance capabilit${needs.length === 1 ? "y" : "ies"}:`);
-  for (const need of needs) {
-    // Name one object per capability, not all of them: the point is to make the
-    // requirement findable, and a workspace with forty redis calls would bury
-    // the other lines.
-    const where = need.objects.length
-      ? ` (e.g. ${need.objects[0]}${need.objects.length > 1 ? ` +${need.objects.length - 1} more` : ""})`
-      : "";
-    detail(`${need.label} — ${need.effect}${where}`);
-  }
-  detail("Check these against the plan of anything you promote to; the deploy cannot.");
+function reportCapabilities(bundle: unknown, args: Pick<ParsedArgs, "command" | "to" | "localEngine">): void {
+  const report = capabilityReport(bundleCapabilities(bundle), { localEngine: deploysToLocalEngine(args) });
+  if (report.info === undefined) return;
+  info(report.info.heading);
+  for (const line of report.info.lines) detail(line);
+  detail(report.info.footer);
+  for (const u of report.unavailable) exportWarn("local.capability-unavailable", u.message, [], false);
+}
+
+/** Whether this run is a `deploy` whose destination is the local Xano Engine. */
+function deploysToLocalEngine(args: Pick<ParsedArgs, "command" | "to" | "localEngine">): boolean {
+  return args.command === "deploy" && (args.localEngine || args.to === "local" || args.to?.startsWith("local:") === true);
 }
 
 /**

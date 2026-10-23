@@ -112,7 +112,7 @@ export {
   withFilters,
 } from "./values/value.js";
 export type { CaughtField } from "./values/value.js";
-export type { Value, RefValue, FilteredValue, RegexValue, AuthValue, InpValue, NotObjMember, CaughtValue } from "./values/value.js";
+export type { Value, RefValue, SafeRefValue, FilteredValue, RegexValue, AuthValue, InpValue, NotObjMember, CaughtValue } from "./values/value.js";
 // A constant that also remembers the JS type it resolves to, so `s.set_var`
 // can brand its binding and a `ref()` into it infers instead of bottoming out.
 export type { ConstValue } from "./values/value.js";
@@ -247,6 +247,7 @@ export {
 export type {
   FunctionRunArgs,
   RunBinding,
+  CallErrorEnvelope,
   FunctionCallArgs,
   ApiCallArgs,
   TaskCallArgs,

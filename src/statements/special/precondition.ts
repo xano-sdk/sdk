@@ -1,11 +1,11 @@
 /**
  * Typed `precondition` / `throw` overrides.
  *
- * `s.throw` raises a generic error the runtime returns with **HTTP 200** and an
- * error body — a client checking `res.ok` (or any non-2xx guard) treats a
- * deliberately-thrown error as success. `s.precondition` instead maps its
- * `error_type` to a status-bearing exception (400/401/403/404/429/…), so a
- * boundary rejection is observable via standard HTTP semantics.
+ * `s.throw` raises a named error. Uncaught, the runtime answers **HTTP 200** with
+ * `{ payload, statement: "Throw Error" }` unless the throw sets `status`, which
+ * the request then answers with. `s.precondition` instead maps its `error_type`
+ * to a status-bearing exception (400/401/403/404/429/…) with the
+ * `{ code, message, payload }` envelope.
  *
  * Both delegate to the codegen'd factory — the encoded statement is identical —
  * and only narrow/annotate the authoring types. `error_type` in particular ships
@@ -93,13 +93,13 @@ export interface PreconditionArgs extends StatementAnnotations {
 
 /**
  * `precondition { … }` — assert a condition and raise a **status-bearing** error
- * if it fails (`mvp:precondition`). Prefer this over {@link throwError} (`s.throw`)
- * whenever the rejection must be observable via HTTP status — a client guarding
- * on `res.ok` sees a real 4xx instead of a 200 with an error body.
+ * if it fails (`mvp:precondition`), answered with the `{ code, message, payload }`
+ * envelope. {@link throwError} (`s.throw`) with a `status` also fails the request,
+ * with a `{ payload, statement }` body instead.
  *
  * @example
  * s.precondition({
- *   expr: fl.starts_with(input.url, "http"),
+ *   expr: cond.startsWith(inp("url"), c.text("http")),
  *   error_type: "badrequest",
  *   error: c.text("url must start with http:// or https://"),
  * })
@@ -116,19 +116,31 @@ export function precondition(a: PreconditionArgs = {}): Statement {
 }
 
 export interface ThrowArgs extends StatementAnnotations {
-  /** Optional error name/code. */
+  /** Optional error name/code. `s.try_catch` reads it as `caught("name")`; the client never sees it. */
   name?: string;
-  /** The error value/message. */
+  /** The error value/message. The client receives it as `payload`. */
   value: Value;
+  /**
+   * The HTTP status the request answers with when nothing catches this throw,
+   * a whole number from 100 to 599 (refused at build time otherwise). Without
+   * it an uncaught throw answers 200. A throw that `s.try_catch` catches never
+   * changes the response status, and one inside a function run with
+   * `s.function.run` answers the caller's request with it.
+   */
+  status?: number;
 }
 
 /**
  * `throw <value>` — raise an error from the stack (`mvp:throw_error`).
  *
- * ⚠️ The runtime returns a thrown error with **HTTP 200** and an error body, so
- * a client checking `res.ok` treats it as success. For a rejection that surfaces
- * as a real 4xx status, use {@link precondition} (`s.precondition`) with an
- * `error_type`.
+ * ⚠️ Uncaught and without `status`, the runtime answers **HTTP 200** with
+ * `{ payload, statement: "Throw Error" }`, so a client checking `res.ok` treats
+ * it as success. Set `status` to fail the request with that status and body, or
+ * use {@link precondition} (`s.precondition`) for the `{ code, message, payload }`
+ * envelope.
+ *
+ * @example
+ * s.throw({ name: "NOT_ALLOWED", value: c.text("You can't edit this record"), status: 403 })
  */
 export function throwError(a: ThrowArgs): Statement {
   return generated.throw(a);

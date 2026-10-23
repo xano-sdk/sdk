@@ -687,8 +687,10 @@ export function realtimeChannelTrigger<
  * `t` carries the server's `tools`, `prompts` and `resources`, and `auth` —
  * the signed-in user when the server has `oauth`, else null. Returning a
  * filtered `prompts`/`resources` narrows what this connection lists; a response
- * without that key leaves the list unfiltered. The default response returns the
- * four lists unchanged.
+ * without that key leaves the list unfiltered. NOT so for `toolset` and `tools`:
+ * the server reads both unconditionally, so a keyed response missing either
+ * breaks it for every client — return `{ toolset: t.toolset, tools: t.tools, ... }`.
+ * The default response returns the four lists unchanged.
  */
 export function mcpServerTrigger<
   Res = never,

@@ -107,17 +107,22 @@ function buildRules(
       return { skip: `nested transform target for "${stripFieldName(rawKey)}"` };
     }
     const { field, optional, default: def } = parseTransformKey(rawKey);
-    const route = routeFor(rawTarget);
+    // `!static:int context.X` is a plain member stored as a JSON integer (the
+    // engine's static:int block), so it routes like `context.X` and types as a
+    // number rather than the text a bare `context.X` carries.
+    const staticInt = rawTarget.match(/^!static:int (context\..+)$/);
+    const route = routeFor(staticInt ? staticInt[1]! : rawTarget);
     if (!route) return { skip: `unsupported transform target "${rawTarget}"` };
 
     const decl = decls[field];
     if (decl?.type === "complex") return { skip: `complex field decl "${field}"` };
     // Field type follows the route: compare → Comparison; spread/nest → Value;
-    // as / context-plain → string.
+    // as / context-plain → string; `!static:int` context-plain → number.
     let type: FieldType;
     if (route.kind === "context-compare") type = "comparison";
     else if (route.kind === "context-spread" || route.kind === "context-nest" || route.kind === "input")
       type = "value";
+    else if (staticInt) type = "number";
     else type = "string";
     rules.push({ field, type, optional: optional || (decl?.optional ?? false), default: def, route });
   }

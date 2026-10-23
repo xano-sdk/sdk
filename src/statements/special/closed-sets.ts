@@ -71,7 +71,18 @@ function field(a: unknown, key: string): unknown {
 /** `access` narrowed on a generated `storage.create_*` factory. */
 type WithAccess<T> = Omit<T, "access"> & { access?: StorageAccess };
 
-type CreateAttachmentArgs = WithAccess<Parameters<typeof generated.storage.create_attachment>[0]>;
+type CreateAttachmentArgs = Omit<WithAccess<Parameters<typeof generated.storage.create_attachment>[0]>, "include_meta"> & {
+  /**
+   * What `as` binds. Absent or `false`: the stored file VALUE
+   * (`{ access, path, name, type, size, mime, meta }`), the thing to write into
+   * an `f.attachment()` cell. `true`: the engine's internal file RECORD instead
+   * (`id`, `sig`, `guid`, `canonical`, `user`, `workspace`, and `storage` with the
+   * cloud provider, bucket and region). Read the fields you need from it; never
+   * return it to a client (export warns `storage.include-meta-returned`) or store
+   * it as the file value.
+   */
+  include_meta?: boolean;
+};
 type CreateAudioArgs = WithAccess<Parameters<typeof generated.storage.create_audio>[0]>;
 type CreateImageArgs = WithAccess<Parameters<typeof generated.storage.create_image>[0]>;
 type CreateVideoArgs = WithAccess<Parameters<typeof generated.storage.create_video>[0]>;
@@ -86,6 +97,10 @@ type SetHeaderArgs = Omit<Parameters<typeof generated.util.set_header>[0], "dupl
  * ⚠ `access` defaults to `"public"` (world-readable by URL). Pass
  * `access: "private"` and reach the file through `s.storage.sign_private_url`
  * when it must not be.
+ *
+ * ⚠ `include_meta: true` binds the internal file record (`sig`, `guid`, the
+ * storage bucket), not the file value. Returned from an endpoint it exposes
+ * storage internals: return the fields you need, or drop `include_meta`.
  */
 export function createAttachment(a: CreateAttachmentArgs): Statement {
   assertClosed("s.storage.create_attachment", "access", STORAGE_ACCESS, field(a, "access"));

@@ -65,6 +65,15 @@ export interface TestDef {
    * bring it back: a token is an expiring credential rather than authored
    * configuration, so `codegen` reports a stored one as a deliberate omission
    * instead of writing it into a committed tree.
+   *
+   * ⚠ A token is signed PER INSTANCE and EXPIRES, so a literal one is not
+   * portable — it runs only on the backend that minted it (passes locally,
+   * `Invalid token.` on an ephemeral or any other instance) and is a live
+   * credential sitting in committed source. To cover `query({ auth })` logic
+   * portably, move the body into a `defineFunction` that takes the user id as
+   * an input and `s.function.call` it from the test (the same pattern the
+   * workflow-test section recommends, since the gate itself is not reachable
+   * from a test run); keep `token` for a throwaway local check only.
    */
   token?: string;
 }

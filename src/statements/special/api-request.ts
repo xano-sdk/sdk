@@ -79,7 +79,7 @@ const API_REQUEST_KEYS = /* @__PURE__ */ Object.keys({ as: 1, url: 1, output: 1,
  * field types over the generated `mvp:api_request` factory; delegates encoding
  * to it for byte-parity. Any field also accepts a dynamic {@link Value}.
  *
- * `method` suggests the 7 verbs, `params` is a key/value object (→ query string
+ * `method` suggests the 8 verbs, `params` is a key/value object (→ query string
  * for GET/HEAD/OPTIONS, body otherwise), `headers` an array of full header-line
  * strings, `timeout` seconds (engine bounds 1–86400), and the verify/follow
  * flags booleans.

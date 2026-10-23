@@ -237,6 +237,56 @@ const realtimePublish: SpecialDecoder = (a) => {
 };
 
 /**
+ * `realtime.kick` — take one user's sockets out of one channel.
+ *
+ * Shaped like `realtime.publish` (a server NAME, a channel value, the `auth` pair)
+ * minus `data`/`message`, plus an optional `reason`. The identity is required on
+ * authoring, so a stored kick without a full `auth` pair declines to `raw()`.
+ */
+const realtimeKick: SpecialDecoder = (a) => {
+  const context = (a.stored.context ?? {}) as Record<string, unknown>;
+  const known = new Set(["realtime_server", "channel", "auth", "reason"]);
+  const unmodelled = Object.keys(context).find((key) => !known.has(key));
+  if (unmodelled !== undefined)
+    return declineHere(`realtime.kick: unmodelled context key "${unmodelled}"`);
+
+  const server = toValue(context.realtime_server);
+  const channel = toValue(context.channel);
+  if (!server || !channel)
+    return declineHere("realtime.kick: realtime_server or channel is not a tagged value");
+
+  const tableGuid = getPath(context, "auth.dbo_id");
+  const authId = toValue(getPath(context, "auth.row_id"));
+  if (typeof tableGuid !== "string" || tableGuid === "" || !authId)
+    return declineHere("realtime.kick: the auth table or auth id is missing");
+
+  const entries: Array<[string, Expr]> = [];
+  const runtime: Record<string, unknown> = {};
+  if (server.tag === "const" && server.filters.length === 0) {
+    entries.push(["server", lit(server.value)]);
+    runtime.server = server.value;
+  } else {
+    entries.push(["server", decodeValue(a.ctx, server)]);
+    runtime.server = server;
+  }
+  entries.push(["channel", decodeValue(a.ctx, channel)]);
+  runtime.channel = channel;
+  entries.push(["authTable", resolveReference(a.ctx, a.refs, tableGuid, { ...a.resolve, unresolved: "object-ref" })]);
+  runtime.authTable = { name: "", guid: tableGuid };
+  entries.push(["authId", decodeValue(a.ctx, authId)]);
+  runtime.authId = authId;
+
+  if (context.reason !== undefined) {
+    const reason = toValue(context.reason);
+    if (!reason) return declineHere("realtime.kick: context.reason is not a tagged value");
+    entries.push(["reason", decodeValue(a.ctx, reason)]);
+    runtime.reason = reason;
+  }
+
+  return prove(a.ctx, a.stored, "realtime.kick", [runtime], [obj(entries)]);
+};
+
+/**
  * `security.create_auth_token` — the auth table rides a bare-guid `const` input
  * entry rather than a `context` reference, and `extras`/`expiration` carry
  * encoder defaults (`{}` / 24h) that are elided when unchanged.
@@ -706,6 +756,7 @@ export const MISC_DECODERS: ReadonlyMap<string, SpecialDecoder> = new Map<string
   ],
   ["mvp:realtime_event", realtimeEvent],
   ["mvp:realtime_publish", realtimePublish],
+  ["mvp:realtime_kick", realtimeKick],
   ["mvp:create_auth", createAuthToken],
   ["mvp:action", actionCall],
   ["mvp:action_package", actionPackageCall],

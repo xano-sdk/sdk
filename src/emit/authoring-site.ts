@@ -8,7 +8,8 @@
  * or task it sits in, and nothing at register or export time ever sees it. The
  * stack does: its first frame in the author's own files is the call that threw.
  */
-import { dirname, relative, resolve, sep } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { projectRootFrom } from "./backend-dir.js";
 
@@ -131,5 +132,27 @@ export function withAuthoringSite(err: unknown, entry: string): unknown {
   if (frame === undefined) return err;
   if (frame.top || Object.getPrototypeOf(err) === Error.prototype) asUsage(err);
   if (!err.message.includes(frame.site)) err.message = `${err.message}\n  (thrown while loading ${frame.site})`;
+  const tsc = typeCheckHint(err, entry);
+  if (tsc !== undefined && !err.message.includes(tsc)) err.message = `${err.message}\n  ${tsc}`;
   return err;
+}
+
+/**
+ * For a bare runtime `TypeError`/`ReferenceError` (`values is not iterable`,
+ * `c.json is not a function`), the command that names the mistake. Loading the
+ * entry runs before any `tsc` step, so a call the compiler would refuse with
+ * the expected signature crashes the loader first, and the message names
+ * neither the API nor the fix (#105). The SDK's own refusals are plain
+ * `Error`s that already say both, so they get no hint.
+ */
+function typeCheckHint(err: Error, entry: string): string | undefined {
+  if (!(err instanceof TypeError || err instanceof ReferenceError)) return undefined;
+  const project = projectRootFrom(dirname(resolve(entry)));
+  for (let dir = dirname(resolve(entry)); ; dir = dirname(dir)) {
+    if (existsSync(join(dir, "tsconfig.json"))) {
+      const p = relative(process.cwd(), dir) || ".";
+      return `A misused SDK call usually fails like this: \`npx tsc --noEmit -p ${p}\` reports it as a type error, with the signature it expected.`;
+    }
+    if (dir === project || dirname(dir) === dir) return undefined;
+  }
 }

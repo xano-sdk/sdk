@@ -99,9 +99,9 @@ const FORMAT_VALUES = new Set(["", "plaintext", "yaml", "html", "xml", "markdown
  * object in that slot (`f.enum({ values })`) or a bare string (`f.enum("abc")`,
  * which would spread into one value per letter) is refused with the right call.
  */
-function assertEnumValues(values: unknown): void {
+export function assertEnumValues(values: unknown, ns: "f" | "input" = "f"): void {
   if (Array.isArray(values) && values.every((v) => typeof v === "string" || typeof v === "number")) return;
-  throw new Error(`f.enum takes its values as a list of strings or numbers, FIRST: f.enum(["a", "b"], { default: "a" }) — got ${JSON.stringify(values)}.`);
+  throw new Error(`${ns}.enum takes its values as a list of strings or numbers, FIRST: ${ns}.enum(["a", "b"], { default: "a" }) — got ${JSON.stringify(values)}.`);
 }
 
 function descriptor(type: string, options: FieldOptions): FieldDescriptor {
@@ -215,6 +215,15 @@ export const f = {
   decimal: make<number, DecimalMethod, "decimal">("decimal"),
   bool: make<boolean, never, "bool">("bool"),
   uuid: make<string, never, "uuid">("uuid"),
+  /**
+   * Date column (`YYYY-MM-DD`). ⚠ The engine does NOT validate the written
+   * value: an invalid calendar date ROLLS OVER into a different valid one
+   * (`"2020-13-45"` stores as `"2021-02-14"`) rather than failing, and an
+   * epoch-ms number is accepted and converted. A column `required` does not
+   * catch it. Validate at the boundary with `input.date` (which rejects the
+   * same string with a 400), or `s.precondition` any value reaching the cell
+   * through `input.text`/`input.json` or a computed var.
+   */
   date: make<string, never, "date">("date"),
   email: make<string, EmailMethod, "email">("email"),
   /** Password field; defaults to `access:"internal"` (the engine's stored default). */

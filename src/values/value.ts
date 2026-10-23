@@ -30,6 +30,13 @@ export type Value = TaggedValue;
 export type RefValue<Name extends string = string> = Value & { readonly __ref: Name };
 
 /**
+ * A `ref(path, { safe: true })` read: the phantom `__safe` tells `InferResponse`
+ * that a null base yields null here. A plain dotted ref into a null base RAISES
+ * (HTTP 500), so its type drops the base's `| null`.
+ */
+export type SafeRefValue<Name extends string = string> = RefValue<Name> & { readonly __safe: true };
+
+/**
  * An `auth(path)` read, carrying its path at the type level only (phantom
  * `__auth`) so `InferResponse` types it from a query's auth table row.
  */
@@ -1108,8 +1115,16 @@ export interface RefOptions {
    * With `safe: true` the path compiles through the `get` filter
    * (`$owner|get:"user_id"`), which walks the remaining path and resolves to
    * null when the base is null — so an ownership/existence guard evaluates to
-   * `false` cleanly rather than throwing. Has no effect on a plain, dot-free name
-   * (a bare var already resolves to null without error).
+   * `false` cleanly rather than throwing.
+   *
+   * ⚠ `safe` has NO effect on a plain, dot-free name — it compiles to the same
+   * bare `{tag:"var"}`. A BOUND bare var reads its value (or null if that value
+   * is null), but a name that NOTHING binds raises `Missing var entry: <name>`
+   * (ERROR_FATAL, HTTP 500) on both backends, and `safe` does NOT suppress it.
+   * This includes a var bound ONLY inside an `s.conditional`/`switch` arm, a
+   * loop body that ran zero times, or a `try` block: when that path is skipped
+   * the var is never bound, so a later read 500s. Declare it before the block —
+   * `s.set_var("x", c.null())` — so it always exists.
    */
   safe?: boolean;
 }
@@ -1131,6 +1146,8 @@ export interface RefOptions {
  * - {@link auth} — the authenticated caller (`auth("id")`).
  * - `c.*` — a literal constant (`c.int(1)`, `c.text("x")`).
  */
+export function ref<const Name extends string>(name: Name, opts: RefOptions & { safe: true }): SafeRefValue<Name>;
+export function ref<const Name extends string>(name: Name, opts?: RefOptions): RefValue<Name>;
 export function ref<const Name extends string>(name: Name, opts?: RefOptions): RefValue<Name> {
   assertRefName("ref", name, "the variable name");
   assertNamed("ref", name, "the variable to read, e.g. ref(\"total\")");
@@ -1203,8 +1220,8 @@ function assertNamed(creator: string, name: string, what: string): void {
 }
 
 /**
- * A path argument with a `""` default (`auth()`, `resp()`, `caught()`): `null`
- * is the absent path, anything else must be a string.
+ * A path argument (`auth()`, `resp()`, `caught()`): an absent or `null` path
+ * reads as `""` (which `auth()` then refuses), anything else must be a string.
  */
 function refPath(creator: string, path: unknown): string {
   if (path === undefined || path === null) return "";
@@ -1237,16 +1254,29 @@ export function col(name: string, opts?: SafeIsRefOnly): ColValue {
 }
 
 /**
- * Reference the authenticated identity (`{tag:"auth", value}`). Pass a path to
- * drill into the auth record — `auth("id")` is the authenticated row id
- * (Xano's `$auth.id`); bare `auth()` is the whole record. Use it to bind the
- * caller into a row write on an authenticated endpoint (one whose `auth` names
- * an auth table), e.g.
+ * Reference the authenticated identity (`{tag:"auth", value}`). The path is
+ * REQUIRED: `auth("id")` is the authenticated row id (Xano's `$auth.id`),
+ * `auth("extras.<key>")` a claim. There is no bare form, because the engine
+ * cannot read an empty auth path (XanoScript has no bare `$auth` either), so
+ * `auth("")` throws. Use it to bind the caller into a row write on an
+ * authenticated endpoint (one whose `auth` names an auth table), e.g.
  * `s.db.add({ table: post, row: { author_id: auth("id") } })`.
+ *
+ * Token EXTRAS are read as `auth("extras.<key>")` (`auth("extras")` is the
+ * whole map). A key the token does not carry is a 500 (`Unable to locate auth`),
+ * not null, and claims are a snapshot frozen at mint — authorize off the row
+ * when the value can change.
  */
-export function auth<const P extends string = "">(path: P = "" as P, opts?: SafeIsRefOnly): AuthValue<P> {
+export function auth<const P extends string>(path: P, opts?: SafeIsRefOnly): AuthValue<P> {
   assertNoRefOptions("auth", opts);
-  return val(refPath("auth", path), "auth") as AuthValue<P>;
+  const read = refPath("auth", path);
+  if (read === "") {
+    throw new Error(
+      'auth() was given an empty path — the engine cannot read the bare identity. Pass a path: ' +
+        'auth("id") (the row id), auth("extras") (the whole extras map) or auth("extras.<key>") (one claim).',
+    );
+  }
+  return val(read, "auth") as AuthValue<P>;
 }
 
 /**

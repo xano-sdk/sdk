@@ -49,7 +49,9 @@ export function returnValue(value: ValueArg, a?: StatementAnnotations): Statemen
 }
 
 /**
- * `die <value>` — terminate the request with an error value.
+ * `die <value>` — terminate the request: HTTP 200 with
+ * `{ payload: <value>, statement: "Stop & Debug" }`, not an error status (use
+ * `s.precondition` for one).
  *
  * The same statement as `s.debug.stop` (both emit `mvp:die`), and the one flat
  * alias whose name does not mirror its `s.*` path — there is no `s.die`. Despite
@@ -81,7 +83,16 @@ export function foreachContinue(a?: StatementAnnotations): Statement {
   return annotate({ name: "mvp:foreach_continue", context: {} }, a);
 }
 
-/** `foreach_remove` — remove the current item from the iterated collection. */
+/**
+ * `foreach_remove` — remove the current item from the iterated collection.
+ *
+ * ⚠ It rewrites the VARIABLE named by the loop's `list`, so the loop must
+ * iterate a bare `ref("arr")` (a stack var): the shrunk list is visible on that
+ * var AFTER the loop. On an `inp()` list — or any non-`ref` value — it silently
+ * does NOTHING (nothing to write back to) and reports nothing. Removing during
+ * iteration does not skip the next item. Copy an input into a var first
+ * (`s.set_var("arr", inp("items"))`) to use it.
+ */
 export function foreachRemove(a?: StatementAnnotations): Statement {
   assertKnownKeys(`Statement "s.foreach_remove"`, a, ANNOTATION_KEYS);
   return annotate({ name: "mvp:foreach_remove", context: {} }, a);

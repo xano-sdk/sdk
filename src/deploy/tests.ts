@@ -138,6 +138,15 @@ export interface TestHandle {
    * workflow tests, and must not present silence as safety.
    */
   datasource?: string;
+  /**
+   * Whether the test is enabled, as the environment's list reports it. A
+   * workflow test deployed `active: false` is parked: `run-all` and
+   * `deploy --test` SKIP it (reported `status: "skipped"`, counted in `notRun`),
+   * while `test run "<name>"` still runs it on request. Only the `workflow_test`
+   * list carries the flag; absent means "the list did not say" (every unit
+   * test), never "inactive".
+   */
+  active?: boolean;
 }
 
 /** One expectation of a unit test, as the run reported it. */
@@ -151,7 +160,8 @@ export interface TestExpectation {
 
 /** What running one test produced. */
 export interface TestOutcome extends TestHandle {
-  status: "pass" | "fail";
+  /** `"skipped"` is a parked (`active: false`) workflow test the suite did not run. */
+  status: "pass" | "fail" | "skipped";
   /** The first failing assertion's message, or the run's own error sentence. */
   message?: string;
   /**
@@ -415,6 +425,10 @@ async function listWorkflowTests(
         id: row.id,
         name,
         datasource: typeof row.datasource === "string" ? row.datasource : undefined,
+        // `active` defaults true engine-side; only an explicit `false` parks a
+        // test. Absent (an older engine that does not project it) is "unknown",
+        // which the runner treats as active — never silently skip.
+        active: typeof row.active === "boolean" ? row.active : undefined,
       },
     ];
   });
@@ -515,9 +529,13 @@ export async function runTest(
     // proxy's page) is about reaching the environment, not about the test,
     // and must not be counted as a failing test. Nor is any 5xx, labelled or
     // not: a `{code, message}` 503 is a server error, not a result (E2E pass
-    // 30: it counted as FAIL, exit 5).
+    // 30: it counted as FAIL, exit 5). The exception is a labelled 501: the
+    // engine saying it cannot run what THIS test reaches, which no retry
+    // changes. Read as unreachable, it would stop `run-all` and mark every
+    // other test not run.
+    const notImplemented = res.status === 501 && labelledMessage(text) !== undefined;
     if (
-      res.status >= 500 ||
+      (res.status >= 500 && !notImplemented) ||
       res.status === 401 ||
       res.status === 403 ||
       res.status === 429 ||

@@ -22,7 +22,7 @@ import { describeEntry } from "../args.js";
  * wrapper coerces to a `Value` and delegates to the generated factory, whose
  * spec carries the same set and rejects a constant outside it.
  */
-export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "PATCH";
+export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "PATCH" | "QUERY";
 
 /**
  * A tagged {@link Value} — the dynamic-binding escape hatch for any typed field.

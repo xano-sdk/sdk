@@ -85,7 +85,8 @@ export interface TestRunSummary extends Ran {
     /** `type:object/name` for a unit test, the bare name for a workflow test — what `test run` takes. */
     qualified: string;
     object?: { type: string; name: string };
-    status: "pass" | "fail";
+    /** `"skipped"` is a parked (`active: false`) workflow test the suite did not run. */
+    status: "pass" | "fail" | "skipped";
     /** The first failing expectation's message, or the run's own error sentence. */
     message?: string;
     /** A unit test's every expectation, in order. Absent for a workflow test. */
@@ -144,9 +145,13 @@ function describe(handle: TestHandle): string {
 /** The per-test line, plus each failure message indented beneath it. */
 function renderOutcome(outcome: TestOutcome, width: number): void {
   const s = stderrStyle();
-  const verdict = outcome.status === "pass" ? s.green("PASS") : s.red("FAIL");
+  const verdict =
+    outcome.status === "pass" ? s.green("PASS") : outcome.status === "skipped" ? s.dim("SKIP") : s.red("FAIL");
   const timing = outcome.timing === undefined ? "" : s.dim(`  ${outcome.timing.toFixed(3)}s`);
-  process.stderr.write(terminalText(`  ${verdict}  ${outcome.name.padEnd(width)}  ${s.dim(describe(outcome))}${timing}\n`));
+  const note = outcome.status === "skipped" ? s.dim("  inactive") : "";
+  process.stderr.write(
+    terminalText(`  ${verdict}  ${outcome.name.padEnd(width)}  ${s.dim(describe(outcome))}${timing}${note}\n`),
+  );
   if (outcome.status !== "fail") return;
   // Every failing expectation, so one run shows all that is wrong. A failure
   // with none to name (a refused run, a workflow test) has only `message`.
@@ -199,12 +204,16 @@ export function suiteCounts(
   unreachable: readonly string[] = [],
 ): { total: number; passed: number; failed: number; notRun: number; unreachable?: string[] } {
   const passed = outcomes.filter((o) => o.status === "pass").length;
-  const failed = outcomes.length - passed;
+  const failed = outcomes.filter((o) => o.status === "fail").length;
+  // A parked (`active: false`) test is a settled outcome, so it counts in `total`
+  // — but it did not run, so it lands in `notRun` beside the unreachable ones and
+  // never in `failed`.
+  const skipped = outcomes.filter((o) => o.status === "skipped").length;
   return {
     total: outcomes.length + unreachable.length,
     passed,
     failed,
-    notRun: unreachable.length,
+    notRun: skipped + unreachable.length,
     ...(unreachable.length > 0 ? { unreachable: [...unreachable] } : {}),
   };
 }
@@ -229,7 +238,7 @@ function report(args: ParsedArgs, ran: Ran, outcomes: TestOutcome[], empty = "No
     detail(empty);
   } else {
     blank();
-    printTally(summary.passed, summary.failed);
+    printTally(summary.passed, summary.failed, summary.notRun);
   }
   if (summary.failed > 0) process.exitCode = EXIT_TESTS_FAILED;
 }
@@ -331,6 +340,10 @@ async function runList(args: ParsedArgs): Promise<void> {
         // printed as `"datasource": ""` on every workflow test — a key whose
         // value says there is nothing. Absent means the same.
         ...(h.datasource === undefined || h.datasource === "" ? {} : { datasource: h.datasource }),
+        // Only when the list reported it (workflow tests): absent is "the list
+        // did not say", not `active: true`, so a reader never mistakes a unit
+        // test's silence for an enabled flag.
+        ...(h.active === undefined ? {} : { active: h.active }),
       })),
     });
     return;
@@ -350,7 +363,10 @@ async function runList(args: ParsedArgs): Promise<void> {
       handle.datasource === undefined || handle.datasource === ""
         ? ""
         : s.yellow(`  datasource: ${handle.datasource}`);
-    process.stderr.write(terminalText(`  ${handle.name.padEnd(width)}  ${s.dim(describe(handle))}${ds}\n`));
+    // A parked test is worth seeing in the list: `run-all` skips it, so a reader
+    // scanning for "why did my test not run" finds the answer here.
+    const inactive = handle.active === false ? s.dim("  inactive") : "";
+    process.stderr.write(terminalText(`  ${handle.name.padEnd(width)}  ${s.dim(describe(handle))}${ds}${inactive}\n`));
   }
 }
 
@@ -511,7 +527,11 @@ export async function runSuite(
   let stopped: Error | undefined;
   const outcomes = await mapWithConcurrency(handles, opts.concurrency ?? 1, async (handle, index) => {
     let outcome: TestOutcome | null;
-    if (stopped !== undefined && opts.onUnreachable !== undefined) {
+    if (handle.active === false) {
+      // A parked test: the suite does not run it and does not fail on it.
+      // `test run "<name>"` still runs one on request (runOne does not skip).
+      outcome = { ...handle, status: "skipped" };
+    } else if (stopped !== undefined && opts.onUnreachable !== undefined) {
       opts.onUnreachable(handle, stopped);
       outcome = null;
     } else {

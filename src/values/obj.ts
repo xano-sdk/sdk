@@ -153,7 +153,12 @@ function serializeValue(v: Value, path: string, followed: boolean): string {
  */
 function grouped(rendered: string, chain: Value["filters"], followed: boolean): string {
   const tail = chain[chain.length - 1];
-  return followed && tail !== undefined && tail.arg.length > 0 ? `(${rendered})` : rendered;
+  // A RECORD literal base is grouped wherever it sits. Bare, the engine does not
+  // apply the chain to the record: `{ v: { k: 1 }|is_object }` answers
+  // `{"v":{"k":1},"0":null}` (a stray key, the record unfiltered), even as the
+  // last member and for a zero-argument filter. `({ k: 1 }|is_object)` answers
+  // `true`. Probed on the local engine. An array base reads correctly bare.
+  return tail !== undefined && (rendered[0] === "{" || (followed && tail.arg.length > 0)) ? `(${rendered})` : rendered;
 }
 
 /**
@@ -342,6 +347,11 @@ function serializeFilters(v: Value, path: string): string {
       );
     }
     const args = f.arg.map((a, i) => {
+      // A populated `c.obj` is stored as `{}` plus `set` filters: its payload,
+      // not a chain. It renders as the literal record, as a member value does.
+      // Only a fully consumed payload: a real chain after it is still refused.
+      const record = objSetRecord(a, path, false);
+      if (record?.[0] === "{") return record;
       if (a.filters.length > 0) {
         // Named for the case that surprised: a null-safe `ref(…, { safe: true })`
         // IS such a chain (its variable piped through `get`), written by no one.
@@ -354,7 +364,10 @@ function serializeFilters(v: Value, path: string): string {
       }
       return serializeAtom(a, `${path}|${f.name}[${i}]`);
     });
-    out += `|${f.name}${args.length > 0 ? `:${args.join(":")}` : ""}`;
+    // `null` is an expression keyword: `"x"|null` reads as the literal and fails
+    // "Invalid pipe.", parenthesized or not (probed on the local engine). The
+    // engine registers `is_null` beside it, and `"x"|is_null` answers `false`.
+    out += `|${f.name === "null" ? "is_null" : f.name}${args.length > 0 ? `:${args.join(":")}` : ""}`;
   }
   return out;
 }

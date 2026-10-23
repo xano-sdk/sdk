@@ -41,6 +41,8 @@ export const refChainedOwnership = defineFunction({
     guard.found("post", { message: "Post not found." }),
     // `post` is known non-null now, so the drill needs no `safe`.
     s.db.get({ table: users, fieldValue: ref("post.author_id"), as: "author" }),
+    // The author row can miss too; drilling `author.id` past a miss would 500.
+    guard.found("author", { message: "Author not found." }),
   ],
   response: ref("author.id"),
 });

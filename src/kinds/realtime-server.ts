@@ -91,8 +91,9 @@ export interface RealtimeServerDef {
    * sets its `_customize` flag, so this tier stops inheriting the one above it;
    * `pre: middleware.clear()` customizes with nothing.
    *
-   * Before this, a realtime auth or rate-limit guard had to be repeated on every
-   * `realtimeMessage()` — the only realtime kind that took one.
+   * ⚠ Not a guard: a middleware that THROWS (an `s.precondition`, a runtime
+   * error) fails the message OPEN — the sender's original payload is broadcast.
+   * A realtime guard vetoes by having the handler RETURN `null`.
    */
   middleware?: MiddlewareAttach;
   /** Workspace tags (stored `tag: [{tag}]`). */
@@ -287,7 +288,12 @@ function liftTenantFromBase(
  *  - Auth is a bearer token carried as the websocket SUBPROTOCOL
  *    (`new WebSocket(url, token)` — `Sec-WebSocket-Protocol`), not a query
  *    param. No token = an anonymous client, admitted only by channels with
- *    `anonymousClients: true`.
+ *    `anonymousClients: true`. An INVALID/tampered/EXPIRED token still
+ *    connects ANONYMOUSLY with no error, and says why: `session.token_error`
+ *    is `"expired"`/`"invalid"`, and an anonymous refusal names the token
+ *    (`{ message, token_error, reason }`) — refresh the token on it. Refuse at
+ *    connect with a `realtimeServerTrigger` `connect` gate
+ *    (`allowed: session.token_error == null`) for a 4401 close.
  *  - The server builds its context during the handshake; a frame sent
  *    immediately after `open` can be refused as not-ready. Wait out a short
  *    settle window before the first frame — there is no explicit ready frame.
@@ -332,9 +338,9 @@ function liftTenantFromBase(
  *    handshake and a refused `connect` trigger, which each push an `error` and
  *    then close with code 4401.
  *  - PRESENCE frames (only on a `presence: true` channel) carry a roster:
- *    `presence_full` → `payload.members` (an ARRAY — the one sent at join
- *    EXCLUDES the receiving client, so the first joiner gets `[]`; the one a
- *    `{ action: "presence" }` re-request answers includes it),
+ *    `presence_full` → `payload.members` (an ARRAY, in no guaranteed order, that
+ *    INCLUDES the receiving client, both at join and on a `{ action: "presence" }`
+ *    re-request),
  *    `presence_join`/`presence_leave` → `payload.member` (a single entry). A member is
  *    `{ id, dbo_id, authenticated, extras, joined_at }` — `id` is the auth row id
  *    as a string (`"0"` for an anonymous client), `dbo_id` the auth table's id

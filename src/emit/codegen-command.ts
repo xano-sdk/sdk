@@ -113,7 +113,6 @@ import { resolveFrameworkValue, resolveFrontendPreset } from "./frontend-resolve
 import { detectPackageManager, installCommandFor } from "./package-manager.js";
 import { resolveThemeChoice } from "./theme-resolve.js";
 import {
-  valueProblem,
   isRepresentableName,
   renderWorkspaceEnvExample,
   renderWorkspaceEnvFile,
@@ -523,13 +522,10 @@ export function routeManifestFor(
  * impossible for a secret to reach the committed template.
  */
 export function envExampleNames(env: Readonly<Record<string, string>>): EnvExampleName[] {
-  return Object.entries(env).map(([name, value]) => {
-    // A name the format cannot carry is as unwritable as a value it cannot
-    // carry, and for the same reason — the template's `# NAME=` line has to
-    // parse back as the name it claims.
-    const problem = !isRepresentableName(name) ? "name" : valueProblem(value);
-    return { name, representable: problem === undefined, ...(problem === undefined ? {} : { problem }) };
-  });
+  // The template's `# NAME=` line has to parse back as the name it claims. Only
+  // the NAME decides: a value-derived note made the committed file depend on
+  // the gitignored `xano/.env`, so `--check`, which has no values, never matched.
+  return Object.keys(env).map((name) => ({ name, representable: isRepresentableName(name) }));
 }
 
 /**
@@ -849,8 +845,8 @@ export function writeDocumentationTokens(
  * theirs to keep, the same way its documentation tokens land in
  * `.secrets.json`. `--no-secrets` declines both, and says so.
  *
- * An EMPTY value is written too, as `NAME=`: the bundle stores the name as
- * empty, and a deploy reads `NAME=` as supplied-empty — so the round trip keeps
+ * An EMPTY value is written too, as `NAME=""`: the bundle stores the name as
+ * empty, and a deploy reads `NAME=""` as supplied-empty — so the round trip keeps
  * it empty instead of refusing it as unsupplied. An existing `xano/.env` (a
  * re-run) is never replaced here — that is `env pull`'s job, behind its
  * confirmation.
@@ -922,7 +918,7 @@ export function writeBundleEnvValues(
           filled.length === 0 ? "" : `${filled.length} value${filled.length === 1 ? "" : "s"} (${safeNames(filled)})`,
           empty.length === 0
             ? ""
-            : `${empty.length} name${empty.length === 1 ? "" : "s"} the bundle stores empty, as \`NAME=\` so a deploy ` +
+            : `${empty.length} name${empty.length === 1 ? "" : "s"} the bundle stores empty, as \`NAME=""\` so a deploy ` +
               `keeps ${empty.length === 1 ? "it" : "them"} empty (${safeNames(empty)})`,
         ]
           .filter((part) => part !== "")

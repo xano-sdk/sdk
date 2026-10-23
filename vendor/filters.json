@@ -883,7 +883,7 @@
     "escape": {
       "result": "text",
       "group": "text",
-      "description": "Converts special characters into their escaped variants. Ex: for tabs and"
+      "description": "Converts special characters into their escaped variants. Ex: for tabs and for newlines."
     },
     "list_encodings": {
       "result": "text[]",
@@ -2257,7 +2257,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Return the entries from the first array that are not in the second"
+      "description": "Return the entries from the first array that are not in the second array. Only values are used for matching."
     },
     "array_diff_assoc": {
       "args": [
@@ -2268,7 +2268,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Return the entries from the first array that are not in the second"
+      "description": "Return the entries from the first array that are not in the second array. Values and keys are used for matching."
     },
     "array_intersect": {
       "args": [
@@ -2279,7 +2279,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Return the entries from the first array that are also present in"
+      "description": "Return the entries from the first array that are also present in the second array. Only values are used for matching."
     },
     "array_intersect_assoc": {
       "args": [
@@ -2290,7 +2290,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Return the entries from the first array that are also present in"
+      "description": "Return the entries from the first array that are also present in the second array. Values and keys are used for matching."
     },
     "array_merge": {
       "args": [
@@ -2301,7 +2301,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Merge the first level of elements of both arrays together and"
+      "description": "Merge the first level of elements of both arrays together and return the new array"
     },
     "array_merge_recursive": {
       "args": [
@@ -2312,7 +2312,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Merge the elements from all levels of both arrays together and"
+      "description": "Merge the elements from all levels of both arrays together and return the new array"
     },
     "array_push": {
       "args": [
@@ -2364,7 +2364,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Remove any elements from the array that match the supplied value"
+      "description": "Remove any elements from the array that match the supplied value and then return the new array"
     },
     "num_min": {
       "args": [
@@ -2430,7 +2430,7 @@
       ],
       "result": "bool",
       "group": "comparison",
-      "description": "Returns a boolean if the left value is greater than or equal to the"
+      "description": "Returns a boolean if the left value is greater than or equal to the right value"
     },
     "lt": {
       "args": [
@@ -2513,7 +2513,7 @@
       ],
       "result": "int",
       "group": "text",
-      "description": "Returns the index of the case-sensitive expression or false if it"
+      "description": "Returns the index of the case-sensitive expression or false if it can't be found"
     },
     "stripos": {
       "args": [
@@ -2524,7 +2524,7 @@
       ],
       "result": "int",
       "group": "text",
-      "description": "Returns the index of the case-insensitive expression or false if it"
+      "description": "Returns the index of the case-insensitive expression or false if it can't be found"
     },
     "array_fill": {
       "args": [
@@ -2567,7 +2567,7 @@
     "array_entries": {
       "result": "any[]",
       "group": "array",
-      "description": "Get the property entries of an object/array as a numerically"
+      "description": "Get the property entries of an object/array as a numerically indexed array of key/value pairs."
     },
     "to_epochms": {
       "args": [
@@ -2579,7 +2579,7 @@
       ],
       "result": "epochms",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to timestamp comparible format."
     },
     "to_epoch_ms": {
       "args": [
@@ -2591,7 +2591,7 @@
       ],
       "result": "int",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the number of milliseconds since the unix epoch."
     },
     "to_epoch_sec": {
       "args": [
@@ -2603,7 +2603,7 @@
       ],
       "result": "int",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the number of seconds since the unix epoch."
     },
     "to_epoch_minute": {
       "args": [
@@ -2615,7 +2615,7 @@
       ],
       "result": "int",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the number of minutes since the unix epoch."
     },
     "to_epoch_hour": {
       "args": [
@@ -2627,7 +2627,7 @@
       ],
       "result": "int",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the number of hours since the unix epoch."
     },
     "to_epoch_day": {
       "args": [
@@ -2639,7 +2639,7 @@
       ],
       "result": "int",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the number of days since the unix epoch."
     },
     "crypto_jws_encode": {
       "args": [
@@ -2810,7 +2810,7 @@
       ],
       "result": "text",
       "group": "timestamp",
-      "description": "Converts a timestamp into a human readable formatted date based on"
+      "description": "Converts a timestamp into a human readable formatted date based on the supplied format"
     },
     "epochms_transform": {
       "args": [
@@ -2826,7 +2826,7 @@
       ],
       "result": "text",
       "group": "timestamp",
-      "description": "Takes a timestamp and applies a relative transformation to it. Ex."
+      "description": "Takes a timestamp and applies a relative transformation to it. Ex. -7 days, last Monday, first day of this month"
     },
     "epochms_add_secs": {
       "args": [
@@ -2870,7 +2870,7 @@
       ],
       "result": "text[]",
       "group": "text",
-      "description": "Return the first set of matches performed by a regular expression"
+      "description": "Return the first set of matches performed by a regular expression on the supplied subject text."
     },
     "regex_match_all": {
       "args": [
@@ -2881,7 +2881,7 @@
       ],
       "result": "text[]",
       "group": "text",
-      "description": "Return all matches performed by a regular expression on the"
+      "description": "Return all matches performed by a regular expression on the supplied subject text."
     }
   }
 }

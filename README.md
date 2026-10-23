@@ -45,11 +45,6 @@ npm run dev                              # 3. start the frontend, already wired 
 <div align="center">
 
 **From an empty folder to a running full-stack app, without signing up.**
-Write with AI · Run locally · Deploy to Xano. `init` writes a TypeScript backend and a React
-or Svelte frontend. The **Xano Engine** runs that backend on your laptop: no account, no
-network round-trip, and your data kept between redeploys. Your agent changes the code, you
-redeploy in seconds. When it's ready to share, `npm run xano:deploy:ephemeral` puts the same
-code on a live URL on Xano.
 
 Every command is `npx @xano/sdk <cmd>`: inside a project it runs the installed SDK, anywhere else the latest release.
 
@@ -92,7 +87,7 @@ SOC 2 Type II, ISO 27001, HIPAA and GDPR coverage ([trust center](https://securi
 
 - **🛤️ Guardrails ahead of every change.** One set of rules for every person and every agent:
   `export --strict` fails CI on any warning, `deploy --test` stops on a failing suite, and
-  `promote` refuses anything missing. Agents move fast because they can't leave the line.
+  `promote` refuses anything missing.
 
 - **📦 TypeScript is the source of truth.** Tables, endpoints, functions, triggers, tasks,
   middleware, AI toolsets: typed TS in your repo. Review it in PRs, diff it, roll it back.
@@ -107,9 +102,6 @@ SOC 2 Type II, ISO 27001, HIPAA and GDPR coverage ([trust center](https://securi
 ---
 
 ## Quickstart
-
-The three commands at the top of this page are the whole local loop. Here it is one step at a
-time, then out to the cloud.
 
 **1. Scaffold.** No sign-in needed. `init` writes a Vite frontend under `frontend/` (React 19 +
 shadcn/ui by default, SvelteKit with `--framework svelte`, none with `--framework none`), a Xano
@@ -165,15 +157,17 @@ has the two-line setup and the one rule that bites.
 
 ## Xano, on your machine
 
-Xano has always been a hosted platform. The **Xano Engine** is the whole Xano backend,
+The **Xano Engine** is the whole Xano backend,
 packaged to run on your laptop: a single binary with Postgres built in. `npx @xano/sdk deploy`
 brings one up and deploys into it; it is where a deploy goes by default.
 
 - **No account, no network.** A Xano Engine needs no sign-in, a cached one deploys offline,
-  and every import runs on your machine. It's the easiest way to try Xano, and your coding
-  agent can iterate against a real backend without credentials.
-- **Your data stays put.** `--keep-data` merges each deploy into what the last one left, so
-  rows you entered through the app survive the edit. `--reset` starts over and re-seeds.
+  and every import runs on your machine. Your coding agent iterates against a real backend
+  without credentials.
+- **Your data stays put across redeploys.** `--keep-data` merges each deploy into what the last
+  one left, so rows you entered through the app survive the edit. Rows survive only in tables
+  and columns that keep their names, and an engine restart or update starts empty (the next
+  deploy seeds). `--reset` starts over and re-seeds.
 - **The Xano editor, locally.** Every deploy prints a sign-in link to the Xano editor running
   on the engine, so you can browse your tables and see what your code compiled to in Canvas
   View and the Function Stack.
@@ -255,9 +249,9 @@ export default workspace("blog")
 
 Tab-complete `s.` to discover the entire statement catalog: `s.db.*`, `s.math.*`,
 `s.array.*`, `s.text.*`, `s.storage.*`, `s.api.*`, `s.cloud.*`, control flow, AI agent runs,
-and more. **All 218 engine statement surfaces are authorable**: every field name matches
+and more. **All 219 engine statement surfaces are authorable**: every field name matches
 the Xano engine, and the emitted shape is checked against bytes a real engine stored. Where
-a surface has no stored instance behind it yet, it is built from the engine's own schema;
+a surface has no stored instance behind it, it is built from the engine's own schema;
 [Coverage](https://github.com/xano-sdk/sdk/blob/main/guides/coverage.md) says which is which.
 
 Give a table a `seed` array and those rows ship into the database on deploy, so a fresh
@@ -312,9 +306,10 @@ async function createPost(body: NewPost): Promise<Post> {
 }
 ```
 
-- **`routePath("GET blog/{slug}", { slug })`** → the endpoint path, resolved from your code
-  (or the frozen `xano.lock`). Keys are `"<VERB> <name>"` and are checked at compile time,
-  `{param}` names included: a backend rename is a compile error rather than a 404.
+- **`routePath("POST posts")`** → the endpoint path, resolved from your code (or the frozen
+  `xano.lock`). Keys are `"<VERB> <name>"` and are checked at compile time; a path with
+  `{param}`s takes them as a second argument, names checked too. A backend rename is a
+  compile error rather than a 404.
 - **`RouteInputs["POST posts"]`** → the request-payload type, under the same keys
   (`ChannelInputs`/`MessageInputs` for realtime); `InferInput<typeof q>` is the def-side twin.
 - **`InferRow<typeof post>`** / **`InferResponse<typeof someQuery>`** → the table's row type
@@ -343,9 +338,9 @@ npm run xano:deploy                          # → your workspace, running on yo
 ```
 
 Object identities are preserved, so cross-references stay intact, and a statement this SDK
-does not model yet round-trips verbatim rather than breaking the pull. Then it checks its own
-work: the tree it just wrote is loaded, exported, and diffed against the workspace it came
-from, so "it compiled" and "it means the same thing" are separate claims and you get both.
+does not model round-trips verbatim rather than breaking the pull. Then it re-exports
+the tree it wrote and diffs it against the workspace it came from (`--skip-roundtrip`
+skips this).
 
 > ⚠️ **After a pull, `xano/` is your source**: edit it and commit it. A pull carries schema
 > only (no table rows or stored files), and deploying it is a *full replace* of the target,
@@ -377,8 +372,8 @@ In Claude Code: `/plugin marketplace add xano-sdk/sdk`, then `/plugin install xa
 
 Code moves through three places: the **Xano Engine** on your machine, a disposable
 **ephemeral** on Xano's cloud, and your **workspace**. `deploy` reaches the first two.
-Reaching anything real goes through a **release**: the stored record that this code came up
-and answered: `deploy --ephemeral --test`, then `release create v1`, then `promote v1`.
+Reaching anything real goes through a **release**, a stored snapshot of code that deployed
+and passed its tests: `deploy --ephemeral --test`, then `release create v1`, then `promote v1`.
 
 | Command | Project shortcut (adds a typecheck) | Where it goes |
 |---|---|---|
@@ -390,15 +385,16 @@ and answered: `deploy --ephemeral --test`, then `release create v1`, then `promo
 | `npx @xano/sdk deploy --to <dest>` |  | The **escape hatch**: merges a local build straight into `workspace` or `tenant:<name>`, skipping the release record. |
 | `npx @xano/sdk publish <dir>` | `npm run xano:deploy:frontend` | **Just the frontend**: an already-built directory onto the Xano Engine or ephemeral you last deployed to, `workspace`, or `tenant:<name>`. The retry when a frontend fails after its backend landed. |
 
-Every `deploy` is a **full replace** of the disposable environment, table records included,
-unless `--keep-data` merges. Promoting is the opposite by design: it changes what your code
-defines and keeps every row. Tables are shared by every branch, so a release that alters one
-is refused without `--allow-shared-schema-changes`. `--branch <label>` lands on a non-live
-branch and `--set-live` promotes it. A release name is refused rather than resolved when it
-already exists. On `deploy --to workspace` (never `promote`), `--backup-branch` first
-snapshots live's logic, not its shared tables, for a one-`set-live` rollback.
-`deploy --to workspace` refuses to overwrite an object edited in Xano since your last deploy or
-pull (`workspace diff` lists them); pull first, or pass `--overwrite`.
+- Every `deploy` is a **full replace** of the disposable environment, table records included,
+  unless `--keep-data` merges.
+- `promote` changes what your code defines and keeps every row. Tables are shared by every
+  branch, so a release that alters one is refused without `--allow-shared-schema-changes`.
+- `--branch <label>` lands on a non-live branch and `--set-live` promotes it.
+- `release create` and `release transfer` refuse a release name that already exists.
+- On `deploy --to workspace` (never `promote`), `--backup-branch` first
+  snapshots live's logic, not its shared tables, for a one-`set-live` rollback.
+- `deploy --to workspace` refuses to overwrite an object edited in Xano since your last deploy
+  or pull (`workspace diff` lists them); pull first, or pass `--overwrite`.
 
 `npx @xano/sdk status` answers where you stand in one read: who you are signed in as, which
 instance and workspace, and the backend this project last deployed to. Every flag, the
@@ -416,10 +412,10 @@ npx @xano/sdk test run-all --on workspace        # or your real workspace
 ```
 
 A failing suite exits **5**, distinct from a crash, so CI can tell the two apart. To deploy
-and prove it in one step, `npx @xano/sdk deploy ./xano/index.ts --test`. A test's `datasource` is
-stored on the test and cloned before every run, so read
-[Object kinds](https://github.com/xano-sdk/sdk/blob/main/guides/object-kinds.md) before
-pointing one at your real workspace.
+and prove it in one step, `npx @xano/sdk deploy ./xano/index.ts --test`. A test's non-empty `datasource` is
+stored on the test and cloned before every run, so a test left on `"live"` clones your real
+database when it runs against the workspace
+([Object kinds](https://github.com/xano-sdk/sdk/blob/main/guides/object-kinds.md)).
 
 ---
 

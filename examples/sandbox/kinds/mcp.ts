@@ -7,7 +7,7 @@
  * (`registerPrompts` / `registerResources`) and exposed by listing them on the
  * server. They are an MCP server feature — an `agent()` takes tools only.
  */
-import { mcpServer, mcpServerTrigger, prompt, resource, tool, hostedFile, s, c, ref, inp, expr, input, fl, env } from "@xano/sdk";
+import { mcpServer, mcpServerTrigger, prompt, resource, tool, hostedFile, s, c, ref, inp, expr, input, fl, env, guard } from "@xano/sdk";
 import { posts, users } from "../_shared.js";
 
 /**
@@ -73,7 +73,8 @@ export const summarizePrompt = prompt({
     post_id: input.int({ required: true, description: "The post to summarize" }),
     tone: input.enum(["neutral", "casual"], { description: "How the summary should read" }),
   },
-  stack: [s.db.get({ table: posts, fieldValue: inp("post_id"), as: "post" })],
+  // An unknown id is a clean not-found, not the 500 a drill into a missed row raises.
+  stack: [s.db.get({ table: posts, fieldValue: inp("post_id"), as: "post" }), guard.found("post", { message: "Post not found." })],
   response: ref("post.title"),
 });
 
@@ -119,8 +120,10 @@ export const fullMcpServer = mcpServer({
 /**
  * Gate 7 — the connection trigger. `t` carries the server's `tools`, `prompts`
  * and `resources`; the response decides what this connection lists. A key
- * returned filtered narrows that list (here: no resources), and a key left out
- * lists everything assigned. Omit `response` to pass all four through.
+ * returned filtered narrows that list (here: no resources), and a `prompts` or
+ * `resources` key left out lists everything assigned. `toolset` and `tools` must
+ * always be returned: the server reads both, and a response missing either
+ * breaks it for every client. Omit `response` to pass all four through.
  */
 export const fullMcpServerOnConnect = mcpServerTrigger({
   name: "ex_kind_mcp_full_on_connect",

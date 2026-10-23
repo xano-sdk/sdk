@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -34,8 +34,8 @@
       ]
     },
     "statements": {
-      "implemented": 218,
-      "total": 218
+      "implemented": 219,
+      "total": 219
     },
     "filters": {
       "typed": 246,
@@ -52,7 +52,7 @@
       {
         "name": "c.int",
         "signature": "(n: number | bigint | string) => Value",
-        "description": "Integer constant → tag \"const:int\". The engine stores integers as STRINGS and has no 53-bit limit, so pass a string or bigint for anything past Number.MAX_SAFE_INTEGER — c.int(\"9223372036854775807\") is exact where the number literal for it is already …808. A number that is not a safe integer THROWS rather than encoding the rounded value. The VALUE encodes at any width, but an `f.int` COLUMN is signed 64-bit and CLAMPS past its ceiling rather than failing — see `llms/fields.md`."
+        "description": "Integer constant → tag \"const:int\". The engine stores integers as STRINGS and has no 53-bit limit, so pass a string or bigint for anything past Number.MAX_SAFE_INTEGER — c.int(\"9223372036854775807\") is exact where the number literal for it is already …808. A number that is not a safe integer THROWS rather than encoding the rounded value. For the int64 clamp of an `f.int` column see `llms/fields.md`."
       },
       {
         "name": "c.decimal",
@@ -62,7 +62,7 @@
       {
         "name": "c.blank",
         "signature": "(tag: \"const:<type>\") => Value",
-        "description": "The editor's UNCONFIGURED value box (stored value \"\"), emitted by codegen for a pulled workspace — do not author it. NOT a zero or an empty collection: the engine reads \"\" and \"0\" differently, so c.blank(\"const:int\") ≠ c.int(0) and neither canonicalizes into the other. Constant tags except const/const:obj, whose blanks are c.text(\"\")/c.obj(null)."
+        "description": "The editor's UNCONFIGURED value box (stored value \"\"), emitted by codegen for a pulled workspace — do not author it. NOT a zero or an empty collection: the engine reads \"\" and \"0\" differently, so c.blank(\"const:int\") ≠ c.int(0) and neither canonicalizes into the other. Valid for every constant tag except `const` and `const:obj`; their blanks are `c.text(\"\")` and `c.obj(null)`."
       },
       {
         "name": "c.bool",
@@ -77,7 +77,7 @@
       {
         "name": "c.obj",
         "signature": "(o?: Json | null) => Value",
-        "description": "Object constant → tag \"const:obj\". A populated one stores an empty {} carrying one `set` filter per key — the editor's form, and the only populated form the engine reads back (a populated JSON string arrives truncated and fails the request with ERROR_FATAL \"Unable to decode.\"). ⚠ a ZERO-BASED numeric key is an INDEX in the engine's data model, so c.obj({\"0\":\"a\"}) evaluates to the list [\"a\"] (a non-zero-based one like {\"2\":…} survives as a key) — that is the platform, not this encoding. Write c.array([...]) for a list, or prefix the keys (\"k0\") for an object; `export()` warns. No argument = the empty object {} — use this one. Explicit null = the legacy blank form the engine evaluates to null, NOT {}; it exists only so a pulled workspace round-trips, do not author it. Plain JSON literals only — a nested tagged value (inp/ref/auth/c.*) is rejected; for a computed object response use a record of values, not c.obj."
+        "description": "Object constant → tag \"const:obj\". A populated one stores an empty {} carrying one `set` filter per key (a populated JSON string fails the request with ERROR_FATAL \"Unable to decode.\"). ⚠ A ZERO-BASED numeric key is an INDEX: c.obj({\"0\":\"a\"}) evaluates to the list [\"a\"] ({\"2\":…} stays a key) — write c.array([...]) for a list, or prefix the keys (\"k0\") for an object; `export()` warns. c.obj() is the empty object {}. c.obj(null) is a pulled-workspace blank that evaluates to null; do not author it. Plain JSON literals only — a nested tagged value (inp/ref/auth/c.*) is rejected; for a computed object use a record of values."
       },
       {
         "name": "c.array",
@@ -87,7 +87,7 @@
       {
         "name": "c.expression",
         "signature": "(source: string) => Value",
-        "description": "Xano Expression Engine source, passed through VERBATIM → tag \"const:expr2\". The string IS the expression: c.expression('\"Hi, \" ~ $input.name'), c.expression(\"$var.price * $var.qty\"). ⚠️ NOT VALIDATED — never parsed or type-checked, invisible to InferResponse, and untouched by a rename that updates every typed ref(); a typo surfaces at runtime or as a wrong answer. Use it ONLY for syntax the typed surfaces cannot express (~ concatenation, inline arithmetic, conditionals) — prefer ref/inp/col, withFilters+fl.*, and obj() (which BUILDS a checked expression). Not the expr() condition builder."
+        "description": "Xano Expression Engine source, passed through VERBATIM → tag \"const:expr2\". The string IS the expression: c.expression('\"Hi, \" ~ $input.name'), c.expression(\"$var.price * $var.qty\"). ⚠ Unvalidated: not parsed, typed (invisible to InferResponse), or renamed with refs; a typo surfaces at runtime. Use only for syntax typed surfaces lack (`~`, inline arithmetic, conditionals); otherwise prefer ref/inp/col, withFilters+fl.*, and obj() (which builds a checked expression). Not the expr() condition builder."
       },
       {
         "name": "c.expressionLegacy",
@@ -98,12 +98,12 @@
       {
         "name": "c.now",
         "signature": "() => Value",
-        "description": "Current time as epoch-ms — the engine-native const:epochms constant (no filter). Valid inline as a where/cmp operand. For cutoff math (cutoff = now - max_age) either compare inline or, for reuse/readability, hoist it into an s.set_var and compare against the var."
+        "description": "Current time as epoch-ms — the engine-native const:epochms constant. Valid inline as a where/cmp operand."
       },
       {
         "name": "obj",
         "signature": "(fields: Record<string, Value | nested>) => ObjValue<typeof fields>",
-        "description": "Dynamic object value → tag \"const:expr2\" (an object-literal expression string). The dynamic sibling of c.obj: members may be inp/ref/auth values, env()/setting()/sys.*, c.now(), c.* constants, nested records, or arrays — and each member may carry a FILTER CHAIN (withFilters + fl.*), which renders as the expression pipe `$var.row|get:\"a.b\"`. A null-safe ref(path, { safe: true }) works inside an obj() member directly. The member record rides the return type, so InferResponse (through a set_var too) resolves each member like a top-level response key — `response: { user: obj({ id: ref(\"row.id\") }) }` derives `{ user: { id: Col | null } }`, and a raw nested object literal (`response: { user: { id: ref(\"row.id\") } }`, auto-wrapped through this) derives the same. A constant record or list has two spellings that both work and render identically: bare (`{ a: 1 }`, `[]`) or `c.obj(...)`/`c.array([...])` — prefer the bare form. An inner obj() nests, same bytes as a raw record. The legacy blank `c.obj(null)` is refused here (it evaluates to null, not {}) — write c.null() or c.obj(). Still rejected: a filter ARGUMENT that carries its own chain or is a c.now() (a trailing | binds to the whole value, not one argument, and c.now() needs one), a DISABLED filter (an expression string cannot record that), and the output/response/trycatch/toolset/reg tags (a type error) — set_var those first and ref() them."
+        "description": "Dynamic object value → tag \"const:expr2\" (an object-literal expression string); the dynamic sibling of c.obj.\n  - Members: inp/ref/auth values, env()/setting()/sys.*, c.now(), c.* constants, nested records, or arrays. Each may carry a FILTER CHAIN (withFilters + fl.*), rendered as the expression pipe `$var.row|get:\"a.b\"`. A null-safe ref(path, { safe: true }) works in a member directly. An inner obj() nests, same bytes as a raw record.\n  - InferResponse (through a set_var too) resolves each member like a top-level response key: `response: { user: obj({ id: ref(\"row.id\") }) }` derives `{ user: { id: Col } }`, and a raw nested object literal (`response: { user: { id: ref(\"row.id\") } }`, auto-wrapped through this) derives the same.\n  - A constant record or list has two spellings that both work and render identically: bare (`{ a: 1 }`, `[]`) or `c.obj(...)`/`c.array([...])` — prefer the bare form.\n  - Rejected: the blank `c.obj(null)` is refused here (write c.null() or c.obj()); a filter ARGUMENT that carries its own chain or is a c.now(); a DISABLED filter; the output/response/trycatch/toolset/reg tags (a type error) — set_var those first and ref() them."
       },
       {
         "name": "ref",
@@ -113,7 +113,7 @@
       {
         "name": "inp",
         "signature": "(name: string) => Value",
-        "description": "Reference a function/endpoint input → tag \"input\". Resolves ONLY against the `input` block of the def it sits in — a value produced earlier in the stack is `ref(\"var.field\")`, not `inp(\"field\")`. A name that is not declared here deploys clean and fails at runtime with ERROR_FATAL \"Unable to locate input: <name>\" on every branch that reads it; `export()` warns, and `--strict` fails the build. Sending the name in the request does NOT rescue it — an undeclared input is never bound, so the call fails identically with the value present. A dotted path drills INTO a declared input (`inp(\"action.amount\")` needs a declared `action`)."
+        "description": "Reference a function/endpoint input → tag \"input\". Resolves ONLY against the `input` block of the def it sits in — a value produced earlier in the stack is `ref(\"var.field\")`, not `inp(\"field\")`. A name that is not declared here deploys clean and fails at runtime with ERROR_FATAL \"Unable to locate input: <name>\" on every branch that reads it; `export()` warns, and `--strict` fails the build. Sending the name in the request does NOT rescue it. A dotted path drills INTO a declared input (`inp(\"action.amount\")` needs a declared `action`). ⚠ An omitted/`null` optional input binds its EMPTY value (`\"\"`/`0`/`false`/`[]`/`{}`; `\"\"` for an enum), not null — only a type whose input defaults to `nullable: true` (vector, uuid, date, timestamp, file types; `llms/fields.md`) or one set `nullable: true` binds null. An omitted optional `input.geo.*` is not bound at all."
       },
       {
         "name": "col",
@@ -122,8 +122,8 @@
       },
       {
         "name": "auth",
-        "signature": "(path?: string) => Value",
-        "description": "Reference the authenticated identity (auth(\"id\") → $auth.id) → tag \"auth\"."
+        "signature": "(path: string) => Value",
+        "description": "Reference the authenticated identity (auth(\"id\") → $auth.id) → tag \"auth\". The PATH is required: the engine cannot read a bare auth, so auth(\"\") throws. A token minted with extras exposes its claims at auth(\"extras.<key>\") (auth(\"extras\") is the whole map); a key absent from the token is a 500, not null."
       },
       {
         "name": "caught",
@@ -138,7 +138,7 @@
       {
         "name": "env",
         "signature": "(name: string) => Value",
-        "description": "Read a WORKSPACE environment variable (set via workspaceConfig({ env }) or the dashboard) → `$env.NAME`. Compiles to tag \"setting\" with the plain name. env(\"remote_ip\") reads a user var named remote_ip, not the caller IP — use sys.remoteIp() for that. A name that does not exist resolves to NULL rather than erroring, so a typo deploys clean and fails downstream of the value: prefer typedEnv(config), which turns the names that config declares into properties (E.STRIPE_KEY), and export() warns stack.env-undeclared on any env() or bare setting() outside the declared set once a config declares env at all."
+        "description": "Read a WORKSPACE environment variable (set via workspaceConfig({ env }) or the dashboard) → `$env.NAME`. Compiles to tag \"setting\" with the plain name.\n  - Every value is TEXT (or null), edge whitespace trimmed on read: compare a flag against c.text(\"true\"), not c.bool(true) (under loose `=`, FLAG=false equals c.bool(true)); a numeric use needs fl.to_int/fl.to_decimal.\n  - env(\"remote_ip\") reads a user var named remote_ip, not the caller IP — use sys.remoteIp().\n  - A name that does not exist resolves to NULL rather than erroring, so a typo deploys clean: prefer typedEnv(config), which turns the names that config declares into properties (E.STRIPE_KEY). Once a config declares env, export() warns stack.env-undeclared on any env() or bare setting() outside the declared set."
       },
       {
         "name": "setting",
@@ -239,7 +239,7 @@
           "authorFactory": "realtimeTrigger",
           "objType": "workspace_realtime_channel",
           "legacy": true,
-          "description": "the SUPERSEDED realtime trigger, against the workspace-global realtime layer — a different object from the current `channel`, despite the similar name. For a join hook use `realtimeChannelTrigger({ actions: { join: true } })`; for message handling use a `realtimeMessage()` handler, which is the current equivalent of its `message` action (a message is an authored unit now, not a trigger action)."
+          "description": "the SUPERSEDED realtime trigger, against the workspace-global realtime layer — a different object from the current `channel`, despite the similar name. For a join hook use `realtimeChannelTrigger({ actions: { join: true } })`; for message handling use a `realtimeMessage()` handler, which is the equivalent of its `message` action (a message is its own object, not a trigger action)."
         },
         {
           "authorFactory": "realtimeServerTrigger",
@@ -318,7 +318,7 @@
       "kind": "task",
       "payloadKey": "task",
       "authorFactory": "task",
-      "description": "A scheduled background job (cron/interval) that runs a stack on a timer.",
+      "description": "A scheduled background job that runs a stack on a fixed interval (no cron).",
       "registerMethod": "registerTasks",
       "registered": true
     },
@@ -326,7 +326,7 @@
       "kind": "workflow_test",
       "payloadKey": "workflow_test",
       "authorFactory": "workflowTest",
-      "description": "An end-to-end test: a named stack with NO input and NO response that invokes other objects (`s.function.call`, `s.task.call`, `s.api.call`) and asserts on what they bind with `s.expect.*`. `datasource` defaults to `\"\"` (an EMPTY datasource, recommended); naming one CLONES it before every run — see `llms/kinds-core.md`.",
+      "description": "An end-to-end test: a named stack with NO input and NO response that invokes other objects (`s.function.call`, `s.task.call`, `s.api.call`) and asserts on what they bind with `s.expect.*`. `datasource`: `llms/kinds-core.md`.",
       "registerMethod": "registerWorkflowTests",
       "registered": true
     },
@@ -334,7 +334,7 @@
       "kind": "middleware",
       "payloadKey": "middleware",
       "authorFactory": "middleware",
-      "description": "A reusable pre/post stack attached to a query/function/task/tool/API group to run before or after its own logic.",
+      "description": "A reusable pre/post stack attached to a host (query, function, task, tool, API group, prompt, resource, realtime server/channel/message) to run before or after its own logic.",
       "registerMethod": "registerMiddleware",
       "registered": true
     },
@@ -382,7 +382,7 @@
       "kind": "knowledge",
       "payloadKey": "knowledge",
       "authorFactory": "knowledge",
-      "description": "Markdown shared by every AI that builds the backend — Xano's own AI (the builder agent, Meta API / MCP readers) and a local coding agent reading the same files — never an `agent()` run: an `agents.md` of standing instructions, a `skill`, or a `doc`. The body is a real markdown FILE via `knowledgeFile(\"./x.md\", import.meta.url)`, and `mode` decides how much of it reaches the agent.",
+      "description": "Markdown for the AIs that build the backend (never an `agent()` run): an `agents.md` of standing instructions, a `skill`, or a `doc`. The body is a markdown FILE via `knowledgeFile(\"./x.md\", import.meta.url)`; readers and `mode`: `llms/kinds-knowledge.md`.",
       "registerMethod": "registerKnowledge",
       "registered": true
     },
@@ -2942,11 +2942,7 @@
           "type": "value",
           "optional": false
         }
-      ],
-      "result": {
-        "name": "as",
-        "type": "number"
-      }
+      ]
     },
     {
       "surface": "math.bitwise.and",
@@ -2966,11 +2962,7 @@
           "type": "value",
           "optional": false
         }
-      ],
-      "result": {
-        "name": "as",
-        "type": "number"
-      }
+      ]
     },
     {
       "surface": "math.bitwise.or",
@@ -2990,11 +2982,7 @@
           "type": "value",
           "optional": false
         }
-      ],
-      "result": {
-        "name": "as",
-        "type": "number"
-      }
+      ]
     },
     {
       "surface": "math.bitwise.xor",
@@ -3014,11 +3002,7 @@
           "type": "value",
           "optional": false
         }
-      ],
-      "result": {
-        "name": "as",
-        "type": "number"
-      }
+      ]
     },
     {
       "surface": "math.div",
@@ -3260,7 +3244,8 @@
       ],
       "result": {
         "name": "as",
-        "type": "[string, unknown][]"
+        "type": "{ key: string | number; value: unknown }[]",
+        "note": "each entry is a { key, value } OBJECT, NOT a [key, value] tuple; an integer-like key comes back as a number"
       }
     },
     {
@@ -3284,7 +3269,8 @@
       ],
       "result": {
         "name": "as",
-        "type": "string[]"
+        "type": "(string | number)[]",
+        "note": "an integer-like key comes back as a NUMBER (PHP coerces it), not a string"
       }
     },
     {
@@ -3372,6 +3358,13 @@
       "surface": "realtime.publish",
       "storedName": "mvp:realtime_publish",
       "sPath": "realtime.publish",
+      "registered": true,
+      "declarative": false
+    },
+    {
+      "surface": "realtime.kick",
+      "storedName": "mvp:realtime_kick",
+      "sPath": "realtime.kick",
       "registered": true,
       "declarative": false
     },
@@ -3794,7 +3787,7 @@
       "result": {
         "name": "as",
         "type": "boolean",
-        "note": "true when the plaintext matches the stored hash. ⚠ input.password double-hashes — pass input.text() plaintext"
+        "note": "true when the plaintext matches the stored hash. ⚠ not input.password — pass input.text() plaintext. ⚠ THROWS 500 on a non-hash hash_password (Invalid password syntax.)"
       }
     },
     {
@@ -3997,7 +3990,12 @@
           "type": "value",
           "optional": false
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "unknown",
+        "note": "the plaintext; takes encrypt's RAW bytes (fl.base64_decode() a stored base64 first). ⚠ THROWS 500 on a wrong key/iv or non-ciphertext — wrap in s.try_catch"
+      }
     },
     {
       "surface": "security.encrypt",
@@ -4104,7 +4102,12 @@
           "type": "value",
           "optional": true
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "unknown",
+        "note": "the decoded claims. ⚠ THROWS 500 ERROR_FATAL on ANY failure (bad/expired token, wrong key/algorithm, failed check_claims) — wrap in s.try_catch for a 401 (statements-calls.md)"
+      }
     },
     {
       "surface": "security.jwe_encode",
@@ -4222,7 +4225,12 @@
           "type": "value",
           "optional": true
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "unknown",
+        "note": "the decoded claims. ⚠ THROWS 500 ERROR_FATAL on ANY failure (bad/garbage/expired/tampered token, wrong key/signature_algorithm, failed check_claims) — wrap in s.try_catch for a 401 (statements-calls.md)"
+      }
     },
     {
       "surface": "security.jws_encode",
@@ -4296,7 +4304,12 @@
           "type": "value",
           "optional": true
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "string",
+        "note": "RAW bytes (encrypt too) — fl.bin2hex()/fl.base64_encode() before returning or storing; raw binary mangles in a JSON/text response"
+      }
     },
     {
       "surface": "security.random_number",
@@ -4693,7 +4706,12 @@
           "type": "value",
           "optional": true
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "XanoFileRef",
+        "note": "the stored file VALUE ({ access, path, name, type, size, mime, meta }) — write it into an f.attachment() cell. ⚠ include_meta: true binds the file's internal RECORD instead (id, guid, sig, the storage BUCKET name): never store it as the file value or return it (warns storage.include-meta-returned). type (also optional) coerces the kind when it is image/video/audio"
+      }
     },
     {
       "surface": "storage.create_audio",
@@ -5012,7 +5030,11 @@
           "type": "value",
           "optional": false
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "boolean"
+      }
     },
     {
       "surface": "text.ends_with",
@@ -5037,7 +5059,11 @@
           "type": "value",
           "optional": false
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "boolean"
+      }
     },
     {
       "surface": "text.icontains",
@@ -5062,7 +5088,11 @@
           "type": "value",
           "optional": false
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "boolean"
+      }
     },
     {
       "surface": "text.iends_with",
@@ -5087,7 +5117,11 @@
           "type": "value",
           "optional": false
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "boolean"
+      }
     },
     {
       "surface": "text.istarts_with",
@@ -5112,7 +5146,11 @@
           "type": "value",
           "optional": false
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "boolean"
+      }
     },
     {
       "surface": "text.ltrim",
@@ -5197,7 +5235,11 @@
           "type": "value",
           "optional": false
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "boolean"
+      }
     },
     {
       "surface": "text.trim",
@@ -5237,6 +5279,11 @@
           "name": "value",
           "type": "value",
           "optional": false
+        },
+        {
+          "name": "status",
+          "type": "number",
+          "optional": true
         }
       ]
     },
@@ -5320,7 +5367,7 @@
       "result": {
         "name": "as",
         "type": "unknown",
-        "note": "inside an ATTACHED middleware it is a { type, vars } envelope whose vars DIFFERS BY PHASE: pre → the request inputs; post → { status, result } (plus payload on an error), NOT the request — read the request in post with s.util.get_raw_input. See llms/kinds-core.md"
+        "note": "inside an ATTACHED middleware it is a { type, vars } envelope whose vars DIFFERS BY PHASE: pre → the request inputs; post → { status, result }, NOT the request — read the request in post with s.util.get_raw_input. ⚠ status is the STRING \"ok\" | \"exception\" (NOT an HTTP code), so store it in a text column, not f.int(); on \"exception\", result is the { code, message, payload } error and payload is set. See llms/kinds-core.md"
       }
     },
     {
@@ -5337,7 +5384,12 @@
           "optional": true,
           "default": ""
         }
-      ]
+      ],
+      "result": {
+        "name": "as",
+        "type": "Record<string, string>",
+        "note": "every workspace env var (declared AND dashboard) as one { NAME: value } object, each value TEXT — so this binds every SECRET; never return it to a client or write it to a row"
+      }
     },
     {
       "surface": "util.get_input",
@@ -5793,7 +5845,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Return the entries from the first array that are not in the second"
+      "description": "Return the entries from the first array that are not in the second array. Only values are used for matching."
     },
     {
       "name": "array_diff_assoc",
@@ -5807,7 +5859,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Return the entries from the first array that are not in the second"
+      "description": "Return the entries from the first array that are not in the second array. Values and keys are used for matching."
     },
     {
       "name": "array_entries",
@@ -5815,7 +5867,7 @@
       "typed": true,
       "result": "any[]",
       "group": "array",
-      "description": "Get the property entries of an object/array as a numerically"
+      "description": "Get the property entries of an object/array as a numerically indexed array of key/value pairs."
     },
     {
       "name": "array_fill",
@@ -5908,7 +5960,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Return the entries from the first array that are also present in"
+      "description": "Return the entries from the first array that are also present in the second array. Only values are used for matching."
     },
     {
       "name": "array_intersect_assoc",
@@ -5922,7 +5974,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Return the entries from the first array that are also present in"
+      "description": "Return the entries from the first array that are also present in the second array. Values and keys are used for matching."
     },
     {
       "name": "array_keys",
@@ -5952,7 +6004,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Merge the first level of elements of both arrays together and"
+      "description": "Merge the first level of elements of both arrays together and return the new array"
     },
     {
       "name": "array_merge_recursive",
@@ -5966,7 +6018,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Merge the elements from all levels of both arrays together and"
+      "description": "Merge the elements from all levels of both arrays together and return the new array"
     },
     {
       "name": "array_pop",
@@ -6029,7 +6081,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Remove any elements from the array that match the supplied value"
+      "description": "Remove any elements from the array that match the supplied value and then return the new array"
     },
     {
       "name": "array_replace",
@@ -6132,7 +6184,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Merges `node` INTO every element matching `match` (loose comparison) and returns the array. An update-in-place for a list of records, where `array_replace` swaps the whole element."
+      "description": "Merges `node` into the FIRST element matching `match` (loose comparison) and returns the array; on a MISS it APPENDS `node` as a new element — an UPSERT, not an update-all. To update every match use `fl.map`/`s.array.map`. `array_replace` is also first-match-only but swaps the whole element and THROWS on a miss."
     },
     {
       "name": "array_values",
@@ -6266,8 +6318,8 @@
       "name": "bitwise_not",
       "fl": "fl.bitwise_not",
       "typed": true,
-      "result": "bool",
-      "group": "comparison",
+      "result": "int",
+      "group": "math",
       "description": "Returns the existing value with its bits flipped"
     },
     {
@@ -6806,7 +6858,7 @@
       ],
       "result": "text",
       "group": "timestamp",
-      "description": "Converts a timestamp into a human readable formatted date based on"
+      "description": "Converts a timestamp into a human readable formatted date based on the supplied format"
     },
     {
       "name": "epochms_from_format",
@@ -6842,9 +6894,9 @@
           "optional": true
         }
       ],
-      "result": "text",
+      "result": "int",
       "group": "timestamp",
-      "description": "Takes a timestamp and applies a relative transformation to it. Ex."
+      "description": "Takes a timestamp and applies a relative transformation to it. Ex. -7 days, last Monday, first day of this month"
     },
     {
       "name": "eq",
@@ -6866,7 +6918,7 @@
       "typed": true,
       "result": "text",
       "group": "text",
-      "description": "Converts special characters into their escaped variants. Ex: for tabs and"
+      "description": "JSON-string escaping, NOT HTML escaping: control characters become backslash sequences (newline as \\n, tab as \\t), and \" and / are backslash-escaped. <, >, & and ' pass through unchanged, so the result is not HTML-safe. Deprecated upstream in favor of text_escape."
     },
     {
       "name": "even",
@@ -6891,7 +6943,7 @@
           "optional": true
         }
       ],
-      "result": "any[]",
+      "result": "bool",
       "group": "array",
       "description": "Checks if all elements in the array pass the test implemented by the provided function."
     },
@@ -6935,7 +6987,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Returns a new array with only entries that are not empty (\"\", null, 0, \"0\", false, [], {})"
+      "description": "Returns a new array with only entries that are not empty (\"\", null, 0, \"0\", false, [], {}) The only one of the filter_* family that removes all of these; filter_empty_text, filter_null, filter_zero, filter_false, filter_empty_array and filter_empty_object each remove exactly one value, compared strictly."
     },
     {
       "name": "filter_empty_array",
@@ -6980,7 +7032,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Returns a new array with only entries that are not empty (\"\", null, 0, \"0\", false, [], {})"
+      "description": "Returns a new array without the empty-text entries: removes only \"\" (strict). null, 0, \"0\", false, [] and {} are kept; filter_empty removes all of them."
     },
     {
       "name": "filter_false",
@@ -7025,7 +7077,7 @@
       ],
       "result": "<T>[]",
       "group": "array",
-      "description": "Returns a new array with only entries that are not zero"
+      "description": "Returns a new array with only entries that are not zero Strict: removes only the integer 0, not \"0\" or 0.0."
     },
     {
       "name": "find",
@@ -7042,7 +7094,7 @@
           "optional": true
         }
       ],
-      "result": "any[]",
+      "result": "<T>",
       "group": "array",
       "description": "Finds if all elements in the array pass the test implemented by the provided function."
     },
@@ -7061,7 +7113,7 @@
           "optional": true
         }
       ],
-      "result": "any[]",
+      "result": "int",
       "group": "array",
       "description": "Finds the index of the first element in the array that passes the test implemented by the provided function."
     },
@@ -7202,7 +7254,7 @@
       ],
       "result": "bool",
       "group": "comparison",
-      "description": "Returns a boolean if the left value is greater than or equal to the"
+      "description": "Returns a boolean if the left value is greater than or equal to the right value"
     },
     {
       "name": "has",
@@ -7751,9 +7803,9 @@
       "name": "null",
       "fl": "fl.null",
       "typed": true,
-      "result": "null",
-      "group": "misc",
-      "description": "Returns a null value."
+      "result": "bool",
+      "group": "comparison",
+      "description": "Returns whether or not the value is null (is_null). Does not produce a null: use c.null() for that."
     },
     {
       "name": "num_max",
@@ -7916,7 +7968,7 @@
       "args": [
         {
           "name": "initial_value",
-          "type": "int"
+          "type": "any"
         },
         {
           "name": "code",
@@ -7928,7 +7980,7 @@
           "optional": true
         }
       ],
-      "result": "any[]",
+      "result": "any",
       "group": "array",
       "description": "Reduces the array to a single value using the code block to combine each element of the array."
     },
@@ -7944,7 +7996,7 @@
       ],
       "result": "text[]",
       "group": "text",
-      "description": "Return the first set of matches performed by a regular expression Direction: the piped value is the regex PATTERN; the `subject` argument is the text tested against it — reversed vs starts_with/contains. Build the pattern with c.regex(...) (delimiter-wrapped); a bare c.text(...) is rejected."
+      "description": "Return the first set of matches performed by a regular expression on the supplied subject text. Direction: the piped value is the regex PATTERN; the `subject` argument is the text tested against it — reversed vs starts_with/contains. Build the pattern with c.regex(...) (delimiter-wrapped); a bare c.text(...) is rejected."
     },
     {
       "name": "regex_match_all",
@@ -7958,7 +8010,7 @@
       ],
       "result": "text[]",
       "group": "text",
-      "description": "Return all matches performed by a regular expression on the Direction: the piped value is the regex PATTERN; the `subject` argument is the text tested against it — reversed vs starts_with/contains. Build the pattern with c.regex(...) (delimiter-wrapped); a bare c.text(...) is rejected."
+      "description": "Return all matches performed by a regular expression on the supplied subject text. Direction: the piped value is the regex PATTERN; the `subject` argument is the text tested against it — reversed vs starts_with/contains. Build the pattern with c.regex(...) (delimiter-wrapped); a bare c.text(...) is rejected."
     },
     {
       "name": "regex_quote",
@@ -8256,7 +8308,7 @@
           "optional": true
         }
       ],
-      "result": "any[]",
+      "result": "bool",
       "group": "array",
       "description": "Checks if at least one element in the array passes the test implemented by the provided function."
     },
@@ -8402,9 +8454,9 @@
           "type": "text"
         }
       ],
-      "result": "int",
+      "result": "int|false",
       "group": "text",
-      "description": "Returns the index of the case-insensitive expression or false if it"
+      "description": "Returns the index of the case-insensitive expression or false if it can't be found"
     },
     {
       "name": "strlen",
@@ -8424,9 +8476,9 @@
           "type": "text"
         }
       ],
-      "result": "int",
+      "result": "int|false",
       "group": "text",
-      "description": "Returns the index of the case-sensitive expression or false if it"
+      "description": "Returns the index of the case-sensitive expression or false if it can't be found"
     },
     {
       "name": "sub",
@@ -8521,7 +8573,7 @@
       ],
       "result": "int",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the number of days since the unix epoch."
     },
     {
       "name": "to_epoch_hour",
@@ -8536,7 +8588,7 @@
       ],
       "result": "int",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the number of hours since the unix epoch."
     },
     {
       "name": "to_epoch_minute",
@@ -8551,7 +8603,7 @@
       ],
       "result": "int",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the number of minutes since the unix epoch."
     },
     {
       "name": "to_epoch_ms",
@@ -8566,7 +8618,7 @@
       ],
       "result": "int",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the number of milliseconds since the unix epoch."
     },
     {
       "name": "to_epoch_sec",
@@ -8581,7 +8633,7 @@
       ],
       "result": "int",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to the number of seconds since the unix epoch."
     },
     {
       "name": "to_epochms",
@@ -8596,7 +8648,7 @@
       ],
       "result": "epochms",
       "group": "transform",
-      "description": "Converts a text expression (now, next friday, Jan 1 2000) to"
+      "description": "Converts a text expression (now, next friday, Jan 1 2000) to timestamp comparible format."
     },
     {
       "name": "to_expr",
@@ -8864,7 +8916,7 @@
           "type": "text"
         }
       ],
-      "result": "text",
+      "result": "bool",
       "group": "text",
       "description": "Returns the existence of a argument in the URL"
     },

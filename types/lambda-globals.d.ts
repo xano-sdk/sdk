@@ -116,7 +116,10 @@ declare global {
   var TextEncoder: typeof globalThis extends { onmessage: any; TextEncoder: infer T } ? T : { prototype: TextEncoder; new (): TextEncoder };
   var TextDecoder: typeof globalThis extends { onmessage: any; TextDecoder: infer T } ? T : { prototype: TextDecoder; new (label?: string): TextDecoder };
 
-  /** Routed to the request log. Only these methods exist; calling any other throws. */
+  /**
+   * Routed to the request log. Only these methods exist; calling any other
+   * (`group`/`count`/`time`/`assert`) throws.
+   */
   interface Console {
     log(...data: any[]): void;
     error(...data: any[]): void;
@@ -124,6 +127,8 @@ declare global {
     info(...data: any[]): void;
     debug(...data: any[]): void;
     trace(...data: any[]): void;
+    table(...data: any[]): void;
+    dir(...data: any[]): void;
   }
   var console: Console;
 }

@@ -12,6 +12,8 @@ export const securityJwsEncode = defineFunction({
       claims: obj({ sub: c.text("user-1") }),
       key: env("JWS_KEY"),
       signature_algorithm: "PS256",
+      // Without `ttl` the token carries no `exp` and never expires.
+      ttl: c.int(3600),
     }),
   ],
   response: ref("result"),

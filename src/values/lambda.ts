@@ -239,7 +239,9 @@ export interface AmbientBindings {
   /** The enclosing function's stack variables, by name — `$var.total`. A stack
    * variable is NOT also injected as a bare `$total`. */
   $var: any;
-  /** The authenticated caller, when the request carries a token. */
+  /** The authenticated caller. With no authenticated caller (a public surface, or
+   * an authed one reached without a token) this is `{ id: 0, dbo: "" }` — an
+   * object, NOT null — so `if ($auth)` always passes; test `$auth.id > 0`. */
   $auth: any;
 }
 
@@ -666,6 +668,15 @@ function assertPlainPattern(
           ? "a default (it never applies)"
           : "a computed or quoted key";
     const alias = hasTopLevel(propMask, ":") ? patternNames(`{${propMask}}`, `{${prop}}`)[0] : undefined;
+    // `{ rate }` beside a module-scope `rate` comes back from a `.ts` loader as
+    // `{ rate: rate2 }`, a pattern not in the author's source. Name the collision.
+    const key = /^\s*([^\s:]+)\s*:/.exec(prop)?.[1];
+    if (index === 1 && key && alias?.startsWith(key) && /^[0-9]+$/.test(alias.slice(key.length))) {
+      throw new Error(
+        `${caller}: capture key \`${key}\` shares its name with a module-scope binding, so the loader rewrote ` +
+          `\`{ ${key} }\` to \`${prop}\` (\`${alias}\` is not in your source). Use \`capture: { ${capturedKey(key)}: ${key} }\`.`,
+      );
+    }
     throw new Error(
       `${caller}: \`${prop}\` in the parameter pattern \`${pattern}\` is ${what}, but ${notReal}` +
         (alias === undefined
@@ -677,6 +688,12 @@ function assertPlainPattern(
         ` ${fix}`,
     );
   }
+}
+
+/** A capture key for `name` that a module-scope `name` cannot collide with: `rate` → `capturedRate`. */
+function capturedKey(name: string): string {
+  const bare = name.replace(/^\$+/, "");
+  return bare === "" ? "captured" : `captured${bare[0]!.toUpperCase()}${bare.slice(1)}`;
 }
 
 /** Index just past the bracket matching the `{`/`[` at `from`. */
@@ -1279,7 +1296,8 @@ function assertNoClosure(code: string, source: string): void {
         `function was WRITTEN in, and only the body's text reaches the engine. There \`${name}\` is not defined: ` +
         `the body throws, and the engine returns that failure as TEXT in the value slot with HTTP 200 — a wrong ` +
         `value, not an error. Inline the value as a literal, pass it through the stack (\`$var.${name}\` after a ` +
-        `\`s.set_var\`, or an input as \`$input.${name}\`), or carry it in with \`lam.fn(body, { capture: { ${name} } })\`.`,
+        `\`s.set_var\`, or an input as \`$input.${name}\`), or carry it in with ` +
+        `\`lam.fn((…, { ${capturedKey(name)} }) => …, { capture: { ${capturedKey(name)}: ${name} } })\`.`,
     );
   }
 }

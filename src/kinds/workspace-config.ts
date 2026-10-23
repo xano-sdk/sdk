@@ -86,7 +86,12 @@ export interface WorkspaceDatasourceLiveDef {
 
 /** Workspace-wide defaults applied when creating new objects. */
 export interface WorkspaceDefaultsDef {
-  /** Primary-key type new tables get when they don't declare one. */
+  /**
+   * Primary-key type for tables created in the Xano editor that don't declare
+   * one. Has no effect on an SDK `table()`, which always declares its key: `id`
+   * is injected as `int` unless `idType: "uuid"` is set on the table. To make an
+   * SDK table use a uuid key, set `idType: "uuid"` on the `table()`, not here.
+   */
   db_primary_key?: "int" | "uuid";
 }
 
@@ -231,15 +236,22 @@ export interface WorkspaceConfigDef<Env extends Record<string, string> = Record<
    * name→value map; Xano SDK encodes it to the engine's persisted `env[]` array
    * of `{ name, value, market_item }`. Order is preserved.
    *
-   * VALUES ARE SECRETS. Prefer sourcing them from the deploy environment rather
-   * than committing literals — `env: { STRIPE_KEY: process.env.STRIPE_KEY! }` —
-   * and don't commit a compiled bundle that contains real values.
+   * VALUES ARE SECRETS AND DO NOT BELONG HERE. Declare each NAME with an empty
+   * value — `env: { STRIPE_KEY: "" }` — and keep the value in `xano/.env`
+   * (gitignored, kept across a `pull`), which every command that compiles a
+   * bundle reads with no flag. Do NOT write `process.env.STRIPE_KEY!`: that
+   * resolves at EXPORT and bakes the literal into the compiled bundle in
+   * cleartext, which is exactly what `xano/.env` exists to prevent. Don't commit
+   * a compiled bundle either.
    *
    * WRITE SEMANTICS DIFFER BY COMMAND, and the difference is not cosmetic:
    *
-   * - `deploy` (ephemeral) REPLACES the tenant's env with this map — the
-   *   workspace object is restored wholesale on import, so a key absent here is
-   *   dropped, and an empty value is written as an empty string.
+   * - `deploy` (ephemeral) REPLACES the tenant's env with the RESOLVED map (these
+   *   names, then `xano/.env` or `--backend-env-file`, then `--env-var`), so a
+   *   key absent here is dropped, and a declared name with no value anywhere
+   *   REFUSES the deploy rather than clearing the live value — fill the name in
+   *   rather than putting the value back in source, and reach for
+   *   `--allow-empty-env=NAME` only when clearing is what you mean.
    * - A merge (`deploy --to <workspace|tenant:…>`, `promote`, `tenant deploy`)
    *   is ADD-ONLY, matched BY NAME. It creates names that do not yet exist on
    *   the target and does NOT update or remove ones that do — the TARGET's
@@ -620,7 +632,7 @@ export function workspaceConfig<const E extends Record<string, string> = Record<
  * Hand the config to this and the declared names become properties:
  *
  * ```ts
- * const config = workspaceConfig({ env: { STRIPE_KEY: process.env.STRIPE_KEY! } });
+ * const config = workspaceConfig({ env: { STRIPE_KEY: "" } }); // value in xano/.env
  * const E = typedEnv(config);
  * s.api.request({ url: …, headers: { Authorization: E.STRIPE_KEY } });  // autocompletes
  * E.STRIP_KEY;                                                          // compile error

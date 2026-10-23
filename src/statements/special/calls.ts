@@ -85,7 +85,7 @@ import type { HeaderMap } from "./coerce.js";
 import { encodeAsyncRuntime } from "./async-runtime.js";
 import type { AsyncRuntime } from "./async-runtime.js";
 import type { InputValue } from "./coerce.js";
-import type { XanoDbLink } from "../../fields/value-types.js";
+import type { XanoDbLink, BrandOpts, BrandType } from "../../fields/value-types.js";
 import { argsOrEmpty, assertArg, describeEntry, isRecordArg, isTaggedArg } from "../args.js";
 import { assertKnownKeys, type AllKeys } from "../../util/known-keys.js";
 
@@ -129,7 +129,27 @@ export type CallInputFor<T, RawWhenEmpty extends boolean = false> =
       ? RawWhenEmpty extends true
         ? CallInput
         : NoInputs
-      : { [K in TargetInputKeys<T>]?: InputValue };
+      : { [K in TargetInputKeys<T>]?: InputValueFor<TargetInputDescriptor<T, K>> };
+
+type TargetInputDescriptor<T, K extends string> = T extends { readonly input?: infer I }
+  ? K extends keyof NonNullable<I> ? NonNullable<I>[K] : unknown
+  : unknown;
+
+/**
+ * What a call may pass to one target input. A `c.*` CONSTANT carries its type
+ * (`ConstValue<T>`), so one that cannot bind is a compile error rather than a
+ * 400 on the first request: `c.text("abc")` or `c.bool(true)` into an
+ * `input.int`/`input.decimal`, or a number/bool into an `input.uuid`. Any other
+ * value (`inp`, `ref`, a filtered value) carries no constant type and passes, as
+ * does every list input and every other target type.
+ */
+type InputValueFor<D> = BrandOpts<D> extends { array: true }
+  ? InputValue
+  : [BrandType<D>] extends ["int" | "decimal"]
+    ? number | (Value & { readonly __const?: number | null })
+    : [BrandType<D>] extends ["uuid"]
+      ? string | (Value & { readonly __const?: string | null })
+      : InputValue;
 
 /**
  * The `input` of a target that declares none: an object literal naming any key
@@ -253,6 +273,23 @@ export type RunBinding<Fn, R> = [R] extends [undefined]
     ? string
     : string | InferResponse<Fn>;
 
+/**
+ * The error envelope a NON-RAISING workspace run binds to `as` when its target
+ * fails, in place of the success result. Two shapes, both measured live: a
+ * precondition / `guard.found` failure binds `{ code, message, payload }`; an
+ * uncaught `s.throw` binds `{ payload, statement }`. `s.function.call` and
+ * `s.tool.call` answer 200 and bind one of these on failure (OUTSIDE a workflow
+ * test), so their `as` is the success shape OR this. Branch on it with
+ * `ref("<as>.code")` / `ref("<as>.statement")`. sdk-dev#137 / #203 / #165.
+ *
+ * `s.function.run` raises on a failing target, so its binding is the success
+ * shape alone; a failed `s.await` serves the job's output through an untyped
+ * (`unknown`) binding, which already admits this.
+ */
+export type CallErrorEnvelope =
+  | { code: string; message: string; payload: unknown }
+  | { payload: unknown; statement: string };
+
 export interface FunctionCallArgs<Fn extends ObjectRef = ObjectRef, As extends string = string>
   extends StatementOptions {
   fn: Fn;
@@ -281,6 +318,17 @@ const FUNCTION_CALL_KEYS = /* @__PURE__ */ Object.keys({ fn: 1, as: 1, input: 1,
  * where there is no def to read — propagates that `unknown` unchanged. Declaring
  * `responseShape` on the TARGET fixes every caller at once, which is why that
  * remains the recommendation for a response the walk cannot resolve.
+ *
+ * ⚠ This differs from `s.function.run` ON FAILURE. OUTSIDE a workflow test
+ * `s.function.call` does NOT raise when the target fails — it binds an error
+ * envelope to `as` and the stack answers 200. So the binding is typed
+ * `InferResponse<Fn> | CallErrorEnvelope`: the SUCCESS shape OR
+ * `{ code, message, payload }` (a precondition/`guard.found` failure) or
+ * `{ payload, statement }` (an uncaught `s.throw`). A guard inside the target
+ * never stops the caller here — use `s.function.run` whenever a failing target
+ * must stop the caller; reach for `s.function.call` to INSPECT the envelope
+ * (branch on `ref("<as>.code")`). INSIDE a workflow test it DOES raise — that is
+ * its home.
  */
 export function functionCall<
   const Fn extends ObjectRef = ObjectRef,
@@ -288,7 +336,7 @@ export function functionCall<
   const Fs extends readonly FilterXdo[] = readonly [],
 >(
   args: FunctionCallArgs<Fn, As> & { asFilters?: Fs },
-): Statement & AsShapeBrand<As, ApplyFilters<InferResponse<Fn>, Fs>> {
+): Statement & AsShapeBrand<As, ApplyFilters<InferResponse<Fn>, Fs> | CallErrorEnvelope> {
   args = argsOrEmpty(args);
   assertKnownKeys(`Statement "s.function.call"`, args, FUNCTION_CALL_KEYS);
   assertArg("s.function.call", "fn", args.fn);
@@ -297,7 +345,7 @@ export function functionCall<
     context: { id: resolveRef("function", args.fn, `Statement "s.function.call": argument "fn"`) },
     as: args.as,
     input: encodeCallInput(args.input as CallInput | undefined, "s.function.call"),
-  }, args) as Statement & AsShapeBrand<As, ApplyFilters<InferResponse<Fn>, Fs>>;
+  }, args) as Statement & AsShapeBrand<As, ApplyFilters<InferResponse<Fn>, Fs> | CallErrorEnvelope>;
 }
 
 /** The type of `s.api.call`'s non-argument `query`, whose one member names the fix. */
@@ -487,6 +535,12 @@ const TOOL_CALL_KEYS = /* @__PURE__ */ Object.keys({ tool: 1, as: 1, input: 1, a
 /**
  * `tool.call <tool>` — invoke a tool as a workspace run. Branded with the
  * TARGET's `InferResponse`, like {@link functionCall}.
+ *
+ * ⚠ Like {@link functionCall}, a FAILING tool does NOT raise, so the binding is
+ * `InferResponse<Tool> | CallErrorEnvelope`: the SUCCESS shape OR
+ * `{ code, message, payload }` (a precondition) or `{ payload, statement }` (an
+ * uncaught `s.throw`), and the caller's stack continues to a 200. When a failure
+ * must stop the caller, put the logic in a `defineFunction` and `s.function.run` it.
  */
 export function toolCall<
   const Tool extends ObjectRef = ObjectRef,
@@ -494,7 +548,7 @@ export function toolCall<
   const Fs extends readonly FilterXdo[] = readonly [],
 >(
   args: ToolCallArgs<Tool, As> & { asFilters?: Fs },
-): Statement & AsShapeBrand<As, ApplyFilters<InferResponse<Tool>, Fs>> {
+): Statement & AsShapeBrand<As, ApplyFilters<InferResponse<Tool>, Fs> | CallErrorEnvelope> {
   args = argsOrEmpty(args);
   assertKnownKeys(`Statement "s.tool.call"`, args, TOOL_CALL_KEYS);
   assertArg("s.tool.call", "tool", args.tool);
@@ -503,7 +557,7 @@ export function toolCall<
     context: { id: resolveRef("tool", args.tool, `Statement "s.tool.call": argument "tool"`) },
     as: args.as,
     input: encodeCallInput(args.input as CallInput | undefined, "s.tool.call"),
-  }, args) as Statement & AsShapeBrand<As, ApplyFilters<InferResponse<Tool>, Fs>>;
+  }, args) as Statement & AsShapeBrand<As, ApplyFilters<InferResponse<Tool>, Fs> | CallErrorEnvelope>;
 }
 
 export interface TriggerCallArgs extends StatementOptions {

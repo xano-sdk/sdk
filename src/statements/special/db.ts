@@ -48,8 +48,8 @@ import { isListColumn } from "../../fields/field.js";
 import { encodeOutputItems } from "./output-select.js";
 import { coerceCell, coerceScalar, type ScalarCell } from "./coerce.js";
 import type { OutputPath, OutputRoot, PagingEnvelopeField, QualifiedCol } from "./output-select.js";
-import { and, assertSortList, encodeSearch, encodeSort, encodeEval, qualifyAggregateEvals } from "./db-search.js";
-import type { DbWhere, SortDirective, DbEval, EvalFields, AggregateRow } from "./db-search.js";
+import { and, assertSortList, encodeSearch, encodeSort, encodeEval, needsQualifier, qualifyAggregateEvals } from "./db-search.js";
+import type { DbWhere, SortDirective, DbEval, AggregateRow, QualifyScope } from "./db-search.js";
 import { annotate } from "../statement.js";
 import type { StatementAnnotations, StatementOptions } from "../statement.js";
 import { argsOrEmpty, assertArg, assertListArg, assertOneOf, assertStatements, assertValueArg, describeArg, describeEntry, isRecordArg, isTaggedArg, type ListItemRule } from "../args.js";
@@ -170,11 +170,30 @@ type NarrowGraft<G, O extends readonly string[]> = IsUnknown<G> extends true
  * attachment-level `output` further restricts the graft to those columns
  * ({@link NarrowGraft}).
  */
-type GraftOf<H> = H extends { addon: AddonDef<infer G> }
-  ? H extends { output: infer O extends readonly string[] }
-    ? NarrowGraft<G, O>
-    : G
-  : unknown;
+type GraftOf<H> = WithChildren<
+  H extends { addon: AddonDef<infer G> }
+    ? H extends { output: infer O extends readonly string[] }
+      ? NarrowGraft<G, O>
+      : G
+    : unknown,
+  H extends { children: infer Ch } ? Ch : readonly []
+>;
+
+/**
+ * A graft with its nested `children` addons merged in. A child grafts onto
+ * each ELEMENT of its parent's result (`_items[]._product`), with its own
+ * cardinality, recursively. Distributes over a single graft's `| undefined`,
+ * and leaves an `unknown` graft alone: there is no shape to add keys to.
+ */
+type WithChildren<G, Ch> = [Ch] extends [readonly []]
+  ? G
+  : IsUnknown<G> extends true
+    ? G
+    : G extends readonly (infer E)[]
+      ? WithAddons<E, Ch>[]
+      : G extends object
+        ? WithAddons<G, Ch>
+        : G;
 
 /**
  * The keys a set of attached addons graft onto each returned row. Each addon's
@@ -185,20 +204,31 @@ type GraftOf<H> = H extends { addon: AddonDef<infer G> }
  * so `as:"items._book"` puts `_book` inside each `items[]` element = each row;
  * without paging `as:"_book"` puts it on each bare row. Both reduce to "the row
  * gains the alias key". Nested `children` addons enrich the addon's own result
- * (under the alias), so they add no parent-visible keys.
+ * (under the alias, see {@link WithChildren}), so they add no parent-visible keys.
  */
 type AddonFields<A> = A extends readonly [infer H, ...infer Rest]
   ? (H extends { envelope: true }
       ? object
       : H extends { as: infer S extends string }
-        ? { [K in AddonAlias<S>]: GraftOf<H> }
+        ? GraftKey<AddonAlias<S>, GraftOf<H>>
         : object) &
       AddonFields<Rest>
   : object;
 
+/**
+ * One alias key valued by its graft. A `single` graft carries `undefined`
+ * (see `AddonGraft`): the engine leaves the alias OUT of the row when no row
+ * matches, rather than writing `null`, so the key is optional.
+ */
+type GraftKey<K extends string, G> = IsUnknown<G> extends true
+  ? { [P in K]: G }
+  : undefined extends G
+    ? { [P in K]?: Exclude<G, undefined> }
+    : { [P in K]: G };
+
 /** The keys `envelope: true` addons graft onto a query's paging envelope (see {@link AddonSpec.envelope}). */
 type EnvelopeAddonFields<A> = A extends readonly [infer H, ...infer Rest]
-  ? (H extends { envelope: true; as: infer S extends string } ? { [K in AddonAlias<S>]: GraftOf<H> } : object) &
+  ? (H extends { envelope: true; as: infer S extends string } ? GraftKey<AddonAlias<S>, GraftOf<H>> : object) &
       EnvelopeAddonFields<Rest>
   : object;
 
@@ -219,13 +249,53 @@ type WithAddons<Row, A> = [keyof AddonFields<A>] extends [never]
   : Prettify<Omit<Row, keyof AddonFields<A>> & AddonFields<A>>;
 
 /**
- * A row shape augmented with any `eval` alias keys. With no evals it is the row
+ * The `eval` aliases a query actually RETURNS. `output` is applied to the eval
+ * columns too, so with a non-empty `output` (`Cols`) only the aliases it names
+ * come back — an alias computed but left out of `output` is dropped by the
+ * engine. With no `output` (`Cols` empty) every alias is returned.
+ */
+type SelectedEvalFields<E, Cols extends readonly string[], B = readonly []> = Cols["length"] extends 0
+  ? QueryEvalFields<E, B>
+  : Pick<QueryEvalFields<E, B>, Extract<keyof QueryEvalFields<E, B>, Cols[number]>>;
+
+/**
+ * A query's `eval` grafts (`EvalFields` in `db-search.ts`), with one alias typed rather than
+ * `unknown`: an UNFILTERED eval naming `<alias>.<col>` of a `bind` entry that
+ * joins a table handle under that explicit `as` carries that column's type
+ * (`| null` under a `left` join). The documented way to read a joined column.
+ * A filtered eval, a bind without `as`, or an unbranded table stays `unknown`.
+ */
+type QueryEvalFields<E, B> = E extends readonly [infer H, ...infer Rest]
+  ? (H extends { as: infer S extends string } ? { [K in S]: JoinedEvalValue<H, B> } : object) & QueryEvalFields<Rest, B>
+  : object;
+
+type JoinedEvalValue<H, B> = H extends { filters: readonly [unknown, ...unknown[]] }
+  ? unknown
+  : H extends { name: `${infer Alias}.${infer Col}` }
+    ? JoinedColumn<B, Alias, Col>
+    : unknown;
+
+type JoinedColumn<B, Alias extends string, Col extends string> = B extends readonly [infer H, ...infer Rest]
+  ? H extends { as: Alias; table: infer T extends ObjectRef }
+    ? [InferRow<T>] extends [never]
+      ? unknown
+      : Col extends keyof InferRow<T>
+        ? H extends { join: "left" } ? InferRow<T>[Col] | null : InferRow<T>[Col]
+        : unknown
+    : JoinedColumn<Rest, Alias, Col>
+  : unknown;
+
+/**
+ * A row shape augmented with any `eval` alias keys it returns under `output`
+ * (see {@link SelectedEvalFields}). With no returned evals it is the row
  * unchanged. Like {@link WithAddons}, an eval alias **overrides** a base column of
  * the same name (the engine computes over it), so the honest type is the graft.
  */
-type WithEval<Row, E> = [keyof EvalFields<E>] extends [never]
+type WithEval<Row, E, Cols extends readonly string[] = readonly [], B = readonly []> = [
+  keyof SelectedEvalFields<E, Cols, B>,
+] extends [never]
   ? Row
-  : Prettify<Omit<Row, keyof EvalFields<E>> & EvalFields<E>>;
+  : Prettify<Omit<Row, keyof SelectedEvalFields<E, Cols, B>> & SelectedEvalFields<E, Cols, B>>;
 
 /**
  * The paging metadata envelope a `db.query` returns when `paging` is set with
@@ -285,7 +355,7 @@ type PagingTotals<P> = P extends { totals: true } ? true : false;
  * The engine's `context.return.type` for a `db.query` — the return-type
  * discriminant. `"list"` is the default (a row array or paging envelope);
  * `"single"` a first-match object; `"count"`/`"exists"` a scalar; `"stream"` a
- * (pageable) row array with no metadata envelope.
+ * cursor only `s.foreach` reads (returned, it serves `"@stream"`).
  */
 export type DbReturnType = "list" | "single" | "count" | "exists" | "stream" | "aggregate";
 
@@ -459,21 +529,22 @@ export interface DbExpandBind {
 
 /**
  * The full `db.query` result shape, discriminated by return type `RT`:
- * `count → number`, `exists → boolean`, `single → row | null`, `stream → row[]`,
+ * `count → number`, `exists → boolean`, `single → row | null`, `stream → "@stream"`
+ * (a cursor only `s.foreach` reads; returned, it serializes to that string),
  * and `list → row[]` or the {@link PagingEnvelope} when `paging` requests
  * metadata. The row is always the addon-augmented row.
  */
-type QueryResult<Row, A, P, RT extends DbReturnType, E = readonly [], AG = unknown, Cols extends readonly string[] = readonly []> = RT extends "count"
+type QueryResult<Row, A, P, RT extends DbReturnType, E = readonly [], AG = unknown, Cols extends readonly string[] = readonly [], B = readonly []> = RT extends "count"
   ? number
   : RT extends "exists"
     ? boolean
     : RT extends "aggregate"
       ? AggregateRow<AG, Row>[]
-      : WithAddons<WithEval<Row, E>, A> extends infer R
-        ? RT extends "single"
-          ? R | null
-          : RT extends "stream"
-            ? R[]
+      : RT extends "stream"
+        ? "@stream"
+        : WithAddons<WithEval<Row, E, Cols, B>, A> extends infer R
+          ? RT extends "single"
+            ? R | null
             : HasPagingEnvelope<P> extends true
               ? PickEnvelope<
                   [keyof EnvelopeAddonFields<A>] extends [never]
@@ -482,7 +553,7 @@ type QueryResult<Row, A, P, RT extends DbReturnType, E = readonly [], AG = unkno
                   Cols
                 >
               : R[]
-        : never;
+          : never;
 
 /**
  * A PAGED read's `output` selects from the envelope, so its row selection is the
@@ -516,6 +587,19 @@ type PagedOutputCheck<Cols extends readonly string[], P, RT, Row extends string>
       : { output?: { [I in keyof Cols]: PagedEntry<Cols[I], Row> } }
     : unknown
   : unknown;
+
+/**
+ * `lock: true` refused where the engine's read is an aggregate. The lock is a
+ * Postgres `FOR UPDATE`, which Postgres refuses beside `count(*)` and
+ * `GROUP BY` (`0A000 FEATURE NOT SUPPORTED`, a 500 on every request), and
+ * `paging.totals` runs a `count(*)` on the same locked query. `exists` wraps
+ * the locked select in a subquery, which Postgres accepts.
+ */
+type LockCheck<RT, P> = [RT] extends ["count" | "aggregate"]
+  ? { lock?: false | Refused<true, "lock needs a row-returning query: FOR UPDATE is refused beside count and aggregate"> }
+  : P extends { totals: true }
+    ? { lock?: false | Refused<true, "lock cannot be combined with paging.totals: the totals count(*) is refused FOR UPDATE"> }
+    : unknown;
 
 type PagedEntry<E, Row extends string> = E extends PagingEnvelopeField
   ? E
@@ -855,7 +939,13 @@ export interface DbGetArgs<
   fieldName?: QualifiedCol<ColsOf<T>>;
   /** The value to match. */
   fieldValue: Value;
-  /** Acquire a row lock for the transaction. */
+  /**
+   * Acquire a row lock (`FOR UPDATE`) held until the enclosing
+   * `s.db.transaction` ends. As the transaction's FIRST step on a shared parent
+   * row (the room, the account), it serializes a check-then-insert that a
+   * `lock: true` query cannot: concurrent requests wait here, then see each
+   * other's inserts.
+   */
   lock?: boolean;
   /**
    * Restrict the returned columns (XanoScript `output = [...]`). Encoded into
@@ -1236,7 +1326,7 @@ export type RowMap<C extends string = string, Row = unknown> = Partial<{
  *
  * Defaults: the column's declared `default` (as a const) if non-empty, else
  * `[]` for list/array columns, `{}` for `obj`/`json`, else `null`. The `ignore`
- * heuristic marks the primary-key `id` (always) and, on edit, `created_at` —
+ * heuristic marks the primary-key `id` (unless an add row supplies it) and, on edit, `created_at` —
  * the read-only/system columns the engine never writes. On **edit**, a column
  * the author did not mention is *also* marked `ignore:true`: a partial edit
  * touches only the keys supplied, so an unmentioned column keeps its stored
@@ -1257,7 +1347,9 @@ export type RowMap<C extends string = string, Row = unknown> = Partial<{
  * column's own nullability to it: a nullable column keeps `null`, and a
  * non-nullable one coerces to that type's zero value. So an unmentioned column
  * on `add` lands as `""` (text), `0` (int/decimal/timestamp), `false` (bool),
- * `[]` (list) or `{}` (json) unless the column is nullable. Author the row
+ * `[]` (list) or `{}` (json) unless the column is nullable. The exception is
+ * a non-nullable `date`: an omitted or null cell stores the CURRENT date, and
+ * `add`'s result omits the key (both backends). Author the row
  * through `data: DbField[]` when a specific stored value matters more than the
  * convenience.
  */
@@ -1378,7 +1470,12 @@ function expandRow(table: ObjectRef, row: RowMap, op: "add" | "edit", statement:
     // (`ignore:true`) — otherwise the partial edit overwrites it with a type
     // default, wiping the stored value. On add there is nothing to
     // preserve, so unmentioned columns still emit their type default.
-    const ignore = systemIgnore.has(col.name) || (op === "edit" && !supplied);
+    // An `id` the add row SUPPLIES is written: the engine honors it (it stores
+    // the id and refuses a duplicate), and a `system: false` table's PK is the
+    // author's to set. Ignored, it was dropped in silence and the next sequence
+    // value used instead (#68). Unsupplied, it stays ignored as before.
+    const ignore =
+      (systemIgnore.has(col.name) && !(op === "add" && col.name === "id" && supplied)) || (op === "edit" && !supplied);
     if (supplied) assertCellShape(statement, col.name, cell);
     if (supplied && isNestedCell(cell)) {
       return { name: col.name, value: c.text(""), ignore, children: nestedFields(cell, statement, col.name) };
@@ -1478,16 +1575,19 @@ export interface DbAddArgs<
   /**
    * Refuse to auto-wire request inputs the endpoint did not explicitly bind.
    *
-   * A row write auto-wires any column whose name matches an incoming request
-   * input, which is convenient and is also how a caller can reach a column the
-   * endpoint never meant to expose. With this on, the engine consults the
-   * endpoint's declared inputs and skips auto-wiring anything outside them;
-   * explicit `data`/`row` entries are unaffected, because those are bindings you
-   * wrote.
+   * ⚠ This ONLY affects a hand-written `data: DbField[]` that LEAVES COLUMNS
+   * OUT. The engine auto-wires a column ABSENT from the args from a same-named
+   * request input (how a caller can reach a column the endpoint never meant to
+   * expose); with this on, it skips auto-wiring anything outside the endpoint's
+   * declared inputs. A `row:` write NEVER auto-wires — `row` expands to EVERY
+   * column explicitly (the type default on add, `ignore` on edit), so nothing is
+   * absent for the engine to fill, and this flag changes nothing for it. So a
+   * `row` endpoint is not exposed to stray inputs in the first place.
    *
    * Off by default, matching the engine's own default — so leaving it unset
-   * writes nothing and changes nothing. Reach for it on any write whose table
-   * has a column a caller must not set (`role`, `is_admin`, `credits`).
+   * writes nothing and changes nothing. Reach for it only alongside a PARTIAL
+   * `data` list on a table with a column a caller must not set (`role`,
+   * `is_admin`, `credits`).
    */
   enforceHiddenFields?: boolean;
 
@@ -1560,16 +1660,19 @@ export interface DbEditArgs<
   /**
    * Refuse to auto-wire request inputs the endpoint did not explicitly bind.
    *
-   * A row write auto-wires any column whose name matches an incoming request
-   * input, which is convenient and is also how a caller can reach a column the
-   * endpoint never meant to expose. With this on, the engine consults the
-   * endpoint's declared inputs and skips auto-wiring anything outside them;
-   * explicit `data`/`row` entries are unaffected, because those are bindings you
-   * wrote.
+   * ⚠ This ONLY affects a hand-written `data: DbField[]` that LEAVES COLUMNS
+   * OUT. The engine auto-wires a column ABSENT from the args from a same-named
+   * request input (how a caller can reach a column the endpoint never meant to
+   * expose); with this on, it skips auto-wiring anything outside the endpoint's
+   * declared inputs. A `row:` write NEVER auto-wires — `row` expands to EVERY
+   * column explicitly (the type default on add, `ignore` on edit), so nothing is
+   * absent for the engine to fill, and this flag changes nothing for it. So a
+   * `row` endpoint is not exposed to stray inputs in the first place.
    *
    * Off by default, matching the engine's own default — so leaving it unset
-   * writes nothing and changes nothing. Reach for it on any write whose table
-   * has a column a caller must not set (`role`, `is_admin`, `credits`).
+   * writes nothing and changes nothing. Reach for it only alongside a PARTIAL
+   * `data` list on a table with a column a caller must not set (`role`,
+   * `is_admin`, `credits`).
    */
   enforceHiddenFields?: boolean;
 
@@ -1661,16 +1764,19 @@ export interface DbAddOrEditArgs<T extends ObjectRef = ObjectRef, As extends str
   /**
    * Refuse to auto-wire request inputs the endpoint did not explicitly bind.
    *
-   * A row write auto-wires any column whose name matches an incoming request
-   * input, which is convenient and is also how a caller can reach a column the
-   * endpoint never meant to expose. With this on, the engine consults the
-   * endpoint's declared inputs and skips auto-wiring anything outside them;
-   * explicit `data`/`row` entries are unaffected, because those are bindings you
-   * wrote.
+   * ⚠ This ONLY affects a hand-written `data: DbField[]` that LEAVES COLUMNS
+   * OUT. The engine auto-wires a column ABSENT from the args from a same-named
+   * request input (how a caller can reach a column the endpoint never meant to
+   * expose); with this on, it skips auto-wiring anything outside the endpoint's
+   * declared inputs. A `row:` write NEVER auto-wires — `row` expands to EVERY
+   * column explicitly (the type default on add, `ignore` on edit), so nothing is
+   * absent for the engine to fill, and this flag changes nothing for it. So a
+   * `row` endpoint is not exposed to stray inputs in the first place.
    *
    * Off by default, matching the engine's own default — so leaving it unset
-   * writes nothing and changes nothing. Reach for it on any write whose table
-   * has a column a caller must not set (`role`, `is_admin`, `credits`).
+   * writes nothing and changes nothing. Reach for it only alongside a PARTIAL
+   * `data` list on a table with a column a caller must not set (`role`,
+   * `is_admin`, `credits`).
    */
   enforceHiddenFields?: boolean;
 
@@ -1968,7 +2074,7 @@ export interface DbBulkDeleteArgs<As extends string = string> extends StatementO
   /**
    * Filter selecting which rows to delete — the same `where` surface as
    * `s.db.query`: `expr(...)`/`cmp(...)` comparisons, `and(...)`/`or(...)` groups,
-   * an array of those (ANDed), or a raw `Value`. Encoded into `context.search`
+   * or an array of those (ANDed). Encoded into `context.search`
    * via {@link encodeSearch}. **A `where` that constrains nothing deletes every
    * row in the table**, which is why it requires {@link DbBulkDeleteArgs.allRows}.
    */
@@ -2007,8 +2113,9 @@ export interface DbBulkDeleteArgs<As extends string = string> extends StatementO
 export function searchConstrainsRows(search: unknown): boolean {
   if (search === undefined || search === null) return false;
   const expression = (search as { expression?: unknown }).expression;
-  // Not an `{expression: […]}` tree at all — a raw `Value` escape hatch, whose
-  // contents cannot be read here. Assume it constrains rather than accuse it.
+  // Not an `{expression: […]}` tree at all. `where` can no longer author one
+  // (a value is refused), so this is a stored oddity; assume it constrains
+  // rather than accuse it.
   if (!Array.isArray(expression)) return true;
   // Each entry after the first with `or: true` starts a new OR-term; the entries
   // of one term AND together. A term that constrains nothing matches every row,
@@ -2778,16 +2885,39 @@ function assertNoEvalShadow(table: ObjectRef, evals?: readonly DbEval[]): void {
  * `distinct` is hardcoded `"auto"` for now (author control is a later unit).
  */
 /**
+ * Refuse an aggregate `group`/`eval` that names a JOINED column. The engine runs
+ * an aggregate as `WITH <alias> AS (<base query>) SELECT …` over the BASE alias
+ * only, so `pr.name` from a `bind` answers 400 `Unsupported object reference`
+ * on every request (both backends). The working form projects the column with a
+ * query-level `eval` and names that alias bare in the aggregate.
+ */
+function assertAggregateNamesBaseOnly(agg: DbAggregate | undefined, bindAliases: readonly string[], primaryAlias: string): void {
+  const joined = new Set(bindAliases.filter((a) => a !== "" && a !== primaryAlias));
+  for (const [kind, list] of [["group", agg?.group], ["eval", agg?.eval]] as const) {
+    for (const e of list ?? []) {
+      const dot = e.name.indexOf(".");
+      if (dot === -1 || !joined.has(e.name.slice(0, dot))) continue;
+      throw new Error(
+        `Statement "s.db.query": aggregate ${kind} "${e.name}" names a joined column. An aggregate reads only the ` +
+          `query's own table, so the engine answers 400 "Unsupported object reference - ${e.name}" on every request. ` +
+          `Project it with a query eval and name that alias bare: \`eval: [{ name: "${e.name}", as: "${e.as}" }]\`, ` +
+          `then \`aggregate: { ${kind}: [{ name: "${e.as}", as: "${e.as}" }] }\`.`,
+      );
+    }
+  }
+}
+
+/**
  * Encode `context.return.aggregate` — `{ sort, paging?, eval, group }`. `group`
  * and `eval` reuse the {@link encodeEval} `{ as, name, filters }` shape, with their
  * `name` alias-qualified against `primaryAlias` (see {@link qualifyAggregateEvals}).
  * Aggregate paging is `{ page, per_page, metadata, enabled }` — no `offset`/`totals`.
  */
-function encodeAggregate(agg: DbAggregate | undefined, primaryAlias: string): unknown {
+function encodeAggregate(agg: DbAggregate | undefined, primaryAlias: string, scope?: QualifyScope): unknown {
   const block: Record<string, unknown> = {
     sort: encodeSort(agg?.sort, "s.db.query", "aggregate.sort"),
-    eval: encodeEval(qualifyAggregateEvals(agg?.eval, primaryAlias, "eval")) ?? [],
-    group: encodeEval(qualifyAggregateEvals(agg?.group, primaryAlias, "group")) ?? [],
+    eval: encodeEval(qualifyAggregateEvals(agg?.eval, primaryAlias, "eval", scope)) ?? [],
+    group: encodeEval(qualifyAggregateEvals(agg?.group, primaryAlias, "group", scope)) ?? [],
   };
   if (agg?.paging) {
     block.paging = {
@@ -2868,9 +2998,10 @@ function encodeReturn(
   distinct: DbDistinct = "auto",
   aggregate?: DbAggregate,
   primaryAlias = "",
+  scope?: QualifyScope,
 ): unknown {
   const sortEls = encodeSort(sort);
-  if (returnType === "aggregate") return encodeAggregate(aggregate, primaryAlias);
+  if (returnType === "aggregate") return encodeAggregate(aggregate, primaryAlias, scope);
   if (returnType === "count" || returnType === "exists") return { type: returnType };
   if (returnType === "single") return { type: "single", single: { sort: sortEls } };
   // `enabled:true` gates the engine's paging (+ the simpleExternal page/per_page/
@@ -2924,6 +3055,7 @@ export interface DbQueryArgs<
   RT extends DbReturnType = DbReturnType,
   E extends readonly DbEval[] = readonly DbEval[],
   AG extends DbAggregate = DbAggregate,
+  B extends readonly DbBind[] = readonly DbBind[],
 > extends StatementOptions {
   /**
    * SQL alias for the bound table (`context.dbo.as`), used to qualify columns.
@@ -2936,11 +3068,12 @@ export interface DbQueryArgs<
   /**
    * The engine's `context.return.type`. `"list"` (default) returns a row array
    * (or paging envelope); `"single"` a first-match `row | null`; `"count"` a
-   * `number`; `"exists"` a `boolean`; `"stream"` a pageable `row[]` with no
-   * metadata envelope. `InferResponse` reflects each shape.
+   * `number`; `"exists"` a `boolean`; `"stream"` a cursor only `s.foreach`
+   * reads (returned, it serves the string `"@stream"`, warning
+   * `db.stream-returned`). `InferResponse` reflects each shape.
    */
   returnType?: RT;
-  /** Primary filter — `expr(...)`, an array of `expr(...)` (ANDed), or a raw `Value`. */
+  /** Primary filter — `expr(...)` or an array of `expr(...)` (ANDed). A value is refused: the engine would run it unfiltered. */
   where?: DbWhere;
   /** Additional filter ANDed with `where` (same forms as `where`). */
   additionalWhere?: DbWhere;
@@ -2949,10 +3082,21 @@ export interface DbQueryArgs<
    * are addressable by dotted path in `where`/`sort`/`eval`; the row shape is
    * unchanged (output columns still come from `output`/`eval`).
    */
-  bind?: DbBind[];
+  bind?: B;
   /** Sort directives (`[{ sortBy, dir }]`) — applied by the engine. */
   sort?: DbSortDirective<ColsOf<T> | EvalAliases<E>>[];
-  /** Acquire row locks. */
+  /**
+   * Acquire row locks (`SELECT … FOR UPDATE`), held until the enclosing
+   * `s.db.transaction` ends. Postgres refuses `FOR UPDATE` beside an
+   * aggregate, so `count`, `aggregate`, and a `list` with `paging.totals` are
+   * refused here rather than failing every request with a 500.
+   *
+   * ⚠ It locks only the rows the query RETURNS, so it cannot make a
+   * check-then-insert exclusive: a competing request inserting a NEW row is
+   * never blocked, and concurrent "is this slot free? then add" both succeed.
+   * Lock a shared parent row first instead (`s.db.get({ …, lock: true })` as
+   * the transaction's first step).
+   */
   lock?: boolean;
   /**
    * Paging controls (`page`/`per_page`/`offset`/`totals`/`metadata`) — applied by
@@ -3020,7 +3164,7 @@ export interface DbQueryArgs<
  * envelope. `where`/`sort`/`paging`/`output` are all applied by the engine.
  *
  * A comparison `where` (plus `additionalWhere`) encodes into one ANDed
- * `expression[]`; a raw `Value` is passed through as `context.search`.
+ * `expression[]`.
  */
 /** Every `s.db.query` argument, held to {@link DbQueryArgs} at compile time. */
 const DB_QUERY_KEYS = Object.keys({
@@ -3032,6 +3176,27 @@ const DB_BIND_KEYS = Object.keys(
   { table: 1, expand: 1, as: 1, join: 1, where: 1 } satisfies Record<keyof DbTableBind | keyof DbExpandBind, 1>,
 );
 
+/**
+ * The runtime half of {@link LockCheck}: `FOR UPDATE` beside an aggregate is a
+ * Postgres `0A000`, which the cloud engine answers as a 500 on every request.
+ */
+function assertLockable(returnType: DbReturnType, paging: DbPaging | undefined): void {
+  if (returnType === "count" || returnType === "aggregate") {
+    throw new Error(
+      `Statement "s.db.query": \`lock: true\` needs a row-returning query, but returnType is "${returnType}". ` +
+        `The lock is a Postgres FOR UPDATE, which is refused beside an aggregate (SQL Error 0A000, a 500 on every request). ` +
+        `Lock the rows with a "list" or "single" query and count those, or drop \`lock\`.`,
+    );
+  }
+  if (paging?.totals === true) {
+    throw new Error(
+      `Statement "s.db.query": \`lock: true\` cannot be combined with \`paging.totals\`: the totals are a count(*) on the ` +
+        `same locked query, which Postgres refuses FOR UPDATE (SQL Error 0A000, a 500 on every request). ` +
+        `Drop \`totals\`, or count in a separate unlocked query.`,
+    );
+  }
+}
+
 export function dbQuery<
   T extends ObjectRef,
   const As extends string = string,
@@ -3042,10 +3207,11 @@ export function dbQuery<
   const E extends readonly DbEval[] = readonly [],
   const AG extends DbAggregate = DbAggregate,
   const Fs extends readonly FilterXdo[] = readonly [],
+  const B extends readonly DbBind[] = readonly [],
 >(
-  args: DbQueryArgs<T, As, Cols, A, P, RT, E, AG> & { asFilters?: Fs } & QueryNestedKeys<P, E, AG> &
-    PagedOutputCheck<Cols, P, RT, ColsOf<T> | EvalAliases<E> | AddonAliases<A>>,
-): DbResult<As, ApplyFilters<QueryResult<QueryRow<T, Cols, P, RT>, A, P, RT, E, AG, Cols>, Fs>> {
+  args: DbQueryArgs<T, As, Cols, A, P, RT, E, AG, B> & { asFilters?: Fs } & QueryNestedKeys<P, E, AG> &
+    PagedOutputCheck<Cols, P, RT, ColsOf<T> | EvalAliases<E> | AddonAliases<A>> & LockCheck<RT, P>,
+): DbResult<As, ApplyFilters<QueryResult<QueryRow<T, Cols, P, RT>, A, P, RT, E, AG, Cols, B>, Fs>> {
   args = argsOrEmpty(args);
   // The stored shape's spelling (`context.return.type`), typed through `any`:
   // not an argument, so it was dropped and the query ran as a "list".
@@ -3084,12 +3250,27 @@ export function dbQuery<
   // Gated on the SDK actually ADDING a prefix, which is what keeps a pulled
   // workspace byte-exact: stored aggregate names are already dotted, so codegen's
   // re-emit qualifies nothing, adds no alias, and round-trips unchanged.
+  // In an AGGREGATE, a dotted name is a json path into an own column when its
+  // first segment is one (`obj.a`) and no alias shares it; the engine reads that
+  // segment as a table and refuses the query, so it needs the qualifier too.
+  // Measured on aggregate group only; a plain eval keeps the old rule.
+  const bindAliasNames = (args.bind ?? []).map((b) =>
+    b.as ?? (typeof b.table === "string" ? b.table : (b.table as { name?: string } | undefined)?.name ?? ""),
+  );
+  const queryEvalAliases = new Set<string>((args.eval ?? []).map((e) => e.as));
+  const qualifyScope: QualifyScope = {
+    ownColumns:
+      args.table !== null && typeof args.table === "object" && "schema" in (args.table as object)
+        ? new Set(tableColumns(args.table as TableDef).map((col) => col.name))
+        : new Set<string>(),
+    aliases: new Set([primaryAlias, ...bindAliasNames]),
+    evalAliases: queryEvalAliases,
+  };
+  if (returnType === "aggregate") assertAggregateNamesBaseOnly(args.aggregate, bindAliasNames, primaryAlias);
   const aggregateAddsQualifier =
     returnType === "aggregate" &&
     tableName !== "" &&
-    [...(args.aggregate?.group ?? []), ...(args.aggregate?.eval ?? [])].some(
-      (e) => !e.name.includes("."),
-    );
+    [...(args.aggregate?.group ?? []), ...(args.aggregate?.eval ?? [])].some((e) => needsQualifier(e.name, qualifyScope));
   // A plain `eval` name needs the SAME treatment, for the same engine reason:
   // `eval: [{ name: "content", as: "c2" }]` exported clean and then answered
   // `Unsupported param format - content` on every request, filters or not
@@ -3113,7 +3294,7 @@ export function dbQuery<
     (returnType === "list" || returnType === "stream") &&
     tableName !== "" &&
     (args.bind?.length ?? 0) > 0;
-  const evalAliases = new Set<string>((args.eval ?? []).map((e) => e.as));
+  const evalAliases = queryEvalAliases;
   const qualifiesSort = (entry: DbSortDirective): boolean =>
     entry.qualify !== false &&
     typeof entry.sortBy === "string" &&
@@ -3181,6 +3362,7 @@ export function dbQuery<
   // Row lock rides `context.lock` as a tagged value (`{value, tag, filters}`),
   // not a bare bool — the shape the engine's lock-config converter reads.
   const lock = optionalFlag("s.db.query", "lock", args.lock);
+  if (args.lock === true) assertLockable(returnType, args.paging);
   if (lock !== undefined) context.lock = lock;
   // Input-bound paging: `Value`-typed page/per_page/offset/search/sort
   // ride `context.simpleExternal` on top of the static block (which is the gate).
@@ -3200,11 +3382,11 @@ export function dbQuery<
     //
     // `external`'s page/per_page are gated by static `paging.enabled` just like
     // simpleExternal — force it on so a self-contained blob isn't silently no-op'd.
-    context.return = encodeReturn(returnType, sort, args.paging, true, args.distinct, args.aggregate, primaryAlias);
+    context.return = encodeReturn(returnType, sort, args.paging, true, args.distinct, args.aggregate, primaryAlias, qualifyScope);
     context.external = encodeExternal(args.external);
     if (simpleExternal) context.simpleExternal = simpleExternal;
   } else {
-    context.return = encodeReturn(returnType, sort, args.paging, false, args.distinct, args.aggregate, primaryAlias);
+    context.return = encodeReturn(returnType, sort, args.paging, false, args.distinct, args.aggregate, primaryAlias, qualifyScope);
     if (simpleExternal) context.simpleExternal = simpleExternal;
   }
   // A `list` query with paging enabled + metadata on returns a paging envelope,
@@ -3225,7 +3407,7 @@ export function dbQuery<
       addon: args.addon,
       addonOffset: usesPagingEnvelope ? "items[]" : undefined,
     }),
-  } as unknown as DbResult<As, ApplyFilters<QueryResult<QueryRow<T, Cols, P, RT>, A, P, RT, E, AG, Cols>, Fs>>, args);
+  } as unknown as DbResult<As, ApplyFilters<QueryResult<QueryRow<T, Cols, P, RT>, A, P, RT, E, AG, Cols, B>, Fs>>, args);
 }
 
 /**

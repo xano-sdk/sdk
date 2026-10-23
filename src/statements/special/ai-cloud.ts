@@ -55,17 +55,21 @@ export interface AgentRunResult<R = string> {
   finishReason: string;
   /** Provider-specific metadata (e.g. usage counters, safety signals), keyed by provider. */
   providerMetadata: Record<string, Record<string, unknown>>;
-  /** Reasoning parts emitted by the model; `[]` when none. */
-  reasoningDetails: unknown[];
-  /** Per-step records (each with e.g. `text`, `finishReason`, `usage`, `toolCalls`, `providerMetadata`). */
-  steps: unknown[];
+  /** Reasoning parts emitted by the model; `[]` when none. ABSENT on a structured-output (`output`) run with no tools. */
+  reasoningDetails?: unknown[];
+  /**
+   * Per-step records (each with e.g. `text`, `finishReason`, `usage`, `toolCalls`, `providerMetadata`).
+   * ABSENT on a structured-output (`output`) agent with NO tools, which runs as a
+   * single call — read it with `ref("<as>.steps", { safe: true })` there.
+   */
+  steps?: unknown[];
   /** Fallback finish reason, populated only when `finishReason` is `'unknown'`; otherwise empty/absent. */
   finishReasonCandidate?: string;
   /** Merged tool-call + result records; absent or empty when no tools ran. */
   toolCalls?: unknown[];
   /** Token usage for the final generation (`inputTokens`, `outputTokens`, `totalTokens`, …). */
   usage?: Record<string, unknown>;
-  /** Token usage aggregated across all steps. */
+  /** Token usage aggregated across all steps. Absent on a structured-output run with no tools. */
   totalUsage?: Record<string, unknown>;
 }
 

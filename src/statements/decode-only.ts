@@ -29,10 +29,9 @@
 export const DECODE_ONLY_STATEMENTS: ReadonlyMap<string, string> = new Map([
   [
     "mvp:placeholder",
-    "an unconfigured statement slot the engine writes in place of a statement it " +
-      "could not resolve, so an export stays well-formed. There is no statement " +
-      "class behind it: importing a workspace that contains one fails outright " +
-      'with "Missing statement: mvp:placeholder". Replace it with the statement it ' +
-      "stands in for before deploying — there is no destination where it runs",
+    "an unconfigured statement slot the engine writes for a statement it could " +
+      'not resolve. Importing a workspace that contains one fails with "Missing ' +
+      'statement: mvp:placeholder" on every destination; replace it with the ' +
+      "statement it stands in for before deploying",
   ],
 ]);

@@ -24,8 +24,11 @@ export interface XanoFileRef {
   /** Vault path, e.g. `/vault/<…>/<name>`. Join it to your base URL — see {@link import("./file-url.js").fileUrl}. */
   path?: string;
   name?: string;
+  /** The coarse kind the engine records (`"image"`, `""`). For the exact media type read {@link XanoFileRef.mime}. */
   type?: string;
   size?: number;
+  /** The file's MIME type (`"image/png"`, `"text/plain"`), carried on every stored file. */
+  mime?: string;
   /** Storage visibility as stored on the column (`"public"` / `"private"`). */
   access?: string;
   /** Type-specific metadata — e.g. `{ width, height }` on an image. */
@@ -178,17 +181,41 @@ type ApplyNullable<T, O, St extends string, Sf extends ValueSurface> = O extends
       : T;
 
 /**
+ * `| ""` on an enum COLUMN: the engine's enum check lets an empty value through
+ * without testing membership, so a write of `""` (which an omitted optional
+ * `input.text` binds) stores it, `required: true` or not. A column with no
+ * `values` is left as it brands (`undefined` on a row).
+ */
+type ApplyEnumEmpty<V, St extends string, Sf extends ValueSurface> = [St] extends ["enum"]
+  ? Sf extends "column"
+    ? [V] extends [never] | [undefined]
+      ? V
+      : V | ""
+    : V
+  : V;
+
+/**
  * The full value type of a single branded descriptor `D` read on surface `Sf`:
  * its base value with `array` and `nullable` applied, `nullable` defaulting per
  * stored type exactly as the encoder does. (Optionality of the *key* is a
  * map-level concern handled by {@link FromFieldMap}.)
  */
 export type ValueOf<D, Sf extends ValueSurface> = ApplyNullable<
-  ApplyArray<BrandValue<D, Sf>, BrandOpts<D>>,
+  ApplyArray<ApplyEnumEmpty<BrandValue<D, Sf>, BrandType<D>, Sf>, BrandOpts<D>>,
   BrandOpts<D>,
   BrandType<D>,
   Sf
 >;
+
+/**
+ * The value a SEED cell takes: the column's value type, widened for a
+ * timestamp (`epochms`) or `date` column to everything the seed coercion reads —
+ * epoch ms, a `Date`, or an ISO 8601 string. The read type stays `number`/text;
+ * the coercion validates the string (a bad one throws at export).
+ */
+export type SeedValueOf<D> = [BrandType<D>] extends ["epochms" | "date"]
+  ? ApplyNullable<ApplyArray<number | string | Date, BrandOpts<D>>, BrandOpts<D>, BrandType<D>, "column">
+  : ValueOf<D, "column">;
 
 /** Keys whose descriptor options declare `required: true`. */
 type RequiredKeys<M> = {

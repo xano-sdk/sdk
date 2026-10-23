@@ -86,7 +86,9 @@ export interface FieldOptions {
   access?: FieldAccess;
   style?: { type: FieldStyleType };
   /**
-   * Length bounds for an array field. Both members are `json`-typed in the
+   * Length bounds for an array field. ⚠ This does NOT make the field a list —
+   * use `array: true` (or `input.list(...)`); on a single value the bounds are
+   * ignored (`field.list-bounds-on-scalar`). Both members are `json`-typed in the
    * engine, not numeric — the editor declares them as `json` and every consumer
    * reads them through a numeric coercion (`+list.max`) — so a bound can arrive
    * as `5` or as `"5"` and neither spelling is wrong.

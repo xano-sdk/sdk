@@ -8,6 +8,20 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.15 — Statements that can run
+
+_2026-10-18_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.15)
+
+This release makes the statement factories refuse calls the engine can't run. About 40 factories now require arguments that used to be optional, because without them the statement fails with a 500 at runtime or quietly returns a wrong answer. No real workspace we swept leaves any of these out, but a call that omits one will now fail to type-check.
+
+- ⚠️ Statements now require the arguments the engine can't run without
+- ⚠️ Every `s.expect.*` assertion requires its operands
+- `output` is only offered where the statement binds `as`
+- `s.await` accepts `terminate`
+- Sandbox examples use real operands
+
+---
+
 ## 1.0.14 — Agents can sign you up
 
 _2026-10-15_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.14)

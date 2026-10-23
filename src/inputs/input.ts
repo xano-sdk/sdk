@@ -7,7 +7,7 @@ import type { InputXdo } from "../types/xdo.js";
 import { isTaggedValue } from "../values/value.js";
 import { encodeField, INPUT_CONTEXT } from "../fields/field.js";
 import type { FieldOptions, MethodArg, ReadonlyMethods } from "../fields/field.js";
-import { f, toNestedFields } from "../fields/catalog.js";
+import { f, toNestedFields, assertEnumValues } from "../fields/catalog.js";
 import type { FieldMap, EnumDefault } from "../fields/catalog.js";
 import type { TypeBrand, RawBrandValue, BrandType, ObjectOf, XanoFileUpload, XanoDbLink } from "../fields/value-types.js";
 import { resolveRef } from "../refs/guid.js";
@@ -45,6 +45,28 @@ function makeInput<V, N extends string, T extends string>(type: T) {
     options: O = {} as O,
   ): InputDescriptor & TypeBrand<V, O, T> =>
     ({ type, options }) as InputDescriptor & TypeBrand<V, O, T>;
+}
+
+/**
+ * One geo input constructor, re-branded from its `f.geo.*` twin. A geo *input*
+ * reads back as WKT text (`inp("p")` → `"POINT(10 20)"`), not the `{ type, data }`
+ * of a geo *column*: the engine's `inp()`→WKT vs column→`{type,data}` split is
+ * deliberate and round-trips (sdk-dev#65). So `input.geo.*` reuses `f.geo`'s
+ * runtime constructor verbatim — identical stored type, options and encoding —
+ * and only the read brand differs (`string`, not `XanoGeoValue`).
+ */
+type GeoInputCtor<T extends string> = <const O extends ConstInputOpts<never> = Record<string, never>>(
+  options?: O,
+) => InputDescriptor & TypeBrand<string, O, T>;
+
+/** The six geo input constructors, keyed exactly like `f.geo`. */
+interface GeoInputCatalog {
+  point: GeoInputCtor<"geo_point">;
+  multipoint: GeoInputCtor<"geo_multipoint">;
+  linestring: GeoInputCtor<"geo_linestring">;
+  multilinestring: GeoInputCtor<"geo_multilinestring">;
+  polygon: GeoInputCtor<"geo_polygon">;
+  multipolygon: GeoInputCtor<"geo_multipolygon">;
 }
 
 /**
@@ -165,8 +187,14 @@ export const input = {
   audio: f.audio,
   /** Generic file-attachment input (stored `blob`). */
   attachment: f.attachment,
-  /** Geo inputs: `input.geo.point()`, `.polygon()`, … (six geometry types). */
-  geo: f.geo,
+  /**
+   * Geo inputs: `input.geo.point()`, `.polygon()`, … (six geometry types). A geo
+   * input reads back as WKT text (`inp(...)` → `"POINT(10 20)"`), so these brand
+   * the read value `string` — unlike a geo *column* (`f.geo.*`), which reads
+   * `{ type, data }`. The runtime is `f.geo` untouched (same stored type and
+   * encoding); the cast only changes the type-level read brand. See {@link GeoInputCatalog}.
+   */
+  geo: f.geo as unknown as GeoInputCatalog,
   /** Vector input; `size` (>= 1) is the embedding dimensionality. */
   vector: f.vector,
   /** Table-reference input — see {@link f.tableRef}; pass the table handle or bare name. */
@@ -180,6 +208,7 @@ export const input = {
     values: V,
     options: O & EnumDefault<V, O> = {} as O & EnumDefault<V, O>,
   ): InputDescriptor & TypeBrand<V[number], O, "enum"> {
+    assertEnumValues(values, "input");
     return { type: "enum", options: { ...options, values: [...values] } } as InputDescriptor &
       TypeBrand<V[number], O, "enum">;
   },

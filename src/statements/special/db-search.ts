@@ -65,56 +65,28 @@ export interface SortDirective<C extends string = string> {
  * A `db.query`/addon filter. Author it as a comparison (or several, ANDed) with
  * `expr(col("status"), "=", c.text("published"))` or, for the full operator set,
  * `cmp(col("tags"), "overlaps", inp("t"))`. Compose nested boolean logic with
- * `and(...)` / `or(...)`. A raw `Value` stays the escape hatch for a pre-built
- * clause. Encoded into the engine's operand-based `{expression:[…]}` search shape.
+ * `and(...)` / `or(...)`. The operands take any `Value` (`inp`, `ref`, ...), but
+ * the filter itself is always a comparison: the engine reads `context.search`
+ * only as an `{expression:[…]}` tree, never as a value resolved at run time.
  */
-export type DbWhere = Value | SearchNode | SearchNode[];
-
-/**
- * Constant tags that can never be a pre-built search clause.
- *
- * The raw-`Value` `where` is a deliberate escape hatch — `inp("clause")` or
- * `ref("built_where")` hands the engine a search expression assembled earlier —
- * and this guard exists to keep that hatch while closing the case it was never
- * for. A FIXED literal is not a clause under any reading: `where: c.bool(true)`
- * is an author reaching for "match every row", and what they get is a
- * `context.search` the engine reads as garbage.
- *
- * A narrow deny-list rather than "every tag starting with const", because
- * several constant tags ARE legitimate here and the cost of wrongly refusing
- * valid code is higher than the cost of missing one more spelling of the bug:
- *
- *   • `const` (text) is how a hand-written clause is spelled —
- *     `where: c.text("id > 0")` is the escape hatch's own worked example.
- *   • `const:expr` / `const:expr2` carry an expression STRING the engine's
- *     parser evaluates; `c.expression(...)` and `obj({...})` both emit one.
- *   • `const:obj` / `const:array` could carry a hand-built search STRUCTURE,
- *     and there is no evidence here that they cannot.
- *
- * What is left is the set that cannot be a clause under any reading: a bare
- * scalar literal. That covers the reported bug — `where: c.bool(true)`, an
- * author reaching for "match every row" and getting a `context.search` the
- * engine reads as garbage. An unlisted tag stays allowed by design.
- */
-const CONSTANT_WHERE_TAGS = new Set([
-  "const:bool",
-  "const:int",
-  "const:decimal",
-  "const:null",
-  "const:epochms",
-]);
+export type DbWhere = SearchNode | SearchNode[];
 
 /**
  * Encode `where` (+ an optional `additionalWhere`) into the single
  * `context.search` the engine reads (`mvp_search` = `{ expression: [...] }`).
  * Comparison clauses from both args concatenate into one `expression[]`, ANDed
  * (`or:false`) — the engine has exactly one `search`, so there is no separate
- * `additional_where`. A raw `Value` (escape hatch) passes through as
- * `context.search` directly, but cannot be combined with comparison clauses.
+ * `additional_where`.
+ *
+ * A `Value` is refused, whatever its tag. The engine reads `context.search` only
+ * as an `{expression:[…]}` tree; any other stored shape it treats as NO filter
+ * and runs the query over every row — a text clause (`c.text("id > 4")`) and a
+ * clause meant for run time (`inp("clause")`, `ref("built_where")`) alike,
+ * measured on both backends. A filter that fails open is worse than one that
+ * fails, so every spelling fails here.
  */
 export function encodeSearch(where?: DbWhere, additionalWhere?: DbWhere, owner = "db search"): unknown {
   const nodes: SearchNode[] = [];
-  let raw: unknown;
   for (const [field, w] of [["where", where], ["additionalWhere", additionalWhere]] as const) {
     if (!w) continue;
     if (Array.isArray(w)) {
@@ -131,33 +103,21 @@ export function encodeSearch(where?: DbWhere, additionalWhere?: DbWhere, owner =
     }
     else if (isGroup(w) || isMixed(w) || isCmpNode(w)) nodes.push(w);
     else if (isValue(w)) {
-      if (CONSTANT_WHERE_TAGS.has(w.tag)) {
-        throw new Error(
-          `${owner}: \`${field}\` is the constant ${w.tag}:${JSON.stringify(w.value)}, which cannot ` +
-            `be a search clause — a fixed literal states no condition, and the engine reads the ` +
-            `resulting \`context.search\` as neither a predicate nor an absent one. To match ` +
-            `EVERY row, omit \`${field}\` entirely (an empty search is how "no filter" is spelled). ` +
-            `To filter, use expr(col("x"), "=", …), cmp(...), or an and()/or() group. The raw ` +
-            `Value form is the escape hatch for a clause built elsewhere — inp("clause"), ` +
-            `ref("built_where"), or an expression value — not for a literal.`,
-        );
-      }
-      raw = w;
+      throw new Error(
+        `${owner}: \`${field}\` is a value (${(w as unknown as Value).tag}), which cannot be a filter: the engine reads a ` +
+          `filter only as a comparison tree, and runs a query whose filter is anything else over ` +
+          `EVERY row. To filter, use expr(col("x"), "=", inp("x")), cmp(...), or an and()/or() ` +
+          `group — the operands take inp()/ref() values. To match every row, omit \`${field}\`.`,
+      );
     } else {
       // Not comparison/group-shaped and not a tagged `Value` — a malformed `where`
       // (e.g. `op` mistyped as `operator`) would otherwise slip through as a
       // garbage `context.search`. Fail at the authoring site, not deep in the engine.
       throw new Error(
-        `${owner}: \`${field}\` must be an expr(...)/cmp(...) comparison, an and()/or() group, an ` +
-          `array of those, or a tagged Value (inp/ref/col/c.*) — got ${typeof w === "object" ? "an object that is neither. Check for a typo (e.g. `operator` instead of `op`)." : `${describeEntry(w)}.`}`,
+        `${owner}: \`${field}\` must be an expr(...)/cmp(...) comparison, an and()/or() group, or an ` +
+          `array of those — got ${typeof w === "object" ? "an object that is neither. Check for a typo (e.g. `operator` instead of `op`)." : `${describeEntry(w)}.`}`,
       );
     }
-  }
-  if (raw !== undefined && nodes.length) {
-    throw new Error(
-      `${owner}: a raw Value \`where\` cannot be combined with expr()/cmp()/and()/or() clauses — ` +
-        "use one form or the other.",
-    );
   }
   // Top-level siblings are ANDed (the engine has exactly one `search`, so
   // `where` + `additionalWhere` concatenate into one ANDed `expression[]`).
@@ -169,7 +129,6 @@ export function encodeSearch(where?: DbWhere, additionalWhere?: DbWhere, owner =
     assertNoBareRightColumn(encoded);
     return encoded;
   }
-  if (raw !== undefined) return raw;
   return undefined;
 }
 
@@ -347,6 +306,39 @@ export function encodeEval(evals?: readonly DbEval[]): unknown[] | undefined {
 }
 
 /**
+ * What decides whether a DOTTED name is a json path into the query's own column
+ * (`obj.a`, which still needs the table qualifier) or an already-qualified one
+ * (`<alias>.<column>`, which passes through). Absent, every dotted name passes.
+ */
+export interface QualifyScope {
+  /** The bound table's own columns, when the table is a handle with a schema. */
+  ownColumns: ReadonlySet<string>;
+  /** Every alias the statement resolves: its own, and each bind's. */
+  aliases: ReadonlySet<string>;
+  /**
+   * The statement's query-level `eval` aliases. An aggregate names one BARE: the
+   * aggregate runs over the base query as a CTE, whose columns include them, so
+   * the bare alias resolves and a qualified `<table>.<alias>` does not.
+   */
+  evalAliases?: ReadonlySet<string>;
+}
+
+/**
+ * Whether an aggregate/eval name needs the primary alias prefixed: a bare
+ * column, or a json path whose first segment is one of the table's own columns
+ * and not an alias. The engine reads the first segment of a dotted name as a
+ * table alias, so an unqualified `obj.a` fails every request with
+ * `Unsupported object reference - obj.a`.
+ */
+export function needsQualifier(name: string, scope?: QualifyScope): boolean {
+  if (scope?.evalAliases?.has(name)) return false;
+  if (!name.includes(".")) return true;
+  if (scope === undefined) return false;
+  const first = name.slice(0, name.indexOf("."));
+  return scope.ownColumns.has(first) && !scope.aliases.has(first);
+}
+
+/**
  * Alias-qualify aggregate `group`/`eval` column names. The engine rejects a bare
  * (dotless) column in an aggregate with `Unsupported param format - <col>`; a name
  * must be `<tableAlias>.<column>`. A bare author name is prefixed with the query's
@@ -366,10 +358,13 @@ export function qualifyAggregateEvals(
   evals: readonly DbEval[] | undefined,
   primaryAlias: string,
   kind: "group" | "eval" | "query eval",
+  scope?: QualifyScope,
 ): DbEval[] | undefined {
   if (!evals?.length) return evals as DbEval[] | undefined;
   return evals.map((e) => {
-    const name = e.name.includes(".") ? e.name : `${primaryAlias}.${e.name}`;
+    // A query-level eval alias stays bare: the aggregate's CTE carries it as a column.
+    if (scope?.evalAliases?.has(e.name)) return { ...e };
+    const name = needsQualifier(e.name, scope) ? `${primaryAlias}.${e.name}` : e.name;
     // Emulates the engine's own check: the qualified name must be a real
     // `<alias>.<column>` (non-empty on both sides of the dot). Trips when the
     // primary alias is unresolvable or the author's dotted name is malformed.

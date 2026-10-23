@@ -130,9 +130,12 @@ export const cond = {
 
   /**
    * The object at `value` has something at `path` — the engine's `has` filter,
-   * whose argument is a dotted path (`"address.city"`), not a value.
+   * whose argument is a dotted path, not a runtime value. Pass it as a bare
+   * string (`cond.has(inp("blob"), "address.city")`); it is wrapped as `c.text`
+   * for you. A `Value` is still accepted for a computed path.
    */
-  has: (value: Value, path: Value): Comparison => predicate(value, fl.has(path), true),
+  has: (value: Value, path: string | Value): Comparison =>
+    predicate(value, fl.has(typeof path === "string" ? c.text(path) : path), true),
 
   /**
    * `value` (an array or object) has exactly `n` entries.

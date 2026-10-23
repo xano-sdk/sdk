@@ -88,7 +88,11 @@ export const expect = {
   to_be_defined: (subject: Value): TestExpect => mk("to_be_defined", subject),
   /** The subject is undefined. */
   to_not_be_defined: (subject: Value): TestExpect => mk("to_not_be_defined", subject),
-  /** The subject is empty — `""`, `[]`, `{}`, `0`, or null. */
+  /**
+   * The subject is empty — only `""`, `[]`, or `{}`. `0`, `null` and `false`
+   * all FAIL, so use {@link to_be_null} for null and `to_equal(…, c.int(0))`
+   * for zero.
+   */
   to_be_empty: (subject: Value): TestExpect => mk("to_be_empty", subject),
   /** The subject is `null`. */
   to_be_null: (subject: Value): TestExpect => mk("to_be_null", subject),
@@ -103,9 +107,9 @@ export const expect = {
   /** The subject is a timestamp earlier than now. */
   to_be_in_the_past: (subject: Value): TestExpect => mk("to_be_in_the_past", subject),
 
-  /** `subject === value`. */
+  /** `subject == value` — a LOOSE compare: text `"5"` equals int `5`, and `5` equals `5.0`. To pin a type, assert on a filter like `withFilters(subject, fl.is_text())` instead. */
   to_equal: (subject: Value, value: Value): TestExpect => mk("to_equal", subject, value),
-  /** `subject !== value`. */
+  /** `subject != value` — the loose inverse of {@link to_equal} (`"5"` and `5` are NOT unequal). */
   to_not_equal: (subject: Value, value: Value): TestExpect => mk("to_not_equal", subject, value),
   /** `subject > value`, both read as numbers. */
   to_be_greater_than: (subject: Value, value: Value): TestExpect =>

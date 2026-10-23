@@ -79,9 +79,10 @@ export const classifier = agent({
  * value — landing in the agent's `$args` namespace, so `{{ $args.question }}` in
  * the prompt above resolves to it at run time.
  *
- * `allowToolExecution: c.bool(true)` lets the agent call its tools. Left unset,
- * the agent runs with its tools off: it sees them, never calls one, and answers
- * as if it had no data (export warns `stack.agent-tools-off`).
+ * `allowToolExecution: c.bool(true)` lets the agent call its tools; it is also
+ * the default when unset. `c.bool(false)` does not hide the tools: the model
+ * still emits the call, it never executes, and the run ends with an empty
+ * `result` (export warns `stack.agent-tools-off`).
  *
  * The `as` var is the rich result ENVELOPE, not the completion — the model's text
  * is at **`.result`** (alongside `finishReason`, `providerMetadata`, `steps`, …).

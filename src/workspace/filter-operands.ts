@@ -19,9 +19,10 @@
  * - `@>` — the left side must be a json column, and the right side json: a
  *   scalar, or a list whose first element is a scalar, is not, and an object
  *   literal fails to evaluate (a bound variable holding one works).
+ * - `===` / `!==` — not database operators at all (`Invalid name: ===`); use `=` / `!=`.
  * - a comparison (`=`, `<`, …) — neither side may be a list.
  * - a pattern or search operator (`like`, `~`, `includes`, `search`, …) — the
- *   right side may not be a list, and `includes` refuses a bool column.
+ *   right side may not be a list, and `includes` refuses a bool or a list column.
  *
  * Only what is decidable is judged: a left operand that is an undotted column
  * of the statement's own table (a joined or json-path column resolves
@@ -151,6 +152,24 @@ function tableShapes(sections: Readonly<Record<string, unknown[] | undefined>>):
   return out;
 }
 
+/**
+ * The def's own declared inputs as {@link ColumnShape}s (name → type + list),
+ * so an `inp()` operand's type is decidable the same way a column's is. A
+ * `dbLink` input (its `type` ends `_mvpschema`) expands to table columns read by
+ * column name, not a scalar of its own, so it is skipped.
+ */
+function inputShapes(obj: Record<string, unknown>): Map<string, ColumnShape> {
+  const out = new Map<string, ColumnShape>();
+  if (!Array.isArray(obj.input)) return out;
+  for (const entry of obj.input) {
+    const e = entry as { name?: unknown; type?: unknown; style?: { type?: unknown } } | null;
+    if (typeof e?.name !== "string" || e.name === "" || typeof e.type !== "string") continue;
+    if (/_mvpschema$/.test(e.type)) continue;
+    out.set(e.name, { type: e.type, list: e.style?.type === "list" });
+  }
+  return out;
+}
+
 function describeColumn(name: string, c: ColumnShape): string {
   return `\`${name}\` (${c.type}${c.list ? " list" : ""})`;
 }
@@ -160,8 +179,31 @@ function describeLiteral(s: LiteralShape): string {
   return s.kind === "object" ? "an object" : "a scalar";
 }
 
+/**
+ * The declared shape of an unfiltered `inp()` operand, from the def's own `input`
+ * block — so a scalar-typed input on the right of a containment op is caught the
+ * same as a scalar literal. A filtered input (its own chain may build a list) or
+ * one whose type is unknown here returns undefined.
+ */
+function inputShape(o: Operand, inputs: Map<string, ColumnShape> | undefined): ColumnShape | undefined {
+  if (o.tag !== "input" || typeof o.operand !== "string" || !unfiltered(o)) return undefined;
+  return inputs?.get(o.operand);
+}
+
 /** Why this comparison fails every request, or undefined when it may not. */
-function problem(op: string, left: Operand, right: Operand, columns: Map<string, ColumnShape> | undefined): string | undefined {
+function problem(
+  op: string,
+  left: Operand,
+  right: Operand,
+  columns: Map<string, ColumnShape> | undefined,
+  inputs?: Map<string, ColumnShape>,
+): string | undefined {
+  // The database operator set has no strict pair: every request fails with
+  // `Invalid name: ===`, whatever the operands. Strict is a runtime-condition
+  // operator only (`s.if`, a precondition).
+  if (op === "===" || op === "!==") {
+    return `the database has no \`${op}\` operator ("Invalid name: ${op}") — use \`${op === "===" ? "=" : "!="}\``;
+  }
   if (right.ignore_empty === true && emptyLiteral(right)) return undefined;
   const lit = literalShape(right);
   const leftName = left.tag === "col" && typeof left.operand === "string" && unfiltered(left) ? left.operand : undefined;
@@ -200,6 +242,30 @@ function problem(op: string, left: Operand, right: Operand, columns: Map<string,
   }
   if ((op === "includes" || op === "not includes") && column.type === "bool") {
     return `\`${op}\` does not take a bool column (${col})`;
+  }
+  // On a list column the cloud has no function for it (every request 500s
+  // "SQL Error: 42883, UNDEFINED FUNCTION"), and the local engine
+  // substring-matches each element instead: the two backends disagree.
+  if ((op === "includes" || op === "not includes") && column.list) {
+    return (
+      `\`${op}\` is a substring match on a scalar text column, and ${col} is a list: every request 500s ` +
+      `"UNDEFINED FUNCTION" on the cloud. Match an element with \`${op === "includes" ? "contains" : "not contains"}\` ` +
+      `and a list on the right`
+    );
+  }
+  // A scalar-typed `inp()` on the right of a containment op against a LIST
+  // column 400s every request that sends a value (`ParseError: Invalid value
+  // for param`), exactly as a scalar literal does — but the input block, not a
+  // literal, declares the type, so the literal rules below never see it.
+  if (CONTAINMENT_OPS.has(op) && column.list) {
+    const inShape = inputShape(right, inputs);
+    if (inShape !== undefined && !inShape.list && SCALAR_COLUMN_TYPES.has(inShape.type)) {
+      return (
+        `\`${op}\` on ${col} needs a LIST on the right, and \`inp("${(right as { operand?: string }).operand}")\` is a ` +
+        `scalar \`${inShape.type}\` input — it 400s \`Invalid value for param\` on every request that sends one. Build a ` +
+        `list first (\`s.set_var("vals", withFilters(c.array([]), fl.array_push(inp("${(right as { operand?: string }).operand}")), fl.filter_empty_text()))\`) and compare \`ref("vals")\``
+      );
+    }
   }
   if (!lit) return undefined;
   if (op === "in" || op === "not in") {
@@ -266,6 +332,7 @@ export function checkFilterOperands(
   for (const [payloadKey, arr] of Object.entries(sections)) {
     for (const obj of arr ?? []) {
       if (!obj || typeof obj !== "object") continue;
+      const inputs = inputShapes(obj as Record<string, unknown>);
       const found: string[] = [];
       walk(obj, (record) => {
         const context = record.context as { search?: unknown; dbo?: { id?: unknown } } | undefined;
@@ -275,7 +342,7 @@ export function checkFilterOperands(
         walk(context.search, (node) => {
           const s = node.statement as { op?: unknown; left?: unknown; right?: unknown } | undefined;
           if (!s || typeof s !== "object" || typeof s.op !== "string") return;
-          const why = problem(s.op, (s.left ?? {}) as Operand, (s.right ?? {}) as Operand, columns);
+          const why = problem(s.op, (s.left ?? {}) as Operand, (s.right ?? {}) as Operand, columns, inputs);
           if (why !== undefined) found.push(why);
         });
       });

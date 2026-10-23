@@ -281,7 +281,7 @@ A tool, prompt or resource can also carry the metadata MCP clients show: a `titl
 const summarize = prompt({
   name: "summarize",
   input: { post_id: input.int({ required: true }) },
-  stack: [s.db.get({ table: posts, fieldValue: inp("post_id"), as: "post" })],
+  stack: [s.db.get({ table: posts, fieldValue: inp("post_id"), as: "post" }), guard.found("post")],
   response: ref("post.title"), // a string is one user message
 });
 
