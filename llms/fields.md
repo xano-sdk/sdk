@@ -61,8 +61,9 @@ Timestamp seeds: epoch ms, `Date`, ISO 8601 date, or date-time with `Z`/offset; 
 Int seeds: whole, in int64 (past 2^53: a string).
 ⚠ Prefer `seedFile` for a file: a thunk's `import()` sits in
 YOUR module, so a bundler emits the JSON as a served chunk. Never put secrets
-in `seed`. `deploy --static` REFUSES a build carrying internal/sensitive seed values;
-declare public ones (demo logins) on the table: `publicSeed: ["password"]`.
+in `seed`. Internal/sensitive/password columns: Seeding them is fine (a seeded user logs in);
+`deploy --static` REFUSES only when a served file of the frontend build contains a seed value
+from one. Declare deliberately shown ones (demo logins) on the table: `publicSeed: ["password"]`.
 A replacing deploy re-seeds cleanly; `--keep-data` writes no seed rows.
 `seed` is evaluated on EVERY build, so a computed value (`Date.now()`) is fine:
 the lock records no seed data.

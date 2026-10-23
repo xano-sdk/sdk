@@ -594,9 +594,10 @@ export interface TableDef<Cols extends string = string, Row = unknown, Internal 
   seed?: SeedSource;
   /**
    * Columns whose SEED values are deliberately public — a demo login the
-   * frontend prints, say. `deploy --static` refuses a build that carries a seed
-   * value from an `internal`, `sensitive` or password column; a column named
-   * here is exempt from that scan, on this table only.
+   * frontend prints, say. Seeding an `internal`, `sensitive` or password column
+   * is fine; `deploy --static` refuses only when a served file of the frontend
+   * build contains one of its seed values. A column named here is exempt from
+   * that scan, on this table only.
    *
    * The column itself is unchanged: an `internal` password stays out of API
    * output. Only its seed values are declared public. Each name must be a

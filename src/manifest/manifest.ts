@@ -2479,7 +2479,7 @@ function renderSections(m: Manifest): RenderedSections {
     "  - The delivered payload arrives NESTED, so read `t.payload(\"<field>\")`, and `t.client` is the SENDER while `s.realtime.get_session` describes the RECIPIENT this run is for.",
     "- `mcpServerTrigger({ name, mcpServer, stack?, response?, responseShape? })` / `agentTrigger({ name, agent, stack?, response?, responseShape? })` — toolset connection. Bind with the `mcpServer()`/`agent()` def handle (or its name) — it resolves to the toolset guid at export. Raw numeric `objId` is a rarely-right escape hatch; binding nothing deploys a trigger that never fires. Inputs: `t.toolset` (`t.toolset(\"name\")`), `t.tools`; an MCP server's also `t.prompts`/`t.resources`: return one filtered to narrow what the connection lists, omit it to list all — but ⚠ a keyed response MUST keep `toolset` and `tools` (omitting either breaks the server for every client) — and `t.auth`, the signed-in user `{dbo, id, extras}` when the server has `oauth` (null otherwise). Response-bearing; the default returns every list input.",
     "- `workspaceTrigger({ name, actions?: {branch_live?,branch_merge?,branch_new?}, stack? })` — branch lifecycle. Inputs: `t.to_branch`, `t.from_branch`, `t.action`. Config-only.",
-    "- `errorTrigger({ name, stack? })` — error-signature trigger. Inputs: `t.event` (`new|regression|fixed`), `t.id`, `t.signature`, `t.error` (`t.error(\"code\")`/`t.error(\"message\")`), `t.caller`, `t.statement`, `t.actor`, `t.count`, `t.first_seen`, `t.last_seen`, `t.fixed_at`. Config-only.",
+    "- `errorTrigger({ name, stack? })` — error-signature trigger. Inputs: `t.event` (`new|regression|fixed`), `t.id`, `t.signature`, `t.error` (`t.error(\"code\")`/`t.error(\"message\")`), `t.caller`, `t.statement`, `t.actor`, `t.count`, `t.first_seen`, `t.last_seen`, `t.fixed_at`. Config-only. ⚠ EVERY error response becomes a signature, 4xx included: an `s.precondition` refusal (`error_type: \"inputerror\"` → `ERROR_CODE_INPUT_ERROR`) fires it with `t.event` `new`. For alerting, skip expected codes with an `s.conditional` on `t.error(\"code\")`.",
     "",
   ];
 
@@ -2555,8 +2555,9 @@ function renderSections(m: Manifest): RenderedSections {
     "Int seeds: whole, in int64 (past 2^53: a string).",
     "⚠ Prefer `seedFile` for a file: a thunk's `import()` sits in",
     "YOUR module, so a bundler emits the JSON as a served chunk. Never put secrets",
-    "in `seed`. `deploy --static` REFUSES a build carrying internal/sensitive seed values;",
-    "declare public ones (demo logins) on the table: `publicSeed: [\"password\"]`.",
+    "in `seed`. Internal/sensitive/password columns: Seeding them is fine (a seeded user logs in);",
+    "`deploy --static` REFUSES only when a served file of the frontend build contains a seed value",
+    "from one. Declare deliberately shown ones (demo logins) on the table: `publicSeed: [\"password\"]`.",
     "A replacing deploy re-seeds cleanly; `--keep-data` writes no seed rows.",
     "`seed` is evaluated on EVERY build, so a computed value (`Date.now()`) is fine:",
     "the lock records no seed data.",

@@ -8,6 +8,25 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.16 — Fewer silent failures
+
+_2026-10-23_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.16)
+
+This release is about failures that used to pass quietly. The compiler now refuses shapes the engine runs wrong, `export()` warns on about 30 more patterns that deploy fine and then misbehave, and the types now match what the engine actually binds. The grounding docs were fact-checked and shortened. Some calls that compiled before now fail to type-check or throw at build; each one was a runtime 500 or a wrong answer.
+
+- ⚠️ A `where` must be a comparison, and `auth()` needs a path
+- ⚠️ Types now match what the engine binds
+- `export()` warns on about 30 more silent-failure shapes
+- `s.realtime.kick` evicts a revoked member
+- `s.throw` takes a `status`
+- `xanosdk local update` downloads a current pin the machine lacks
+- `s.api.request` accepts `method: "QUERY"`
+- `routes.gen.ts` exports a dependency-free `routeQuery()`
+- `s.util.send_email`'s built-in provider sends only to the workspace owner
+- Grounding docs fact-checked and condensed
+
+---
+
 ## 1.0.15 — Statements that can run
 
 _2026-10-18_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.15)
