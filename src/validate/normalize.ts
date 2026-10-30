@@ -821,6 +821,31 @@ const DEFAULT_DOCUMENTATION = { require_token: false, token: "" };
 const DEFAULT_MIDDLEWARE = { pre: [], post: [], pre_customize: false, post_customize: false };
 
 /**
+ * The per-object `mesh0` telemetry block at its default: inherit the logging
+ * type from the container, set nothing of its own.
+ *
+ * A current engine writes this block on every object kind that runs (an
+ * endpoint, function, task, trigger, tool, ...) and on each container (an API
+ * group, channel, realtime server, toolset), as `{inherit: true, logging:
+ * "inherit"}`. A container spells its member after the runs it covers
+ * (`query_logging`, `message_logging`, `tool_logging`). The SDK authors none of
+ * it, and an engine generation before the block existed omits it, so the
+ * absent block and this one mean the same thing: an absent `inherit` reads as
+ * `true`, and an absent logging member as `"inherit"`. That also makes an empty
+ * block (`{}`, or the `[]` an empty map comes back as) the default.
+ *
+ * Narrow on purpose: every member has to sit at its default. A block that turns
+ * `inherit` off, or names a logging type, still compares.
+ */
+function isDefaultMesh0Block(v: unknown): boolean {
+  if (isEmptyArray(v)) return true;
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
+  return Object.entries(v as Record<string, unknown>).every(([member, value]) =>
+    member === "inherit" ? value === true : /^(?:[a-z]+_)?logging$/.test(member) && value === "inherit",
+  );
+}
+
+/**
  * Envelope members whose value, when it equals the listed default, is a
  * representational artifact rather than authored data. The SDK emits the
  * **full** persisted statement/object envelope (every member always present
@@ -1069,6 +1094,10 @@ export function isDefaultEnvelopeMember(key: string, v: unknown): boolean {
     // customized to run nothing still compares — that is not inheriting.
     case "middleware":
       return isEmptyArray(v) || deepEqual(normalize(v), normalize(DEFAULT_MIDDLEWARE));
+    // An object's or container's telemetry block, when it only inherits. See
+    // {@link isDefaultMesh0Block}.
+    case "mesh0":
+      return isDefaultMesh0Block(v);
     // Two unrelated `offset`s, both at a default. An addon's is the response path
     // its rows are spliced into, `""` when spliced at the root. A list context's
     // paging offset is declared to default to 0. Neither carries information at

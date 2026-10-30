@@ -557,18 +557,6 @@ export const ENGINE_OBJECT_KINDS: ReadonlyArray<EngineObjectKind> = [
   { kind: "realtime_server_trigger", authorFactory: "realtimeServerTrigger" },
   { kind: "realtime_trigger", authorFactory: "realtimeTrigger" },
   { kind: "resource", authorFactory: "resource" },
-  {
-    kind: "run.job",
-    authorFactory: null,
-    absence:
-      "not authorable, on the same grounds as branch/market_item: a run is a NAMED runnable registered against an account (it carries a user and a signature), not an object a workspace bundle carries — there is no `run` section in a bundle, only an install record. Nothing here targets one either: `s.cloud.job` takes an `image` and a `command` directly, so a containerized job is declared AT THE CALL and needs no separate definition",
-  },
-  {
-    kind: "run.service",
-    authorFactory: null,
-    absence:
-      "not authorable, for the same reason as run.job — account-registered state rather than workspace source. A long-running container in a workspace is a `microservice()`",
-  },
   { kind: "table", authorFactory: "table" },
   { kind: "table_trigger", authorFactory: "tableTrigger" },
   {

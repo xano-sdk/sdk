@@ -9,21 +9,18 @@ the real Xano engine golden fixtures, and a coverage report prints on every test
 
 | Surface | Coverage |
 |---|---|
-| Object kinds | **27 / 33** — counted over the engine's catalog, where each trigger type is its own kind |
+| Object kinds | **27 / 31** — counted over the engine's catalog, where each trigger type is its own kind |
 | Statements (via `s`) | **219 / 219 (100%)** — every engine statement surface has a factory |
 | Filters (via `fl`) | **246 / 246 (100%)** — every filter's signature is known: 144 carry arguments, 102 take none |
 
-The six engine kinds you cannot author here are `tablemap`, `run.job`, `run.service`, the
-superseded `realtime_channel`, `branch` and `market_item`. Four of the six are the same
-verdict: they are instance or account state rather than workspace source, so a bundle has no
-section for them and a pull could not bring one back. `run.job`/`run.service` belong in that
-group — a run is a named runnable registered against an ACCOUNT, carrying a user and a
-signature, and a bundle carries only an install record for one. Nothing in this SDK targets
-one either: `s.cloud.job` takes an `image` and a `command` directly, so a containerized job
-is declared at the call site and needs no separate definition, and a long-running container
-that belongs to a workspace is a `microservice()`. `llms.txt` names all six with their
-reasons. `llms.txt` and `manifest.json` regenerate their counts from the SDK's own
-catalogs; this table is hand-written, so a test asserts every figure in it against
+The four engine kinds you cannot author here are `tablemap`, the superseded
+`realtime_channel`, `branch` and `market_item`. Two of the four, `branch` and `market_item`,
+are instance state rather than workspace source, so a bundle has no section for them and a
+pull could not bring one back. A containerized job needs no object of its own: `s.cloud.job`
+takes an `image` and a `command` directly, so the job is declared at the call site, and a
+long-running container that belongs to a workspace is a `microservice()`. `llms.txt` names
+all four with their reasons. `llms.txt` and `manifest.json` regenerate their counts from the
+SDK's own catalogs; this table is hand-written, so a test asserts every figure in it against
 `buildManifest()` (`@xano/sdk/internal`) — the numbers here and the numbers an agent
 reads cannot disagree.
 

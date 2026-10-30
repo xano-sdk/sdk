@@ -1,4 +1,4 @@
-# xanosdk v1.0.17
+# xanosdk v1.0.18
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 
@@ -17,7 +17,7 @@ caller, `c.*` a constant — resolved at request time; JS operators over them do
 compute (see Gotchas). Requests share no memory — state persists in tables or redis.
 
 Authorable: statement surfaces 219/219, filters 246 (246 typed).
-Not authorable here: branch, market_item, realtime_channel (legacy; author realtimeServer + realtimeChannel instead), run.job, run.service, tablemap — these cannot be authored and do not survive a pull; reasons in `coverage.objectKinds.unmodeled`.
+Not authorable here: branch, market_item, realtime_channel (legacy; author realtimeServer + realtimeChannel instead), tablemap — these cannot be authored and do not survive a pull; reasons in `coverage.objectKinds.unmodeled`.
 
 Per-surface detail is in the topic files below: open the one whose condition matches the task.
 Per-entry detail (a statement's field schema with engine defaults, a filter's full argument

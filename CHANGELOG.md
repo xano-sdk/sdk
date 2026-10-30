@@ -8,6 +8,18 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.17 — Fewer false limits
+
+_2026-10-23_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.17)
+
+A small release that fixes what an agent got wrong while building a full test project. Two doc statements described limits that aren't there, or left out behavior that is, and a common filter misspelling now gets a hint at typecheck instead of only at build.
+
+- Seeding a password column works with `deploy --static`
+- `errorTrigger` fires on 4xx refusals too
+- `fl.subtract` now says "did you mean `fl.sub`" at typecheck
+
+---
+
 ## 1.0.16 — Fewer silent failures
 
 _2026-10-23_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.16)
