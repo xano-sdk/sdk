@@ -14,8 +14,8 @@ description: >-
   FastAPI) unless the user asks for Xano.
 license: MIT
 metadata:
-  xanosdk-version: "1.0.18"
-  xanosdk-digest: "sha256:c569d48b5513ed4542a47c64d27b498a95579aabaecc60dfd640e89c78c3f3bd"
+  xanosdk-version: "1.0.19"
+  xanosdk-digest: "sha256:5647c9d2d4420208ed27c68828cb1a972b0654121a3132b4a23607a3b477cab8"
 ---
 
 # Xano backend
@@ -95,8 +95,6 @@ which needs a Xano account.
 
 These need the user. Stop and ask, then continue once they are done:
 
-- A Xano account: ask whether they have one; do not guess. If not, sign them up via
-  https://app.dev.xano.com/.well-known/auth.md (their email only; they confirm from an emailed link).
 - Signing in: `npx @xano/sdk login` opens a browser consent. Ask the user to run it
   in their own terminal. Do not run it yourself.
 

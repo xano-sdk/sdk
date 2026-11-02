@@ -8,6 +8,17 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.18 — Preflight reads the default mesh0 block
+
+_2026-10-30_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.18)
+
+Preflight no longer fails every object against an engine that writes the new per-object `mesh0` telemetry block, and the engine object-kind catalog drops two kinds the engine removed. Take this release before the engine's per-object `mesh0` change reaches your instance: every earlier `@xano/sdk` reports a round-trip difference on every object there.
+
+- Preflight reads a default `mesh0` block as absent
+- `run.job` and `run.service` leave the engine kind catalog
+
+---
+
 ## 1.0.17 — Fewer false limits
 
 _2026-10-23_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.17)

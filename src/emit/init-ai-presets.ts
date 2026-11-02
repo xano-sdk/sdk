@@ -20,7 +20,6 @@
  * existing app) gets the same brief with every frontend slot left out: the
  * frontend guidance is `null`.
  */
-import { AGENT_SIGNUP_URL } from "../auth/agent-signup.js";
 import { reactPreset } from "./frontend-react.js";
 import { NODE_MIN } from "./init-templates.js";
 import { spellProjectSdkDir } from "./invocation.js";
@@ -194,9 +193,6 @@ npm run dev            # the frontend, pointed at the engine through .env.local
 - \`npx @xano/sdk login\` then \`npm run xano:deploy:ephemeral\` — ship the backend + static
   frontend to a disposable **ephemeral** environment on Xano's cloud;
   \`npm run xano:deploy:frontend\` republishes only the frontend.
-- Not signed in? Ask the user whether they have a Xano account; don't guess from context.
-  If not, sign them up via ${AGENT_SIGNUP_URL} (needs only their email; they
-  confirm from an emailed link). If so, they run \`npx @xano/sdk login\`.
 ${pullBullet(mode)}- \`npx @xano/sdk status\` says who you are, which workspace, and the environment this project
   last deployed to; \`npx @xano/sdk routes ./xano/index.ts\`, \`npx @xano/sdk tables\`,
   \`npx @xano/sdk test list\` and \`npx @xano/sdk local list\` inspect without changing anything.
@@ -274,9 +270,6 @@ npm run xano:deploy    # typecheck, then deploy the backend to the Xano Engine o
   nothing and needs no secrets. Run it before calling the work done, and again after any merge.
 - \`npx @xano/sdk login\` then \`npm run xano:deploy:ephemeral\` — ship the backend to a
   disposable **ephemeral** environment on Xano's cloud.
-- Not signed in? Ask the user whether they have a Xano account; don't guess from context.
-  If not, sign them up via ${AGENT_SIGNUP_URL} (needs only their email; they
-  confirm from an emailed link). If so, they run \`npx @xano/sdk login\`.
 ${pullBullet(mode)}- \`npx @xano/sdk status\` says who you are, which workspace, and the environment this project
   last deployed to; \`npx @xano/sdk routes ./xano/index.ts\`, \`npx @xano/sdk tables\`,
   \`npx @xano/sdk test list\` and \`npx @xano/sdk local list\` inspect without changing anything.

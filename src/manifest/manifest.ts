@@ -13,7 +13,6 @@
 // Side-effect imports: ensure every kind + statement is registered so the
 // manifest's coverage reflects the full SDK regardless of how it's loaded.
 import "../kinds/all.js";
-import { AGENT_SIGNUP_URL } from "../auth/agent-signup.js";
 import "../statements/s.js";
 import { GENERATED_SPECS } from "../statements/generated/specs.generated.js";
 import { SUPERSEDED_STATEMENTS } from "../statements/superseded.js";
@@ -1939,9 +1938,6 @@ function renderSections(m: Manifest): RenderedSections {
     "  browser consent no agent can complete. Set all three of `$XANO_INSTANCE_URL`,",
     "  `$XANO_WORKSPACE_ID`, `$XANO_META_TOKEN` and run `deploy`/`promote` directly: no disk, no",
     "  rotation, so it survives repeated runs.",
-    "  - Not signed in: ask the human whether they have a Xano account; never guess. No: sign",
-    `    them up via ${AGENT_SIGNUP_URL}; it returns this triple once they confirm by email. Yes: the`,
-    "    human runs `login`.",
     "  - The triple outranks every other credential (`--config`, `$XANO_PROFILE` and",
     "    `$XANO_REFRESH_TOKEN` included, each named on stderr when displaced). Setting SOME of the",
     "    three is a hard error, so a misspelled secret cannot fall through to whatever credential",

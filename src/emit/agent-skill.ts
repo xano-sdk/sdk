@@ -19,7 +19,6 @@
  * keeps install, uninstall and status stateless.
  */
 import { createHash } from "node:crypto";
-import { AGENT_SIGNUP_URL } from "../auth/agent-signup.js";
 import { AGENT_RULE_BACKENDS } from "./init-ai-presets.js";
 
 /** The skill's name. The Agent Skills spec requires it to equal its directory name. */
@@ -147,8 +146,6 @@ which needs a Xano account.
 
 These need the user. Stop and ask, then continue once they are done:
 
-- A Xano account: ask whether they have one; do not guess. If not, sign them up via
-  ${AGENT_SIGNUP_URL} (their email only; they confirm from an emailed link).
 - Signing in: \`npx @xano/sdk login\` opens a browser consent. Ask the user to run it
   in their own terminal. Do not run it yourself.
 
