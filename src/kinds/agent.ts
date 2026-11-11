@@ -20,7 +20,8 @@
  * provider config nested under `configs.<provider>` with the engine's camelCase
  * keys (`apiKey`, `sendReasoning`, `thinking.budgetTokens`, `useSearchGrounding`,
  * `reasoningEffort`, …). `xano-free` is a Google-GenAI wrapper minus
- * `apiKey`/`model`. Agents have **no** `instructions` field (the transform has
+ * `apiKey`/`model`; `xano-ai` is the same wrapper minus `apiKey` only, plus an
+ * optional `location`. Agents have **no** `instructions` field (the transform has
  * none) and no toolset-level middleware.
  *
  * The `agent_settings` wire shape is golden-verified: the openai provider config
@@ -68,9 +69,11 @@ import type { InputXdo } from "../types/xdo.js";
 import type { NoExtraKeys, RowFromFieldMap } from "../fields/value-types.js";
 import { assertKnownKeys, nearestKey } from "../util/known-keys.js";
 import { brandDef } from "./def-brand.js";
+import type { XanoAiAgentModel } from "../statements/generated/xano-ai-models.generated.js";
+import { XANO_AI_LOCATIONS, type XanoAiLocationName } from "../statements/xano-ai-statements.js";
 
 /** The LLM provider — the `agent_settings.type` value and the `configs` key. */
-export type LlmProvider = "xano-free" | "openai" | "anthropic" | "google-genai";
+export type LlmProvider = "xano-free" | "xano-ai" | "openai" | "anthropic" | "google-genai";
 
 /**
  * Fields common to every provider's LLM settings. String fields accept Twig
@@ -176,6 +179,44 @@ interface XanoFreeProvider extends LlmCommon {
 }
 
 /**
+ * Where a Xano AI agent runs its model. `""` (or leaving it out) defers to the
+ * workspace's Xano AI location, then to the gateway's default. Lowercase only.
+ * A `{{ … }}` template is also accepted: the run renders it before choosing.
+ */
+export type XanoAiLocation = XanoAiLocationName | `${string}{{${string}}}${string}`;
+
+/** A Twig placeholder in a stored string: the run renders it, so its value is not known here. */
+const TEMPLATED = /\{\{|\{%/;
+
+/**
+ * Xano AI provider settings → `configs.xano-ai`: Xano's billed models, the same
+ * Google-GenAI wrapper as `xano-free` without an `apiKey` (the credential is
+ * Xano's), but with a `model` and a `location` of its own.
+ */
+interface XanoAiProvider extends LlmCommon {
+  type: "xano-ai";
+  /**
+   * The model the agent runs (`xanosdk ai models` lists the current ones).
+   * Must be a literal: the run picks the model before it renders templates, so
+   * a `{{ … }}` or expression never matches and the run uses the default model
+   * instead. A model name the run does not serve also falls back to the default.
+   * Blank or left out runs the default model.
+   */
+  model?: XanoAiAgentModel | (string & {});
+  /** Where the model runs; see {@link XanoAiLocation}. Not written when left out. */
+  location?: XanoAiLocation;
+  /** 0–2; outside it is refused at register. */
+  temperature?: LlmNumber;
+  searchGrounding?: boolean;
+  thinkingBudget?: LlmNumber;
+  includeThoughts?: boolean;
+  baseURL?: string;
+  headers?: string;
+  safetySettings?: string;
+  dynamicRetrieval?: string;
+}
+
+/**
  * The run prompt, in exactly one of its two spellings.
  *
  * The engine stores ONE prompt behind a `prompt_type` discriminator: either a
@@ -212,9 +253,10 @@ export type AnthropicLlm = AnthropicProvider & LlmPrompt;
 export type OpenAiLlm = OpenAiProvider & LlmPrompt;
 export type GoogleGenAiLlm = GoogleGenAiProvider & LlmPrompt;
 export type XanoFreeLlm = XanoFreeProvider & LlmPrompt;
+export type XanoAiLlm = XanoAiProvider & LlmPrompt;
 
 /** Typed LLM settings, discriminated by provider `type`. */
-export type LlmSettings = AnthropicLlm | OpenAiLlm | GoogleGenAiLlm | XanoFreeLlm;
+export type LlmSettings = AnthropicLlm | OpenAiLlm | GoogleGenAiLlm | XanoFreeLlm | XanoAiLlm;
 
 /**
  * Structured-output authoring. `schema` is a record of named fields authored with
@@ -374,6 +416,26 @@ function buildProviderConfig(llm: LlmSettings): Record<string, unknown> {
         dynamicRetrievalConfig: llm.dynamicRetrieval ?? "",
       };
       break;
+    case "xano-ai":
+      // The xano-free wrapper, but it keeps `model` (the run reads it), and
+      // `location` is written only when the def has one: a toolset without one
+      // stores no key. A blank one is kept, since a stored blank reads back as
+      // `""` and has to re-encode to the same bytes; it runs as if absent.
+      config = {
+        model: llm.model ?? "",
+        temperature: llm.temperature ?? 1,
+        useSearchGrounding: llm.searchGrounding ?? false,
+        thinkingConfig: {
+          includeThoughts: llm.includeThoughts ?? false,
+          thinkingBudget: llm.thinkingBudget ?? 0,
+        },
+        baseURL: llm.baseURL ?? "",
+        headers: llm.headers ?? "",
+        safetySettings: llm.safetySettings ?? "",
+        dynamicRetrievalConfig: llm.dynamicRetrieval ?? "",
+        ...(llm.location !== undefined ? { location: llm.location } : {}),
+      };
+      break;
   }
   // Forward-compat escape hatch, merged last.
   return llm.extraConfig ? { ...config, ...llm.extraConfig } : config;
@@ -385,7 +447,40 @@ const LLM_KEYS: Record<string, string[]> = {
   openai: ["reasoningEffort", "organization", "project", "compatibility"],
   "google-genai": ["searchGrounding", "thinkingBudget", "includeThoughts", "safetySettings", "dynamicRetrieval"],
   "xano-free": ["searchGrounding", "thinkingBudget", "includeThoughts", "safetySettings", "dynamicRetrieval"],
+  "xano-ai": ["model", "location", "searchGrounding", "thinkingBudget", "includeThoughts", "safetySettings", "dynamicRetrieval"],
 };
+
+/**
+ * The two `xano-ai` settings whose wrong value lands silently. A model that is
+ * not a literal never matches the models the run serves, so every run uses (and
+ * bills) the default model; a location outside the set is not one the gateway
+ * serves.
+ */
+function assertXanoAiSettings(owner: string, llm: XanoAiLlm): void {
+  const where = `${owner} llm (xano-ai)`;
+  const model: unknown = llm.model;
+  if (model !== undefined && (typeof model !== "string" || TEMPLATED.test(model))) {
+    throw new Error(
+      `${where}: \`model\` must be a literal model name — got ${typeof model === "string" ? JSON.stringify(model) : "a value expression"}. ` +
+        "The run picks the model before it renders templates, so a `{{ … }}` or expression never matches " +
+        "and every run would use the default model instead. Write the name, e.g. `model: \"gemini-3.8-flash\"` " +
+        "(`xanosdk ai models` lists them).",
+    );
+  }
+  const location: unknown = llm.location;
+  if (location === undefined) return;
+  if (typeof location !== "string") {
+    throw new Error(
+      `${where}: \`location\` is a value expression; it takes "" | "us" | "global" | "eu", ` +
+        "or a `{{ $env.NAME }}` / `{{ $args.name }}` template the run renders.",
+    );
+  }
+  if (!(XANO_AI_LOCATIONS as readonly string[]).includes(location) && !TEMPLATED.test(location)) {
+    throw new Error(
+      `${where}: \`location\` is ${JSON.stringify(location)}; it takes "" | "us" | "global" | "eu" (or a {{ … }} template).`,
+    );
+  }
+}
 
 /** Map the typed authoring def onto the engine's stored `agent_settings`. */
 /**
@@ -413,12 +508,25 @@ export function buildAgentSettings(
     );
   }
   if (provider) {
-    assertKnownKeys(`${owner} llm (${llm.type})`, llm, [
+    // xano-free and xano-ai run on Xano's credential, so neither takes an
+    // `apiKey`; xano-ai's own `model` is in its provider list.
+    const xanoHosted = llm.type === "xano-free" || llm.type === "xano-ai";
+    const known = [
       "type", "systemPrompt", "maxSteps", "extraConfig", "prompt", "messages",
-      ...(llm.type === "xano-free" ? [] : ["apiKey", "model"]),
+      ...(xanoHosted ? [] : ["apiKey", "model"]),
       "temperature", "baseURL", "headers", ...provider,
-    ]);
+    ];
+    // Nothing is spelled near `apiKey`, so the generic refusal would only list
+    // keys; say why these providers have none.
+    if (xanoHosted && Object.hasOwn(llm, "apiKey")) {
+      throw new Error(
+        `${owner} llm (${llm.type}): unknown key "apiKey" — ${llm.type} runs on Xano's credential and takes no key; ` +
+          `remove it, or use a keyed provider (anthropic, openai, google-genai). Expected one of: ${known.join(", ")}.`,
+      );
+    }
+    assertKnownKeys(`${owner} llm (${llm.type})`, llm, known);
   }
+  if (llm.type === "xano-ai") assertXanoAiSettings(owner, llm);
   // Numeric settings are stored as typed literals, not templated: a number, a
   // numeric string, or the `""` an untouched editor control leaves.
   for (const key of ["temperature", "thinkingTokens", "thinkingBudget"] as const) {

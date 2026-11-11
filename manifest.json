@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -26,8 +26,8 @@
       ]
     },
     "statements": {
-      "implemented": 219,
-      "total": 219
+      "implemented": 227,
+      "total": 227
     },
     "filters": {
       "typed": 246,
@@ -586,6 +586,62 @@
       "declarative": false
     },
     {
+      "surface": "ai.embedding.create",
+      "storedName": "mvp:ai_embedding_create",
+      "sPath": "ai.embedding.create",
+      "registered": true,
+      "declarative": true,
+      "output": false,
+      "fields": [
+        {
+          "name": "as",
+          "type": "string",
+          "optional": true,
+          "default": ""
+        },
+        {
+          "name": "model",
+          "type": "value",
+          "optional": true,
+          "examples": [
+            "gemini-embedding-2",
+            "gemini-embedding-001"
+          ]
+        },
+        {
+          "name": "input",
+          "type": "value",
+          "optional": false
+        },
+        {
+          "name": "task_type",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "dimensions",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "location",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "us",
+            "global",
+            "eu"
+          ]
+        }
+      ],
+      "result": {
+        "name": "as",
+        "type": "{ embeddings: number[][]; model: string; usage: { input_tokens?: number; output_tokens?: number } }",
+        "note": "one vector per input, in input order; a single input still binds a list of one — read embeddings[0]"
+      }
+    },
+    {
       "surface": "ai.external.mcp.server_details",
       "storedName": "mvp:mcp_server_details",
       "sPath": "ai.external.mcp.server_details",
@@ -702,6 +758,564 @@
           "optional": true
         }
       ]
+    },
+    {
+      "surface": "ai.image.generate",
+      "storedName": "mvp:ai_image_generate",
+      "sPath": "ai.image.generate",
+      "registered": true,
+      "declarative": true,
+      "output": false,
+      "fields": [
+        {
+          "name": "as",
+          "type": "string",
+          "optional": true,
+          "default": ""
+        },
+        {
+          "name": "model",
+          "type": "value",
+          "optional": true,
+          "examples": [
+            "gemini-3.1-flash-image",
+            "gemini-3-pro-image",
+            "gemini-3.1-flash-lite-image",
+            "gemini-nano-banana-2.1"
+          ]
+        },
+        {
+          "name": "prompt",
+          "type": "value",
+          "optional": false
+        },
+        {
+          "name": "images",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "aspect_ratio",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "3:4",
+            "4:3",
+            "4:5",
+            "5:4",
+            "9:16",
+            "16:9",
+            "21:9"
+          ]
+        },
+        {
+          "name": "image_size",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "1K",
+            "2K",
+            "4K"
+          ]
+        },
+        {
+          "name": "save_to_files",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "public",
+            "private"
+          ]
+        },
+        {
+          "name": "location",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "us",
+            "global",
+            "eu"
+          ]
+        }
+      ],
+      "result": {
+        "name": "as",
+        "type": "{ image: <file resource> | XanoFileRef; text: string; model: string; usage: { input_tokens?: number; output_tokens?: number } }",
+        "note": "image is the file resource (pass it to s.storage.create_image to keep it), or the stored file value when save_to_files is \"public\"/\"private\". text is \"\" when the model returns none"
+      }
+    },
+    {
+      "surface": "ai.music.generate",
+      "storedName": "mvp:ai_music_generate",
+      "sPath": "ai.music.generate",
+      "registered": true,
+      "declarative": true,
+      "output": false,
+      "fields": [
+        {
+          "name": "as",
+          "type": "string",
+          "optional": true,
+          "default": ""
+        },
+        {
+          "name": "model",
+          "type": "value",
+          "optional": true,
+          "examples": [
+            "lyria-002",
+            "lyria-3-clip-preview",
+            "lyria-3-pro-preview"
+          ]
+        },
+        {
+          "name": "prompt",
+          "type": "value",
+          "optional": false
+        },
+        {
+          "name": "negative_prompt",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "seed",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "save_to_files",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "public",
+            "private"
+          ]
+        },
+        {
+          "name": "location",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "us",
+            "global",
+            "eu"
+          ]
+        }
+      ],
+      "result": {
+        "name": "as",
+        "type": "{ audio: <file resource> | XanoFileRef; model: string; lyrics: string | null; description: string | null }",
+        "note": "audio is the file resource, or the stored file value when save_to_files is set. lyrics/description are null when the model gives none (some never do)"
+      }
+    },
+    {
+      "surface": "ai.rerank",
+      "storedName": "mvp:ai_rerank",
+      "sPath": "ai.rerank",
+      "registered": true,
+      "declarative": true,
+      "output": false,
+      "fields": [
+        {
+          "name": "as",
+          "type": "string",
+          "optional": true,
+          "default": ""
+        },
+        {
+          "name": "model",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "query",
+          "type": "value",
+          "optional": false
+        },
+        {
+          "name": "documents",
+          "type": "value",
+          "optional": false
+        },
+        {
+          "name": "top_n",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "location",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "us",
+            "global",
+            "eu"
+          ]
+        }
+      ],
+      "result": {
+        "name": "as",
+        "type": "{ results: { index: number; id: string; score: number; content: string }[]; model: string }",
+        "note": "results best first (top_n limits them). index is the position in documents; id is the document's id, or its index as a string when it had none"
+      }
+    },
+    {
+      "surface": "ai.speech.generate",
+      "storedName": "mvp:ai_speech_generate",
+      "sPath": "ai.speech.generate",
+      "registered": true,
+      "declarative": true,
+      "output": false,
+      "fields": [
+        {
+          "name": "as",
+          "type": "string",
+          "optional": true,
+          "default": ""
+        },
+        {
+          "name": "model",
+          "type": "value",
+          "optional": true,
+          "examples": [
+            "gemini-3.8-flash-tts",
+            "gemini-3.8-flash-lite-tts"
+          ]
+        },
+        {
+          "name": "text",
+          "type": "value",
+          "optional": false
+        },
+        {
+          "name": "voice",
+          "type": "value",
+          "optional": true,
+          "examples": [
+            "Zephyr",
+            "Puck",
+            "Charon",
+            "Kore",
+            "Fenrir",
+            "Leda",
+            "Orus",
+            "Aoede",
+            "Callirrhoe",
+            "Autonoe",
+            "Enceladus",
+            "Iapetus",
+            "Umbriel",
+            "Algieba",
+            "Despina",
+            "Erinome",
+            "Algenib",
+            "Rasalgethi",
+            "Laomedeia",
+            "Achernar",
+            "Alnilam",
+            "Schedar",
+            "Gacrux",
+            "Pulcherrima",
+            "Achird",
+            "Zubenelgenubi",
+            "Vindemiatrix",
+            "Sadachbia",
+            "Sadaltager",
+            "Sulafat"
+          ]
+        },
+        {
+          "name": "instructions",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "save_to_files",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "public",
+            "private"
+          ]
+        },
+        {
+          "name": "location",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "us",
+            "global",
+            "eu"
+          ]
+        }
+      ],
+      "result": {
+        "name": "as",
+        "type": "{ audio: <file resource> | XanoFileRef; model: string; usage: { input_tokens?: number; output_tokens?: number } }",
+        "note": "audio is the file resource, or the stored file value when save_to_files is set"
+      }
+    },
+    {
+      "surface": "ai.speech.transcribe",
+      "storedName": "mvp:ai_speech_transcribe",
+      "sPath": "ai.speech.transcribe",
+      "registered": true,
+      "declarative": true,
+      "output": false,
+      "fields": [
+        {
+          "name": "as",
+          "type": "string",
+          "optional": true,
+          "default": ""
+        },
+        {
+          "name": "model",
+          "type": "value",
+          "optional": true,
+          "examples": [
+            "gemini-3.5-transcribe"
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "value",
+          "optional": false
+        },
+        {
+          "name": "language",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "prompt",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "location",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "us",
+            "global",
+            "eu"
+          ]
+        }
+      ],
+      "result": {
+        "name": "as",
+        "type": "{ text: string; model: string; usage: { input_tokens?: number; output_tokens?: number } }"
+      }
+    },
+    {
+      "surface": "ai.text.generate",
+      "storedName": "mvp:ai_text_generate",
+      "sPath": "ai.text.generate",
+      "registered": true,
+      "declarative": true,
+      "output": false,
+      "fields": [
+        {
+          "name": "as",
+          "type": "string",
+          "optional": true,
+          "default": ""
+        },
+        {
+          "name": "model",
+          "type": "value",
+          "optional": true,
+          "examples": [
+            "gemini-3.8-flash",
+            "gemini-4-argon",
+            "gemini-3.5-flash-lite",
+            "gemini-3.5-flash",
+            "claude-fable-5-1",
+            "claude-opus-5-5",
+            "claude-sonnet-5-5",
+            "claude-haiku-5-5"
+          ]
+        },
+        {
+          "name": "prompt",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "system",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "messages",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "files",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "temperature",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "max_tokens",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "response_format",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "text",
+            "json"
+          ]
+        },
+        {
+          "name": "json_schema",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "location",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "us",
+            "global",
+            "eu"
+          ]
+        }
+      ],
+      "result": {
+        "name": "as",
+        "type": "{ text: string; json: unknown; model: string; finish_reason: string | null; usage: { input_tokens?: number; output_tokens?: number } }",
+        "note": "json is the parsed reply when response_format is \"json\" (throws if it does not parse), else null. finish_reason is stop | max_tokens | safety | ..., null when none. usage can be {}"
+      }
+    },
+    {
+      "surface": "ai.video.generate",
+      "storedName": "mvp:ai_video_generate",
+      "sPath": "ai.video.generate",
+      "registered": true,
+      "declarative": true,
+      "output": false,
+      "fields": [
+        {
+          "name": "as",
+          "type": "string",
+          "optional": true,
+          "default": ""
+        },
+        {
+          "name": "model",
+          "type": "value",
+          "optional": true,
+          "examples": [
+            "veo-3.1-fast-generate-001",
+            "veo-3.1-generate-001",
+            "veo-3.1-lite-generate-001"
+          ]
+        },
+        {
+          "name": "prompt",
+          "type": "value",
+          "optional": false
+        },
+        {
+          "name": "negative_prompt",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "image",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "last_image",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "aspect_ratio",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "16:9",
+            "9:16"
+          ]
+        },
+        {
+          "name": "resolution",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "720p",
+            "1080p",
+            "4k"
+          ]
+        },
+        {
+          "name": "duration",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "generate_audio",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "timeout",
+          "type": "value",
+          "optional": true
+        },
+        {
+          "name": "save_to_files",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "public",
+            "private"
+          ]
+        },
+        {
+          "name": "location",
+          "type": "value",
+          "optional": true,
+          "enum": [
+            "",
+            "us",
+            "global",
+            "eu"
+          ]
+        }
+      ],
+      "result": {
+        "name": "as",
+        "type": "{ video: <file resource> | XanoFileRef; model: string; duration: number }",
+        "note": "video is the file resource, or the stored file value when save_to_files is set. duration in SECONDS"
+      }
     },
     {
       "surface": "api.call",
@@ -9014,6 +9628,24 @@
       "description": "Remove the copies install wrote; an edited copy is reported and kept"
     },
     {
+      "command": "ai models",
+      "flags": [
+        {
+          "flag": "--all",
+          "description": "Include unlisted models: they still run when a saved script names them, but no picker offers them"
+        },
+        {
+          "flag": "--config <path>",
+          "description": "Explicit credential file (default: $XANO_CONFIG)"
+        },
+        {
+          "flag": "--local-auth",
+          "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
+        }
+      ],
+      "description": "List the models each Xano AI statement takes, read live from the hub catalog with no sign-in: the suggested model, locations and options"
+    },
+    {
       "command": "compile",
       "args": "<file>",
       "flags": [
@@ -9179,6 +9811,14 @@
         {
           "flag": "--reset",
           "description": "Replace the environment and re-seed it, overriding --keep-data (a deploy without --keep-data already does) — not with --to"
+        },
+        {
+          "flag": "--ai-billing <user|instance>",
+          "description": "Who Xano AI usage on the Xano Engine is billed to: `user` (you, the default) or `instance` (the owner of the instance you signed in to). Overrides the `aiBilling` setting in package.json — only to the Xano Engine",
+          "values": [
+            "user",
+            "instance"
+          ]
         },
         {
           "flag": "--lock[=<path>]",
@@ -9934,6 +10574,14 @@
         {
           "flag": "--version <v>",
           "description": "Pin this engine version instead of the latest, like v0.1.5 — or `latest`, the default"
+        },
+        {
+          "flag": "--ai-billing <user|instance>",
+          "description": "Who Xano AI usage on the restarted engine is billed to: `user` (the default) or `instance`",
+          "values": [
+            "user",
+            "instance"
+          ]
         }
       ],
       "description": "Move this project's pinned engine to the latest release (or `--version <v>`, downgrades included), download it, and restart the project's running engine on it — the restarted engine starts empty, so the next deploy seeds it. Writes package.json: commit it"

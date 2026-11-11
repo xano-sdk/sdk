@@ -83,6 +83,16 @@ import {
 import { lambda } from "./special/lambda-args.js";
 import { mcpElicit } from "./special/mcp.js";
 import type { ExternalSqlEngine } from "./special/db.js";
+import type {
+  XanoAiTextResult,
+  XanoAiImageResult,
+  XanoAiVideoResult,
+  XanoAiSpeechResult,
+  XanoAiMusicResult,
+  XanoAiTranscribeResult,
+  XanoAiEmbeddingResult,
+  XanoAiRerankResult,
+} from "./special/xano-ai-results.js";
 import {
   returnValue,
   foreachBreak,
@@ -108,6 +118,20 @@ type ObjectEntries = <const As extends string = string, const Fs extends readonl
 type CreateUuid = <const As extends string = string, const Fs extends readonly FilterXdo[] = readonly []>(
   a?: Omit<NonNullable<Parameters<typeof generated.security.create_uuid>[0]>, "as" | "asFilters"> & { as?: As; asFilters?: Fs },
 ) => Statement & AsShapeBrand<As, ApplyFilters<string, Fs>>;
+
+/**
+ * A Xano AI statement, branded so the bound var reads as the result the engine
+ * returns (`ref("out.text")` is a `string`, not `unknown`). Same arguments and
+ * bytes as the generated factory `F`; only `as` / `asFilters` are re-typed to
+ * carry the name and filters through.
+ */
+type XanoAi<F extends (a: never) => Statement, Result> = undefined extends Parameters<F>[0]
+  ? <const As extends string = string, const Fs extends readonly FilterXdo[] = readonly []>(
+      a?: Omit<NonNullable<Parameters<F>[0]>, "as" | "asFilters"> & { as?: As; asFilters?: Fs },
+    ) => Statement & AsShapeBrand<As, ApplyFilters<Result, Fs>>
+  : <const As extends string = string, const Fs extends readonly FilterXdo[] = readonly []>(
+      a: Omit<NonNullable<Parameters<F>[0]>, "as" | "asFilters"> & { as?: As; asFilters?: Fs },
+    ) => Statement & AsShapeBrand<As, ApplyFilters<Result, Fs>>;
 
 /**
  * An in-place list mutator, branded with the name it appends to and the value
@@ -209,7 +233,23 @@ export const s = {
     },
   },
   // AI agent + cloud jobs.
-  ai: { ...generated.ai, agent: { run: aiAgentRun } },
+  // The eight Xano AI statements are the generated factories, typed: each
+  // binds the result the engine returns, so `ref("<as>.<field>")` traces.
+  ai: {
+    ...generated.ai,
+    agent: { run: aiAgentRun },
+    text: { ...generated.ai.text, generate: generated.ai.text.generate as XanoAi<typeof generated.ai.text.generate, XanoAiTextResult> },
+    image: { ...generated.ai.image, generate: generated.ai.image.generate as XanoAi<typeof generated.ai.image.generate, XanoAiImageResult> },
+    video: { ...generated.ai.video, generate: generated.ai.video.generate as XanoAi<typeof generated.ai.video.generate, XanoAiVideoResult> },
+    music: { ...generated.ai.music, generate: generated.ai.music.generate as XanoAi<typeof generated.ai.music.generate, XanoAiMusicResult> },
+    speech: {
+      ...generated.ai.speech,
+      generate: generated.ai.speech.generate as XanoAi<typeof generated.ai.speech.generate, XanoAiSpeechResult>,
+      transcribe: generated.ai.speech.transcribe as XanoAi<typeof generated.ai.speech.transcribe, XanoAiTranscribeResult>,
+    },
+    embedding: { ...generated.ai.embedding, create: generated.ai.embedding.create as XanoAi<typeof generated.ai.embedding.create, XanoAiEmbeddingResult> },
+    rerank: generated.ai.rerank as XanoAi<typeof generated.ai.rerank, XanoAiRerankResult>,
+  },
   cloud: { ...generated.cloud, job: cloudJobNs },
   // Array map/union, expect.to_throw, auth-token, raw-input/post-process merge
   // into their generated namespaces.

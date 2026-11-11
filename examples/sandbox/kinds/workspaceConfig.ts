@@ -96,9 +96,18 @@ export const wsConfig = workspaceConfig({
   // (`allow_push: false`, `track_performance: true`, `use_internal_docs: false`)
   // — a value equal to the default is dropped when a workspace is pulled back.
   preferences: { allow_push: true },
-  // Workspace settings, an opaque map merged over the engine's default scaffold:
-  // name the members you care about, not the four provider configs you don't.
-  settings: { ai_enabled: true },
+  // Workspace settings, merged over the engine's default scaffold: name the
+  // members you care about, not the provider configs you don't.
+  //
+  // The `xano-ai` provider's `location` is the workspace default for Xano AI
+  // statements and `xano-ai` agents; one that sets its own wins (the agent in
+  // kinds/ai.ts opts out with "global"). Lowercase only — anything else throws.
+  // Leave the `xano-ai` block out and a deploy keeps the live location; an empty
+  // block or `location: ""` clears it.
+  settings: {
+    ai_enabled: true,
+    ai_settings: { providers: { "xano-ai": { location: "eu" } } },
+  },
   // Defaults applied to newly created objects (engine default: `int`).
   defaults: { db_primary_key: "uuid" },
   // Let tables carry SQL names distinct from their workspace names.

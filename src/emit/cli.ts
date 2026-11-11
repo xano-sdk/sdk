@@ -38,6 +38,7 @@
  * lock, so canonicals minted in CI are never silently discarded.
  */
 import { writeData } from "../util/secrets.js";
+import type { AiBilling } from "../deploy/local-engine-ai.js";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 // Type-only, so the emitter module itself stays a lazy import (see the export path).
@@ -278,6 +279,12 @@ export interface ParsedArgs {
   on: string | undefined;
   /** `test --kind unit|workflow`: narrow to one test family (default: both). */
   kind: "unit" | "workflow" | undefined;
+  /**
+   * `deploy --ai-billing user|instance` (and `local update`): who a Xano
+   * Engine's Xano AI usage is billed to. Absent, the project's setting decides,
+   * then the signed-in user.
+   */
+  aiBilling?: AiBilling;
   /** `test run-all --concurrency <n>`: how many tests to run at once (default 1). */
   concurrency: number | undefined;
   /** `deploy --test`: run the environment's tests after the deploy lands. */
@@ -798,6 +805,7 @@ function parsePort(raw: string | undefined): number {
 
 /** Nouns that take a verb as a second token (`xanosdk <noun> <verb> …`). */
 const NOUN_COMMANDS = new Set([
+  "ai",
   "profile",
   "env",
   "secrets",
@@ -1024,6 +1032,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let keepData = false;
   let on: string | undefined;
   let kind: "unit" | "workflow" | undefined;
+  let aiBilling: AiBilling | undefined;
   let concurrency: number | undefined;
   let test = false;
   let expiresHours: number | undefined;
@@ -1258,6 +1267,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
       kind = parseKind(valueAfter());
     } else if (arg.startsWith("--kind=")) {
       kind = parseKind(arg.slice("--kind=".length));
+    } else if (arg === "--ai-billing") {
+      aiBilling = parseAiBilling(valueAfter());
+    } else if (arg.startsWith("--ai-billing=")) {
+      aiBilling = parseAiBilling(arg.slice("--ai-billing=".length));
     } else if (arg === "--concurrency") {
       concurrency = parseConcurrency(numberAfter());
     } else if (arg.startsWith("--concurrency=")) {
@@ -1861,6 +1874,13 @@ export function parseArgs(argv: string[]): ParsedArgs {
     });
   };
   if (aiSeen) refuseUnlessDeclared("ai", "--ai", "it only chooses whether `init` writes AGENTS.md.");
+  if (aiBilling !== undefined) {
+    refuseUnlessDeclared(
+      "ai-billing",
+      "--ai-billing",
+      "it chooses who a Xano Engine's Xano AI usage is billed to, so only `deploy` and `local update`, which start one, take it.",
+    );
+  }
   if (profileSeen && profile !== undefined) {
     // `--profile` is the one GLOBAL flag with a scope, so its own check reads
     // the AUTH bundle rather than a per-command declaration — it is declared on
@@ -2243,6 +2263,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     keepData,
     on,
     kind,
+    ...(aiBilling === undefined ? {} : { aiBilling }),
     concurrency,
     test,
     expiresHours,
@@ -2447,6 +2468,15 @@ export function resolveHelpRequest(argv: string[]): HelpRequest | undefined {
 function parseFormat(raw: string | undefined): "json" | "multidoc" {
   if (raw === "json" || raw === "multidoc") return raw;
   throw new UsageError(`--format must be "json" or "multidoc" (got "${raw ?? ""}").`);
+}
+
+/** Parse an `--ai-billing` value, rejecting anything but the two billing modes. */
+function parseAiBilling(raw: string | undefined): AiBilling {
+  if (raw === "user" || raw === "instance") return raw;
+  throw new UsageError(
+    `--ai-billing must be "user" (bill yourself, the default) or "instance" (bill the owner of the instance you signed in to) ` +
+      `(got "${raw ?? ""}").`,
+  );
 }
 
 /** Parse a `--kind` value, rejecting anything but the two test families. */
@@ -4533,6 +4563,12 @@ async function dispatch(rawArgv: string[]): Promise<void> {
     // distance would not surface it now the family has real verbs.
     const { runProfileCommand } = await import("./profile-command.js");
     return runProfileCommand(args);
+  }
+  if (command === "ai") {
+    // The live Xano AI model catalog: a public read, so it works signed out.
+    // Node-only (the credential file decides which host answers).
+    const { runAiCommand } = await import("./ai-models-command.js");
+    return runAiCommand(args);
   }
   if (command === "marketplace") {
     // Three public catalogue reads plus the three npm-backed lifecycle verbs.

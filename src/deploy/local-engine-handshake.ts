@@ -65,6 +65,12 @@ export interface LocalEngine {
    * {@link loginLinkEndpoint}, it is checked right before the bearer follows it.
    */
   mcpUrl?: string;
+  /**
+   * Epoch ms the engine stops itself. Present only for an engine started with
+   * a nonzero `--ttl`; absent means it runs until it is stopped. Bounds how
+   * long a Xano AI credential asked for it is worth.
+   */
+  expiresAt?: number;
 }
 
 /** The three spellings of "this machine, and nowhere else". */
@@ -126,6 +132,7 @@ interface RawEngine {
   login_link_endpoint: string;
   log: string;
   mcp_url: string;
+  expires_at: string;
 }
 
 function requireString(raw: Record<string, unknown>, key: keyof RawEngine, source: string): string {
@@ -148,6 +155,25 @@ function requireString(raw: Record<string, unknown>, key: keyof RawEngine, sourc
  */
 function optionalString(raw: Record<string, unknown>, key: keyof RawEngine, source: string): string | undefined {
   return raw[key] === undefined ? undefined : requireString(raw, key, source);
+}
+
+/**
+ * An optional RFC 3339 time, as epoch ms. Present but not a time is the same
+ * version skew a malformed required field is, and refuses the same way.
+ */
+function optionalTime(raw: Record<string, unknown>, key: keyof RawEngine, source: string): number | undefined {
+  const text = optionalString(raw, key, source);
+  if (text === undefined) return undefined;
+  const at = Date.parse(text);
+  if (Number.isNaN(at)) {
+    throw new Error(
+      `${source} gave \`${key}\` as something other than a time.\n` +
+        `That is not an engine this SDK knows how to drive — the engine on this machine is ` +
+        `older or newer than the one it was built against. Move to a current one with ` +
+        `\`xanosdk local update\`.`,
+    );
+  }
+  return at;
 }
 
 function requireNumber(raw: Record<string, unknown>, key: keyof RawEngine, source: string): number {
@@ -180,6 +206,7 @@ function readEngine(value: unknown, source: string): LocalEngine {
   }
   const raw = value as Record<string, unknown>;
   const mcpUrl = optionalString(raw, "mcp_url", source);
+  const expiresAt = optionalTime(raw, "expires_at", source);
   return {
     name: requireString(raw, "name", source),
     url: requireString(raw, "url", source),
@@ -190,6 +217,7 @@ function readEngine(value: unknown, source: string): LocalEngine {
     loginLinkEndpoint: requireString(raw, "login_link_endpoint", source),
     logPath: requireString(raw, "log", source),
     ...(mcpUrl === undefined ? {} : { mcpUrl }),
+    ...(expiresAt === undefined ? {} : { expiresAt }),
   };
 }
 

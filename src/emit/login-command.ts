@@ -482,10 +482,15 @@ async function attemptLogin(p: {
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
     expires_at: Date.now() + (tokens.expires_in ?? 0) * 1000,
-    scope: tokens.scope ?? p.scope,
+    // What was asked for at authorize, when the answer names no scope: without
+    // the Xano AI scope on a server that does not advertise it.
+    scope: tokens.scope ?? provider.requestedScope(),
     instance: boundInstance,
     workspace_id: workspaceId,
     auth_host: p.authHost,
+    // The instance's public AI gateway, when the token response names one: shown by
+    // `xanosdk ai models` beside the catalog, never called.
+    ...(tokens.ai_gateway_url !== undefined ? { ai_gateway_url: tokens.ai_gateway_url } : {}),
     // Record exactly which client minted the token — required to refresh/revoke
     // it later. Resolved already (buildAuthUrl awaited the config).
     client_id: provider.clientId(),

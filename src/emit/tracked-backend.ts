@@ -203,6 +203,15 @@ function lookupRetry(err: unknown, slot: BackendSlot): unknown {
 }
 
 /**
+ * Why a deploy to the Xano Engine refuses a credential flag: the engine is
+ * reached with its own bearer, and the one credential the deploy does read —
+ * for the engine's Xano AI — comes from the ambient profile, never a flag.
+ */
+export const LOCAL_DEPLOY_CREDENTIAL =
+  "and a deploy to the Xano Engine takes none from the command line — the engine is reached with its own bearer, " +
+  "and its Xano AI credential comes from the profile this project pins, XANO_PROFILE, or the default profile.";
+
+/**
  * Refuse `--profile` when none of an invocation's resolved kinds is hosted
  * (R9). A profile beside one hosted slot is legitimate — `deploy local`
  * to an ephemeral picks the destination's account with it — so this takes
@@ -221,7 +230,9 @@ export function refuseProfileForLocal(
   flags: { authFile?: string; local?: boolean; authHost?: string } = typedCredentialFlags(),
 ): void {
   if (kinds.some((k) => k !== "local")) return;
-  const why = "and a Xano Engine takes none — it is reached with the engine's own bearer.";
+  // A deploy to the engine DOES read a credential — its Xano AI one — but never
+  // the one a flag names, so the reason says where that one comes from.
+  const why = slot === undefined ? LOCAL_DEPLOY_CREDENTIAL : "and a Xano Engine takes none — it is reached with the engine's own bearer.";
   // No slot is `deploy --local`, whose destination is the flag itself:
   // "name a hosted backend on the command" read as keeping it.
   const or = slot === undefined ? "or add `--ephemeral` to deploy to a hosted backend." : `or ${nameOne(slot, "a hosted backend", true)}.`;

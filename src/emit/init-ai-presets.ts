@@ -92,7 +92,7 @@ writing:
    conditions are for.
 3. \`node_modules/@xano/sdk/manifest.json\` — only for per-entry detail neither
    carries: a statement's full field schema with engine defaults, a filter's
-   complete argument list. Grep or \`jq\` the one entry you need; it is ~70k
+   complete argument list. Grep or \`jq\` the one entry you need; it is ~80k
    tokens, so never read it whole.
 
 The published types and JSDoc (\`node_modules/@xano/sdk/**/*.d.ts\`) are that

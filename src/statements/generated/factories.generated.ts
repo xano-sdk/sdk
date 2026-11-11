@@ -15,6 +15,7 @@ import type { FilterXdo } from "../../types/xdo.js";
 import type { LambdaBody } from "../../values/lambda.js";
 import type { Condition } from "../conditional.js";
 import type { MockMap } from "../../values/mock.js";
+import type { XanoAiEmbeddingModel, XanoAiImageModel, XanoAiMusicModel, XanoAiRerankModel, XanoAiSpeechModel, XanoAiSpeechVoice, XanoAiTextModel, XanoAiTranscribeModel, XanoAiVideoModel } from "./xano-ai-models.generated.js";
 import { GENERATED_SPECS } from "./specs.generated.js";
 
 const SPECS = new Map(GENERATED_SPECS.map((s) => [s.name, s]));
@@ -22,6 +23,10 @@ const fromSpec = (name: string, a: object): Statement => encodeFromSpec(SPECS.ge
 
 export const generated = {
   ai: {
+    embedding: {
+      create: /** `mvp:ai_embedding_create` — fields: as, model, input, task_type, dimensions, location */
+(a: { as?: string; model?: XanoAiEmbeddingModel | (string & {}) | Value; input: Value; task_type?: Value; dimensions?: Value; location?: "" | "us" | "global" | "eu" | Value; disabled?: boolean; description?: string; mock?: MockMap; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:ai_embedding_create", a),
+    },
     external: {
       mcp: {
         server_details: /** `mvp:mcp_server_details` — fields: as, url, bearer_token, connection_type */
@@ -33,6 +38,30 @@ export const generated = {
 (a: { as?: string; url: Value; bearer_token?: Value; connection_type?: "sse" | "stream" | Value; tool: Value; args?: Value; disabled?: boolean; description?: string; mock?: MockMap; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:mcp_call_tool", a),
         },
       },
+    },
+    image: {
+      generate: /** `mvp:ai_image_generate` — fields: as, model, prompt, images, aspect_ratio, image_size, save_to_files, location */
+(a: { as?: string; model?: XanoAiImageModel | (string & {}) | Value; prompt: Value; images?: Value; aspect_ratio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9" | Value; image_size?: "1K" | "2K" | "4K" | Value; save_to_files?: "" | "public" | "private" | Value; location?: "" | "us" | "global" | "eu" | Value; disabled?: boolean; description?: string; mock?: MockMap; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:ai_image_generate", a),
+    },
+    music: {
+      generate: /** `mvp:ai_music_generate` — fields: as, model, prompt, negative_prompt, seed, save_to_files, location */
+(a: { as?: string; model?: XanoAiMusicModel | (string & {}) | Value; prompt: Value; negative_prompt?: Value; seed?: Value; save_to_files?: "" | "public" | "private" | Value; location?: "" | "us" | "global" | "eu" | Value; disabled?: boolean; description?: string; mock?: MockMap; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:ai_music_generate", a),
+    },
+    rerank: /** `mvp:ai_rerank` — fields: as, model, query, documents, top_n, location */
+(a: { as?: string; model?: XanoAiRerankModel | (string & {}) | Value; query: Value; documents: Value; top_n?: Value; location?: "" | "us" | "global" | "eu" | Value; disabled?: boolean; description?: string; mock?: MockMap; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:ai_rerank", a),
+    speech: {
+      generate: /** `mvp:ai_speech_generate` — fields: as, model, text, voice, instructions, save_to_files, location */
+(a: { as?: string; model?: XanoAiSpeechModel | (string & {}) | Value; text: Value; voice?: XanoAiSpeechVoice | (string & {}) | Value; instructions?: Value; save_to_files?: "" | "public" | "private" | Value; location?: "" | "us" | "global" | "eu" | Value; disabled?: boolean; description?: string; mock?: MockMap; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:ai_speech_generate", a),
+      transcribe: /** `mvp:ai_speech_transcribe` — fields: as, model, audio, language, prompt, location */
+(a: { as?: string; model?: XanoAiTranscribeModel | (string & {}) | Value; audio: Value; language?: Value; prompt?: Value; location?: "" | "us" | "global" | "eu" | Value; disabled?: boolean; description?: string; mock?: MockMap; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:ai_speech_transcribe", a),
+    },
+    text: {
+      generate: /** `mvp:ai_text_generate` — fields: as, model, prompt, system, messages, files, temperature, max_tokens, response_format, json_schema, location */
+(a: { as?: string; model?: XanoAiTextModel | (string & {}) | Value; prompt?: Value; system?: Value; messages?: Value; files?: Value; temperature?: Value; max_tokens?: Value; response_format?: "text" | "json" | Value; json_schema?: Value; location?: "" | "us" | "global" | "eu" | Value; disabled?: boolean; description?: string; mock?: MockMap; asFilters?: FilterXdo[]; uncheckedAs?: boolean } = {}): Statement => fromSpec("mvp:ai_text_generate", a),
+    },
+    video: {
+      generate: /** `mvp:ai_video_generate` — fields: as, model, prompt, negative_prompt, image, last_image, aspect_ratio, resolution, duration, generate_audio, timeout, save_to_files, location */
+(a: { as?: string; model?: XanoAiVideoModel | (string & {}) | Value; prompt: Value; negative_prompt?: Value; image?: Value; last_image?: Value; aspect_ratio?: "16:9" | "9:16" | Value; resolution?: "720p" | "1080p" | "4k" | Value; duration?: Value; generate_audio?: Value; timeout?: Value; save_to_files?: "" | "public" | "private" | Value; location?: "" | "us" | "global" | "eu" | Value; disabled?: boolean; description?: string; mock?: MockMap; asFilters?: FilterXdo[]; uncheckedAs?: boolean }): Statement => fromSpec("mvp:ai_video_generate", a),
     },
   },
   api: {

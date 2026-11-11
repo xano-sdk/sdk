@@ -13,9 +13,7 @@
  * The `unset` state stays distinct from the literal name `default` through
  * every rung. Collapsing them early would make "the user asked for `default`"
  * indistinguishable from "the user asked for nothing" — a distinction the
- * pointer file, the error wording, and the ephemeral stamp all need, and the
- * exact shape of `docs/solutions/conventions/a-default-silently-defeats-a-
- * required-flag.md`.
+ * pointer file, the error wording, and the ephemeral stamp all need.
  */
 import { readEnvVar } from "../util/env.js";
 

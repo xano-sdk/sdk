@@ -132,6 +132,43 @@ export function legacyRuntimeDirs(env: NodeJS.ProcessEnv = process.env, platform
 }
 
 /**
+ * The directory holding each engine's Xano AI credential file — owner-only,
+ * under {@link localEngineHome}, never the project.
+ */
+export function engineAiDir(env: NodeJS.ProcessEnv = process.env): string {
+  return join(localEngineHome(env), "ai");
+}
+
+/**
+ * The file an engine reads its Xano AI credential from: `<home>/ai/<name>.token`.
+ * The engine is told the path when it starts and re-reads the file on every
+ * run, so a deploy that writes a fresh credential there reaches an engine that
+ * is already serving.
+ */
+export function engineAiTokenPath(name: string, env: NodeJS.ProcessEnv = process.env): string {
+  return join(engineAiDir(env), `${name}.token`);
+}
+
+/**
+ * The file holding this machine's id: one random id, made once and kept. It
+ * keeps two machines deploying the same project path (devcontainers, cloud
+ * workspaces) from replacing each other's Xano AI credential.
+ */
+export function machineIdPath(env: NodeJS.ProcessEnv = process.env): string {
+  return join(localEngineHome(env), "machine-id");
+}
+
+/** The shortest Xano AI credential the sign-in server issues, in seconds. */
+export const ENGINE_AI_MIN_TTL_S = 60;
+/** The longest one: a day. What an engine that runs until it is stopped is asked for. */
+export const ENGINE_AI_MAX_TTL_S = 86_400;
+
+/** A credential lifetime in whole seconds, within what the sign-in server issues. */
+export function clampEngineAiTtl(seconds: number): number {
+  return Math.min(ENGINE_AI_MAX_TTL_S, Math.max(ENGINE_AI_MIN_TTL_S, Math.ceil(seconds)));
+}
+
+/**
  * Where cached executables live, one DIRECTORY per engine.
  *
  * A directory rather than a bare file because an engine is identified by more

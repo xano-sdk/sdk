@@ -275,6 +275,12 @@ export const FLAGS = {
     spec: "--reset",
     summary: "Replace the environment and re-seed it, overriding --keep-data (a deploy without --keep-data already does)",
   },
+  "ai-billing": {
+    spec: "--ai-billing <user|instance>",
+    summary:
+      "Who Xano AI usage on the Xano Engine is billed to: `user` (you, the default) or `instance` (the owner of the instance you signed in to). Overrides the `aiBilling` setting in package.json",
+    values: ["user", "instance"],
+  },
   "keep-data": {
     spec: "--keep-data",
     summary:
@@ -1094,6 +1100,24 @@ export const COMMANDS = {
     },
   },
 
+  ai: {
+    group: "Author",
+    display: "ai models",
+    summary: "Show the live Xano AI model catalog: the models each AI statement takes",
+    subcommands: {
+      // No apostrophes in any registry string: zsh completion single-quotes them.
+      models: {
+        summary:
+          "List the models each Xano AI statement takes, read live from the hub catalog with no sign-in: the suggested model, locations and options",
+        flags: [
+          { key: "all", summary: "Include unlisted models: they still run when a saved script names them, but no picker offers them" },
+          ...CREDENTIAL_FILE,
+        ],
+        example: "xanosdk ai models --json",
+      },
+    },
+  },
+
   // ── Deploy ──────────────────────────────────────────────────────────────
   deploy: {
     group: "Deploy",
@@ -1166,6 +1190,7 @@ export const COMMANDS = {
       withoutTo("open"),
       "keep-data",
       withoutTo("reset"),
+      { key: "ai-billing", summary: `${FLAGS["ai-billing"].summary} — only to the Xano Engine` },
       ...COMPILE,
       ...AUTH,
     ],
@@ -1696,6 +1721,7 @@ export const COMMANDS = {
             key: "engine-version",
             summary: "Pin this engine version instead of the latest, like v0.1.5 — or `latest`, the default",
           },
+          { key: "ai-billing", summary: "Who Xano AI usage on the restarted engine is billed to: `user` (the default) or `instance`" },
         ],
         example: "xanosdk local update",
       },

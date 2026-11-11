@@ -8,8 +8,9 @@
  * The CLI differs from the dashboard in two ways, both handled here:
  *   - the redirect target is a loopback URL with a runtime-bound port (see
  *     `loopback.ts`), not a fixed config value;
- *   - the DCR client registration is cached per (auth host + redirect URI) in a
- *     global machine file (`client-store.ts`), reused across projects.
+ *   - the client is the SDK's own first-party one when the server advertises
+ *     {@link AI_SCOPE}, and otherwise a dynamically registered one, cached per
+ *     (auth host + redirect URI) in a global machine file (`client-store.ts`).
  *
  * Like the dashboard, the user picks the target instance at the hosted consent
  * screen; the binding is read back from the token's `aud` claim (see
@@ -44,16 +45,32 @@ export const DEFAULT_PORT = 47100;
 /** RFC 7591 `software_id` for the CLI's dynamically-registered client. */
 export const SOFTWARE_ID = "xanosdk";
 
+/**
+ * The SDK's first-party OAuth client: public (no secret, PKCE), any loopback
+ * port on `/oauth/callback`. The only client a server grants {@link AI_SCOPE}
+ * to, and used whenever its metadata lists that scope.
+ */
+export const FIRST_PARTY_CLIENT_ID = "xanosdk";
+
 /** Default Xano control-plane OAuth host when none is configured. */
 export const DEFAULT_AUTH_HOST = "https://app.xano.com";
 
 /**
+ * The scope that lets a sign-in obtain a short-lived Xano AI credential for a
+ * Xano Engine on this machine, billed to the signed-in user or to the owner of
+ * the instance. Granted only to {@link FIRST_PARTY_CLIENT_ID}, so a token handed
+ * to some other client cannot spend the user's AI credits.
+ */
+export const AI_SCOPE = "xano:ai";
+
+/**
  * Scopes requested by default. `offline_access` is what yields the refresh
- * token push relies on; `workspace:write`/`xano:dev` cover the environment import.
+ * token push relies on; `workspace:write`/`xano:dev` cover the environment import;
+ * {@link AI_SCOPE} covers a local engine's Xano AI credential.
  * No `openid` — identity/instance binding is read from the token's `aud` claim
  * (see `decodeAudience`), not an id_token.
  */
-export const DEFAULT_SCOPE = "offline_access workspace:read workspace:write xano:dev";
+export const DEFAULT_SCOPE = `offline_access workspace:read workspace:write xano:dev ${AI_SCOPE}`;
 
 /** Well-known discovery path (served at the bare OAuth origin). */
 const DISCOVERY_PATH = "/.well-known/oauth-authorization-server";
@@ -67,6 +84,8 @@ export interface Endpoints {
   token_endpoint: string;
   /** RFC 7591 Dynamic Client Registration endpoint (may be absent). */
   registration_endpoint?: string;
+  /** The scopes the server advertises (may be absent). */
+  scopes_supported?: string[];
 }
 
 /**
@@ -79,6 +98,8 @@ export interface RawTokens {
   refresh_token?: string;
   expires_in?: number;
   scope?: string;
+  /** The bound instance's Xano AI gateway, when the sign-in server names one. */
+  ai_gateway_url?: string;
 }
 
 /**
@@ -121,6 +142,7 @@ export async function discover(authHost: string): Promise<Endpoints> {
     authorization_endpoint: doc.authorization_endpoint,
     token_endpoint: doc.token_endpoint,
     registration_endpoint: doc.registration_endpoint,
+    ...(Array.isArray(doc.scopes_supported) ? { scopes_supported: doc.scopes_supported } : {}),
   };
 }
 
@@ -337,14 +359,14 @@ export interface OpenIdProviderOptions {
   scope: string;
   /**
    * A pre-known `client_id` (the refresh/logout paths read it from the token
-   * cache). When set, discovery skips DCR entirely — we already have a client.
+   * cache). When set, no client is chosen or registered — we already have one.
    */
   clientId?: string;
 }
 
 /**
  * openid-client-backed provider. Lazily builds (and memoizes) a `Configuration`
- * — discovery + a DCR registration when no `client_id` is known — then delegates
+ * — discovery + a client choice when no `client_id` is known — then delegates
  * PKCE, the code grant, refresh, and revocation to openid-client.
  */
 export class OpenIdProvider implements TokenProvider {
@@ -353,8 +375,19 @@ export class OpenIdProvider implements TokenProvider {
   private resolvedClientId?: string;
   /** The issuer the resolved config discovered — set once `build()` completes. */
   private resolvedIssuer?: string;
+  /** The scope set a registered client was registered for: the one asked for, less {@link AI_SCOPE}. */
+  private resolvedScope?: string;
 
   constructor(private readonly opts: OpenIdProviderOptions) {}
+
+  /**
+   * The scope set the authorize request asks for: {@link OpenIdProviderOptions.scope},
+   * less {@link AI_SCOPE} on a server that does not advertise it. Final once the
+   * configuration has resolved.
+   */
+  requestedScope(): string {
+    return this.resolvedScope ?? this.opts.scope;
+  }
 
   private redirectUri(): string {
     if (!this.opts.redirectUri) {
@@ -397,19 +430,30 @@ export class OpenIdProvider implements TokenProvider {
 
     let clientId = this.opts.clientId;
     if (!clientId) {
-      const { registration_endpoint } = await discover(this.opts.authHost);
-      if (!registration_endpoint) {
+      const { registration_endpoint, scopes_supported } = await discover(this.opts.authHost);
+      if (scopes_supported?.includes(AI_SCOPE)) {
+        // The server serves the AI scope to the first-party client only, and
+        // refuses it to a registered one: never register, never reuse a cached one.
+        clientId = FIRST_PARTY_CLIENT_ID;
+      } else if (!registration_endpoint) {
         throw new Error(
           `The OAuth server at ${this.opts.authHost} does not advertise a registration ` +
             `endpoint, so xanosdk can't register its loopback client. Check --origin.`,
         );
+      } else {
+        // An older server: a registered client, which cannot be granted the AI scope.
+        const scope = this.opts.scope
+          .split(/\s+/)
+          .filter((w) => w !== "" && w !== AI_SCOPE)
+          .join(" ");
+        ({ client_id: clientId } = await getOrRegisterClient({
+          authHost: this.opts.authHost,
+          redirectUri: this.redirectUri(),
+          registrationEndpoint: registration_endpoint,
+          scope,
+        }));
+        this.resolvedScope = scope;
       }
-      clientId = await getOrRegisterClient({
-        authHost: this.opts.authHost,
-        redirectUri: this.redirectUri(),
-        registrationEndpoint: registration_endpoint,
-        scope: this.opts.scope,
-      });
     }
     this.resolvedClientId = clientId;
     const config = await client.discovery(
@@ -430,6 +474,7 @@ export class OpenIdProvider implements TokenProvider {
   async reset(): Promise<void> {
     this.configPromise = undefined;
     this.resolvedClientId = undefined;
+    this.resolvedScope = undefined;
     this.resolvedIssuer = undefined;
     if (this.opts.redirectUri) {
       clearClient({ authHost: this.opts.authHost, redirectUri: this.opts.redirectUri });
@@ -441,7 +486,7 @@ export class OpenIdProvider implements TokenProvider {
     const code_challenge = await client.calculatePKCECodeChallenge(verifier);
     return client.buildAuthorizationUrl(config, {
       redirect_uri: this.redirectUri(),
-      scope: this.opts.scope,
+      scope: this.requestedScope(),
       code_challenge,
       code_challenge_method: "S256",
       state,
@@ -480,6 +525,8 @@ function pick(t: {
   refresh_token?: string;
   expires_in?: number;
   scope?: string;
+  // openid-client keeps a token response's extra members on the object.
+  ai_gateway_url?: unknown;
 }): RawTokens {
   registerSecret(t.access_token);
   registerSecret(t.refresh_token);
@@ -488,5 +535,6 @@ function pick(t: {
     refresh_token: t.refresh_token,
     expires_in: t.expires_in,
     scope: t.scope,
+    ...(typeof t.ai_gateway_url === "string" && t.ai_gateway_url !== "" ? { ai_gateway_url: t.ai_gateway_url } : {}),
   };
 }

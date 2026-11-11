@@ -28,6 +28,7 @@
 import type { Statement } from "../statement.js";
 import { registerStatement, annotate, assertBindsAs, readableStatementName } from "../statement.js";
 import type { Value } from "../../values/value.js";
+import { c } from "../../values/value.js";
 import type { MockMap } from "../../values/mock.js";
 import type { FilterXdo } from "../../types/xdo.js";
 import { leanInput } from "../lean-input.js";
@@ -100,6 +101,15 @@ export interface FieldRule {
    * {@link encodeFromSpec}.
    */
   enum?: string[];
+  /**
+   * The field takes any text, and the SDK suggests values without closing the
+   * set: a bare string is written as a text constant with no membership check,
+   * and a `Value` passes through. Set by `overrides.ts` on the Xano AI fields
+   * whose legal values change without an SDK release (`model`, `voice`). The
+   * suggestions live in a generated type module, never on the spec, so this
+   * flag is all the runtime carries.
+   */
+  open?: true;
   /**
    * Written as an empty text constant when the author omits it, rather than
    * left out. Set by `overrides.ts` for a field that is optional to author but
@@ -392,9 +402,12 @@ export function encodeFromSpec(spec: StatementSpec, authored: Authored): Stateme
         // An enum-constrained field takes the bare-literal shorthand and is
         // checked when the authored value is statically decidable; every other
         // field passes straight through. See ./enum-guard.ts.
+        // An open field takes the same bare-literal shorthand, unchecked.
         const value = rule.enum
           ? resolveEnumValue(label, rule.field, rule.enum, provided)
-          : (provided as Value);
+          : rule.open && typeof provided === "string"
+            ? c.text(provided)
+            : (provided as Value);
         assertValueArg(label, rule.field, value);
         input.push(inputEntry(rule.route.name, value, env?.inputFull ?? false));
         break;

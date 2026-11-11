@@ -283,6 +283,19 @@ export {
 } from "./statements/special/misc.js";
 export { ipLookup } from "./statements/special/ip-lookup.js";
 export type { IpLookupArgs, IpLookupResult } from "./statements/special/ip-lookup.js";
+export type {
+  XanoAiUsage,
+  XanoAiMedia,
+  XanoAiTextResult,
+  XanoAiImageResult,
+  XanoAiVideoResult,
+  XanoAiSpeechResult,
+  XanoAiMusicResult,
+  XanoAiTranscribeResult,
+  XanoAiEmbeddingResult,
+  XanoAiRerankHit,
+  XanoAiRerankResult,
+} from "./statements/special/xano-ai-results.js";
 export type { ElicitResult, McpElicitArgs } from "./statements/special/mcp.js";
 export type {
   ArrayMapArgs,
@@ -442,6 +455,8 @@ export type {
   OpenAiLlm,
   GoogleGenAiLlm,
   XanoFreeLlm,
+  XanoAiLlm,
+  XanoAiLocation,
 } from "./kinds/agent.js";
 export { knowledge, knowledgeFile, knowledgeDir } from "./kinds/knowledge.js";
 export type {
@@ -556,7 +571,15 @@ export { workspaceConfig } from "./kinds/workspace-config.js";
 // compile error rather than a null at request time. The export-time counterpart
 // is the `stack.env-undeclared` warning.
 export { typedEnv } from "./kinds/workspace-config.js";
-export type { WorkspaceConfigDef, WorkspaceConfigXdo, WorkspaceMiddlewareDef, WorkspaceMiddlewareXdo } from "./kinds/workspace-config.js";
+export type {
+  WorkspaceConfigDef,
+  WorkspaceConfigXdo,
+  WorkspaceMiddlewareDef,
+  WorkspaceMiddlewareXdo,
+  WorkspaceSettings,
+  WorkspaceXanoAiLocation,
+  WorkspaceXanoAiProvider,
+} from "./kinds/workspace-config.js";
 export type {
   ToolDef,
   ToolXdo,

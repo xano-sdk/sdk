@@ -63,6 +63,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertWritable, atomicWrite } from "../util/atomic-write.js";
+import { isRecord } from "../deploy/answer-shape.js";
+import type { AiBilling } from "../deploy/local-engine-ai.js";
+import { UsageError } from "./errors.js";
 
 /**
  * The SDK's own package name, as a key of the project's `"xanosdk"` block.
@@ -302,4 +305,34 @@ export function writeToolchainConfig(
   assertWritable(path);
   atomicWrite(path, next);
   return true;
+}
+
+/**
+ * The field under the SDK's own entry that says who a Xano Engine's Xano AI
+ * usage is billed to:
+ *
+ *     "xanosdk": { "@xano/sdk": { "aiBilling": "instance" } }
+ */
+export const AI_BILLING_FIELD = "aiBilling";
+
+/**
+ * Who this run bills a Xano Engine's Xano AI usage to: the flag, then the
+ * project's {@link AI_BILLING_FIELD} setting, then the signed-in user.
+ *
+ * A setting that is neither mode is refused rather than ignored: falling back
+ * to `user` would bill someone the project did not name.
+ */
+export function resolveAiBilling(
+  flag: AiBilling | undefined,
+  projectDir: string,
+): AiBilling {
+  if (flag !== undefined) return flag;
+  const own = readToolchainBlock(projectDir)[SDK_PACKAGE];
+  if (!isRecord(own) || !(AI_BILLING_FIELD in own)) return "user";
+  const value = own[AI_BILLING_FIELD];
+  if (value === "user" || value === "instance") return value;
+  throw new UsageError(
+    `The "${AI_BILLING_FIELD}" setting under "xanosdk"."${SDK_PACKAGE}" in ${join(projectDir, "package.json")} is ` +
+      `${JSON.stringify(value)}. It must be "user" or "instance" — or pass \`--ai-billing user|instance\` for this run.`,
+  );
 }

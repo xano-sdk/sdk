@@ -16,6 +16,21 @@ import { registerClient } from "./oauth.js";
 
 interface ClientRecord {
   client_id: string;
+  /**
+   * The scope set the client was registered for. A client is reused only for
+   * the same set: an authorization server refuses a client a scope it was not
+   * registered with (`invalid_scope`), so a login asking for a scope added
+   * since would fail. Absent on records written before it was kept, which
+   * therefore re-register once.
+   */
+  scope?: string;
+}
+
+/** A scope string as a set, so word order and spacing do not force a re-registration. */
+function sameScopes(a: string | undefined, b: string): boolean {
+  if (a === undefined) return false;
+  const norm = (s: string): string => [...new Set(s.split(/\s+/).filter((w) => w !== ""))].sort().join(" ");
+  return norm(a) === norm(b);
 }
 
 /** Location of the global client cache (overridable for tests). */
@@ -45,8 +60,8 @@ function writeAll(path: string, all: Record<string, ClientRecord>): void {
 }
 
 /**
- * Return the client_id registered for (authHost, redirectUri), registering a
- * new one (and caching it) when none exists. The registration's redirect_uri is
+ * Return the client registered for (authHost, redirectUri) and this scope
+ * set, registering a new one (and caching it) when none exists. The registration's redirect_uri is
  * exactly `redirectUri`, so the authorize exact-match check always passes.
  */
 export async function getOrRegisterClient(params: {
@@ -54,21 +69,21 @@ export async function getOrRegisterClient(params: {
   redirectUri: string;
   registrationEndpoint: string;
   scope: string;
-}): Promise<string> {
+}): Promise<{ client_id: string }> {
   const path = clientStorePath();
   const all = readAll(path);
   const k = key(params.authHost, params.redirectUri);
   const cached = all[k];
-  if (cached?.client_id) return cached.client_id;
+  if (cached?.client_id && sameScopes(cached.scope, params.scope)) return { client_id: cached.client_id };
 
   const { client_id } = await registerClient({
     registrationEndpoint: params.registrationEndpoint,
     redirectUri: params.redirectUri,
     scope: params.scope,
   });
-  all[k] = { client_id };
+  all[k] = { client_id, scope: params.scope };
   writeAll(path, all);
-  return client_id;
+  return { client_id };
 }
 
 /**

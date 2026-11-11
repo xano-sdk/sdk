@@ -65,6 +65,18 @@ export const PROBE_CONFIRMED: ReadonlySet<string> = new Set([
   "mvp:mcp_oauth_request",
   "mvp:mcp_oauth_revoke",
   "mvp:mcp_progress",
+  // The eight Xano AI statements. Newer than every workspace the corpus
+  // exports. Each was deployed with no `model`, with a `location`, and with
+  // `save_to_files` where it has one; all came back as authored, and a model
+  // left out stayed out rather than being filled with the suggested default.
+  "mvp:ai_embedding_create",
+  "mvp:ai_image_generate",
+  "mvp:ai_music_generate",
+  "mvp:ai_rerank",
+  "mvp:ai_speech_generate",
+  "mvp:ai_speech_transcribe",
+  "mvp:ai_text_generate",
+  "mvp:ai_video_generate",
   // The assertion family. Test objects export like any other and the corpus
   // holds six of them, but all six are EMPTY — so this was an authoring gap
   // upstream, not a gap in what an export carries.

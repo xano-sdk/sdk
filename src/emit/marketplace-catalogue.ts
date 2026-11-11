@@ -25,6 +25,7 @@
 import { readEnvVar } from "../util/env.js";
 import { EXIT_SOURCE_UNRESOLVABLE } from "./source-selector.js";
 import { parseJsonAnswer, serverMessage, statusLabel } from "../util/http.js";
+import { asRecord, asString, asStringArray } from "../util/project.js";
 
 /**
  * Where the catalogue lives: the Xano Release Manager's live workspace, which
@@ -103,22 +104,8 @@ export interface CatalogueModule extends CatalogueRow {
   listed: boolean | undefined;
 }
 
-function asString(v: unknown): string | undefined {
-  return typeof v === "string" && v !== "" ? v : undefined;
-}
-
-function asStringArray(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "") : [];
-}
-
 function asBoolean(v: unknown): boolean | undefined {
   return typeof v === "boolean" ? v : undefined;
-}
-
-function asRecord(v: unknown): Record<string, unknown> | undefined {
-  return typeof v === "object" && v !== null && !Array.isArray(v)
-    ? (v as Record<string, unknown>)
-    : undefined;
 }
 
 function projectRow(raw: Record<string, unknown>): CatalogueRow {

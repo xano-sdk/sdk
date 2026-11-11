@@ -83,6 +83,14 @@ export interface LocalEngineRecord {
    * what a record written before the import and never followed by one is.
    */
   filled?: FilledMarker;
+  /**
+   * The Xano AI gateway URL the engine was started with, beside the path of its
+   * credential file. The engine reads the URL once, at boot, and cannot call
+   * the gateway without it, so only an engine started with both can use a
+   * credential a later deploy writes. Absent when either was missing at start
+   * (signed out, say), which only a restart can repair.
+   */
+  aiGatewayUrl?: string;
 }
 
 /** The on-disk file: one record per project path. */

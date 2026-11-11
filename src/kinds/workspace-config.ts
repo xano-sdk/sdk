@@ -20,6 +20,7 @@ import type { WorkspaceHistoryDef, WorkspaceHistoryXdo } from "./history.js";
 import { assertCanonical } from "./stored-name.js";
 import { env } from "../values/value.js";
 import { describeEntry } from "../statements/args.js";
+import { XANO_AI_LOCATIONS, type XanoAiLocationName } from "../statements/xano-ai-statements.js";
 import type { Value } from "../values/value.js";
 import { brandDef } from "./def-brand.js";
 import { findNonJson, nonJsonMessage } from "../workspace/non-json.js";
@@ -280,11 +281,16 @@ export interface WorkspaceConfigDef<Env extends Record<string, string> = Record<
    */
   env?: Env;
   /**
-   * Workspace settings (AI provider config, agent visibility). Modeled as an
-   * opaque map — declare only the members you want to change; the rest are
-   * filled from the engine's own default scaffold on export.
+   * Workspace settings (AI provider config, agent visibility). Declare only the
+   * members you want to change; the rest are filled from the engine's own
+   * default scaffold on export. Open except for the Xano AI provider, whose
+   * `location` is the workspace default for Xano AI statements and agents:
+   *
+   * ```ts
+   * settings: { ai_settings: { providers: { "xano-ai": { location: "eu" } } } }
+   * ```
    */
-  settings?: Record<string, unknown>;
+  settings?: WorkspaceSettings;
   /**
    * Allow tables to carry custom SQL names distinct from their workspace names.
    * Emitted only when set — omit to leave the tenant's current setting alone.
@@ -351,6 +357,76 @@ export const DEFAULT_DOCUMENTATION: Readonly<Record<string, unknown>> = {
 };
 
 /**
+ * Where Xano AI runs a model. `""` leaves the choice to the gateway. Lowercase
+ * only: the workspace reader matches the value exactly, and the import stores
+ * any other spelling as `""` without saying so.
+ */
+export type WorkspaceXanoAiLocation = XanoAiLocationName;
+
+/** The workspace's Xano AI defaults, which a statement or agent that sets its own overrides. */
+export interface WorkspaceXanoAiProvider {
+  /** The model a Xano AI call runs when it names none. `""` is the gateway's suggested one. */
+  model?: string;
+  location?: WorkspaceXanoAiLocation;
+}
+
+/**
+ * The workspace `settings` block. Typed where a wrong value would land
+ * silently; every other member passes through as written.
+ */
+export interface WorkspaceSettings {
+  ai_settings?: {
+    providers?: {
+      "xano-ai"?: WorkspaceXanoAiProvider;
+      [provider: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/**
+ * The authored Xano AI provider block, refused by path when a member is outside
+ * what the engine accepts. Reached by an untyped caller, or a value cast past
+ * the type: the import takes `location: "EU"` and stores `""`, so the workspace
+ * would run at the gateway's default with nothing said.
+ */
+function assertXanoAiProvider(settings: WorkspaceSettings | undefined): void {
+  const providers = (settings as { ai_settings?: { providers?: unknown } } | undefined)?.ai_settings?.providers;
+  if (!isPlainRecord(providers) || !Object.hasOwn(providers, "xano-ai")) return;
+  const at = 'settings.ai_settings.providers["xano-ai"]';
+  const block = providers["xano-ai"];
+  if (!isPlainRecord(block)) {
+    throw new Error(`workspaceConfig: ${at} is ${describeEntry(block)}; it takes { model?, location? }.`);
+  }
+  if (block.model !== undefined && typeof block.model !== "string") {
+    throw new Error(`workspaceConfig: ${at}.model is ${describeEntry(block.model)}; a model is a string.`);
+  }
+  if (block.location !== undefined && !(XANO_AI_LOCATIONS as readonly unknown[]).includes(block.location)) {
+    throw new Error(
+      `workspaceConfig: ${at}.location is ${JSON.stringify(block.location) ?? String(block.location)}; ` +
+        `it takes "" | "us" | "global" | "eu", lowercase, because the engine matches it exactly.`,
+    );
+  }
+}
+
+/**
+ * An authored Xano AI block that leaves `model` out, stated as the engine
+ * stores it. Measured on a live engine: a replace deploy of `{ location }`
+ * alone stores `{ model: "", location }`, clearing a live model. Writing the
+ * `""` into the archive makes the bytes say what the deploy does, so the live
+ * diff names the model a deploy would clear. Codegen subtracts `model: ""` on
+ * pull, so a pulled block still regenerates naming only its location.
+ */
+function fillXanoAiModel(settings: Record<string, unknown>): Record<string, unknown> {
+  const providers = (settings.ai_settings as { providers?: unknown } | undefined)?.providers;
+  if (!isPlainRecord(providers) || !isPlainRecord(providers["xano-ai"])) return settings;
+  const block = providers["xano-ai"];
+  if (!Object.hasOwn(block, "model")) providers["xano-ai"] = { model: "", ...block };
+  return settings;
+}
+
+/**
  * The engine's default preferences — what the settings form writes when nothing
  * has been touched. 174 of the 177 workspaces in the sweep store exactly this.
  *
@@ -379,6 +455,11 @@ export const DEFAULT_PREFERENCES: WorkspacePreferences = {
  * An author may write just the members they care about — see
  * {@link mergeOverDefaults} — so departing from one member does not mean
  * spelling the other twenty.
+ *
+ * No `xano-ai` member, although a new workspace stores
+ * `{ model: "", location: "" }`. A replace import keeps a stored provider the
+ * archive leaves out and writes one it carries, so an empty scaffold here would
+ * clear a location set in the dashboard on every deploy that does not name one.
  */
 export const DEFAULT_SETTINGS: Record<string, unknown> = {
   ai_enabled: false,
@@ -422,7 +503,9 @@ function mergeOver(
   over: Record<string, unknown>,
   path: string,
 ): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...base };
+  // Cloned, so a nested default block the author did not touch is never handed
+  // out by reference: `DEFAULT_SETTINGS` is shared by every encode.
+  const out: Record<string, unknown> = structuredClone(base);
   for (const [key, value] of Object.entries(over)) {
     const under = out[key];
     const at = path === "" ? key : `${path}.${key}`;
@@ -565,6 +648,7 @@ export function encodeWorkspaceConfig(def: WorkspaceConfigDef): WorkspaceConfigX
     );
   }
   assertCanonical(`workspace "${def.name}"`, def.canonical);
+  assertXanoAiProvider(def.settings);
   return {
     name: def.name,
     description: def.description ?? "",
@@ -586,7 +670,7 @@ export function encodeWorkspaceConfig(def: WorkspaceConfigDef): WorkspaceConfigX
       : {}),
     ...(def.history !== undefined ? { history: buildWorkspaceHistory(def.history) } : {}),
     env: def.env ? encodeWorkspaceEnv(def.env) : [],
-    settings: mergeOverDefaults(DEFAULT_SETTINGS, def.settings, "settings"),
+    settings: fillXanoAiModel(mergeOverDefaults(DEFAULT_SETTINGS, def.settings, "settings")),
     // Presence-preserving: each key is written only when the author set it, and
     // each nested optional likewise, so a pulled workspace re-exports to its own
     // bytes whether or not the engine happened to store the `?=` default.

@@ -31,18 +31,22 @@
  *
  * Node-only, reached by a lazy import from the command layer.
  */
+import { rmSync } from "node:fs";
 import { acquireEngine, type AcquiredEngine, type EngineFetch } from "./local-engine-release.js";
 import { readEngineEntry, RELEASE_VERSION, type EngineCacheEntry } from "./local-engine-cache.js";
-import type { EngineSourceSpec } from "./local-engine-config.js";
+import { clampEngineAiTtl, engineAiTokenPath, ENGINE_AI_MAX_TTL_S, type EngineSourceSpec } from "./local-engine-config.js";
+import type { AiBilling, AiOff, AiOutcome, EngineAiRequest } from "./local-engine-ai.js";
 import { assertLoopbackUrl, type LocalEngine } from "./local-engine-handshake.js";
 import {
   engineVersion as askEngineVersion,
+  engineRunsUntilStopped,
   engineVersionToken,
   listEngines,
   resolveRecordedEngine,
   startEngine,
   stopEngineNamed,
   stopOrphanedEngineProcesses,
+  type EngineAiWiring,
   type EngineRun,
   type EngineSpawn,
 } from "./local-engine-process.js";
@@ -56,6 +60,18 @@ import type { FilledMarker } from "./keep-data.js";
 import { recordDeployed } from "./deployed-state.js";
 import { ImportHttpError } from "./import.js";
 import { compareSemver, parseSemver } from "../emit/semver.js";
+
+/**
+ * Ask for the engine's Xano AI credential before it starts — see
+ * `local-engine-ai.ts`. Absent, none is asked for; an engine started here
+ * still gets the credential file's path, so a later deploy's credential
+ * reaches it.
+ */
+export interface EngineAiOptions {
+  billing: AiBilling;
+  /** Overridden only by tests. */
+  request?: (req: EngineAiRequest) => Promise<AiOutcome>;
+}
 
 /** What {@link ensureProjectEngine} needs: a project, a source, and the seams. */
 export interface EnsureEngineOptions {
@@ -103,6 +119,10 @@ export interface EnsureEngineOptions {
    * (moving a project's pin): a failed download never reaches it.
    */
   onAcquired?: (acquired: AcquiredEngine) => void;
+  /** Told the version a release download put on this machine; never for a cached engine (see `acquireEngine`). */
+  onDownloaded?: (version: string) => void;
+  /** The engine's Xano AI credential, asked for before any start. */
+  ai?: EngineAiOptions;
 }
 
 /** A live engine this run stopped because it was not the engine it resolved to. */
@@ -151,6 +171,8 @@ export interface ProjectEngine {
    * afterwards, every engine would read as never filled.
    */
   priorFilled: FilledMarker | undefined;
+  /** Whether Xano AI is on for this engine, when {@link EnsureEngineOptions.ai} asked. */
+  ai?: AiOutcome;
 }
 
 /**
@@ -195,6 +217,7 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
     ...(opts.rerun === undefined ? {} : { rerun: opts.rerun }),
     ...(opts.rerunNote === undefined || opts.rerunNote === "" ? {} : { rerunNote: opts.rerunNote }),
     ...(opts.fetch === undefined ? {} : { fetch: opts.fetch }),
+    ...(opts.onDownloaded === undefined ? {} : { onDownloaded: opts.onDownloaded }),
   });
   const { entry, version } = acquired;
   opts.onAcquired?.(acquired);
@@ -211,6 +234,10 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
   const sweep = opts.sweepOrphans ?? (opts.spawn === undefined ? () => stopOrphanedEngineProcesses({ env }).stopped : undefined);
   const sweptOrphans = live === undefined && sweep !== undefined ? sweep() : [];
 
+  // Before any start: the gateway URL is fixed when the engine boots, and the
+  // answer is what names it.
+  const ai = await engineAi(opts.ai, name, live === undefined ? undefined : { record }, aiTtlFor(live, shownVersion), env);
+
   const engine =
     live ??
     (await startEngine({
@@ -219,6 +246,7 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
       env,
       ...(shownVersion === undefined ? {} : { version: shownVersion }),
       ...(opts.spawn === undefined ? {} : { spawn: opts.spawn }),
+      ai: wiringFor(name, ai, env),
     }));
 
   const reused = live !== undefined;
@@ -231,7 +259,10 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
   // repairs a record whose URL is stale or that was lost entirely. A replaced
   // engine is a fresh start, so `reused` is false and the marker is never
   // carried: the new process holds no rows to vouch for.
-  writeRecord(opts.dir, engine, entry, shownVersion, reused && carry ? priorFilled : undefined, env);
+  // A started engine was given the credential file, and the gateway URL when the
+  // answer named one; a reused one keeps what it was started with.
+  const aiGatewayUrl = reused ? record?.aiGatewayUrl : ai?.gatewayUrl;
+  writeRecord(opts.dir, engine, entry, shownVersion, reused && carry ? priorFilled : undefined, env, aiGatewayUrl);
   // A DEPLOY to this engine, so the project's bare commands now follow it.
   // Here, beside the deploy's record write — never inside `writeRecord`, which
   // the `local update` restart also reaches: a restart is not a deploy,
@@ -252,6 +283,80 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
     ...(sweptOrphans.length === 0 ? {} : { sweptOrphans }),
     hadRecord,
     priorFilled,
+    ...(ai === undefined ? {} : { ai }),
+  };
+}
+
+/**
+ * The engine's Xano AI outcome, asked for when `opts` says to.
+ *
+ * A live engine this run reuses reads its gateway URL only from the environment
+ * it booted with. One started without a URL (its record names none, or there is
+ * no record) can never use a credential, so none is asked for and the outcome
+ * says to restart it. One started with a URL other than the one the answer names
+ * would call the wrong gateway, so an `on` answer becomes the same restart.
+ */
+async function engineAi(
+  opts: EngineAiOptions | undefined,
+  name: string,
+  reuse: { record: LocalEngineRecord | undefined } | undefined,
+  ttl: number,
+  env: NodeJS.ProcessEnv,
+): Promise<AiOutcome | undefined> {
+  if (opts === undefined) return undefined;
+  const booted = reuse?.record?.aiGatewayUrl;
+  if (reuse !== undefined && booted === undefined) {
+    return restartToEnable(name, opts.billing, "was started before it could take a Xano AI credential", env);
+  }
+  const request = opts.request ?? (await import("./local-engine-ai.js")).requestEngineAiCredential;
+  const outcome = await request({ billing: opts.billing, engineName: name, ttl, env });
+  if (reuse !== undefined && outcome.status === "on" && outcome.gatewayUrl !== undefined && outcome.gatewayUrl !== booted) {
+    return restartToEnable(name, opts.billing, "was started with another Xano AI gateway than this sign-in uses", env);
+  }
+  return outcome;
+}
+
+/** The lifetime an engine started without `--ttl` may stop itself after: the engine's default hour. */
+const ENGINE_DEFAULT_TTL_S = 3600;
+
+/**
+ * How long, in seconds, the Xano AI credential for this engine is worth: as
+ * long as the engine runs, capped at the day the server issues at most.
+ *
+ * A live engine says when it stops (its listing's stop time), or runs until it
+ * is stopped. A fresh one is started by this SDK, so its version says: one that
+ * runs until stopped gets the day, and one of unknown version, which may stop
+ * after its default hour, gets the hour.
+ */
+function aiTtlFor(live: LocalEngine | undefined, version: string | undefined): number {
+  if (live !== undefined) {
+    return live.expiresAt === undefined ? ENGINE_AI_MAX_TTL_S : clampEngineAiTtl((live.expiresAt - Date.now()) / 1000);
+  }
+  return engineRunsUntilStopped(version) ? ENGINE_AI_MAX_TTL_S : ENGINE_DEFAULT_TTL_S;
+}
+
+/**
+ * The outcome for a live engine whose boot environment cannot use this
+ * credential: `why` says how. Any credential file is removed, so an engine
+ * reported off holds nothing it could still spend.
+ */
+function restartToEnable(name: string, billing: AiBilling, why: string, env: NodeJS.ProcessEnv): AiOff {
+  rmSync(engineAiTokenPath(name, env), { force: true });
+  return {
+    status: "off",
+    billing,
+    reason: "restart-to-enable",
+    message:
+      `Xano AI is off for this engine: ${name} ${why}. ` +
+      `Restart it to turn it on: \`xanosdk local stop ${name}\`, then deploy again.`,
+  };
+}
+
+/** What a start passes the engine for Xano AI: always the credential file, and the gateway when known. */
+function wiringFor(name: string, ai: AiOutcome | undefined, env: NodeJS.ProcessEnv): EngineAiWiring {
+  return {
+    tokenFile: engineAiTokenPath(name, env),
+    ...(ai?.gatewayUrl === undefined ? {} : { gatewayUrl: ai.gatewayUrl }),
   };
 }
 
@@ -264,6 +369,8 @@ export interface RestartedEngine extends ReplacedEngine {
   url: string;
   /** Where this project's engine served before, when it was recorded. */
   previousUrl: string | undefined;
+  /** Whether Xano AI is on for the restarted engine, when {@link RestartEngineOptions.ai} asked. */
+  ai?: AiOutcome;
 }
 
 /** What {@link restartMismatchedEngine} needs: the project, the engine it now resolves to, and the seams. */
@@ -275,6 +382,8 @@ export interface RestartEngineOptions {
   env?: NodeJS.ProcessEnv;
   run?: EngineRun;
   spawn?: EngineSpawn;
+  /** The restarted engine's Xano AI credential, asked for before it starts. */
+  ai?: EngineAiOptions;
 }
 
 /**
@@ -294,15 +403,17 @@ export async function restartMismatchedEngine(opts: RestartEngineOptions): Promi
   const shownVersion = version ?? overrideVersion(entry, env, opts.run);
   const { record, name, replaced } = reconcileLive(opts.dir, entry, shownVersion, env, opts.run);
   if (replaced === undefined) return undefined;
+  const ai = await engineAi(opts.ai, name, undefined, aiTtlFor(undefined, shownVersion), env);
   const engine = await startEngine({
     entry,
     name,
     env,
     ...(shownVersion === undefined ? {} : { version: shownVersion }),
     ...(opts.spawn === undefined ? {} : { spawn: opts.spawn }),
+    ai: wiringFor(name, ai, env),
   });
-  writeRecord(opts.dir, engine, entry, shownVersion, undefined, env);
-  return { ...replaced, url: engine.url, previousUrl: record?.url };
+  writeRecord(opts.dir, engine, entry, shownVersion, undefined, env, ai?.gatewayUrl);
+  return { ...replaced, url: engine.url, previousUrl: record?.url, ...(ai === undefined ? {} : { ai }) };
 }
 
 /**
@@ -342,6 +453,7 @@ function writeRecord(
   shownVersion: string | undefined,
   filled: FilledMarker | undefined,
   env: NodeJS.ProcessEnv,
+  aiGatewayUrl: string | undefined,
 ): void {
   setEngineRecord(
     dir,
@@ -355,6 +467,7 @@ function writeRecord(
       ...(shownVersion === undefined ? {} : { engineVersion: shownVersion }),
       startedAt: Date.now(),
       ...(filled === undefined ? {} : { filled }),
+      ...(aiGatewayUrl === undefined ? {} : { aiGatewayUrl }),
     },
     env,
   );

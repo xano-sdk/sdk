@@ -24,7 +24,7 @@ import {
 import { onUserInsert, onMessage, onBranchLive } from "./kinds/trigger.js";
 import { searchTool } from "./kinds/tool.js";
 import { valueToolset } from "./values/toolset.js";
-import { exampleMcpServer, assistant, classifier, askAssistant, classifyTicket } from "./kinds/ai.js";
+import { exampleMcpServer, assistant, classifier, askAssistant, classifyTicket, xanoAiAgent, askXanoAiAgent } from "./kinds/ai.js";
 import {
   countPostsTool,
   archivePostTool,
@@ -88,14 +88,14 @@ export default workspace("xanosdk-examples")
   .registerWorkspace(wsConfig)
   .registerApiGroups(defs([api, publicApi, browserApi]))
   .registerTables(defs([users, posts, productTable, productNoteTable, accessoryTable, auditTable, demoLoginTable, ...autoTables]))
-  .registerFunctions(defs([doubleFn, addFunction, ...autoFunctions]))
+  .registerFunctions(defs([doubleFn, addFunction, askXanoAiAgent, ...autoFunctions]))
   .registerQueries(defs([getUserQuery, userPostQuery, listItemsQuery, createItemQuery, scoreQuery, askAssistant, classifyTicket, ...autoQueries]))
   .registerTriggers(defs([onUserInsert, onMessage, onBranchLive, onChatConnect, onRoomJoin, onRoomDeliver]))
   .registerTools(defs([searchTool, valueToolset, countPostsTool, archivePostTool]))
   .registerPrompts(defs([summarizePrompt]))
   .registerResources(defs([readmeResource, postResource]))
   .registerMcpServers(defs([exampleMcpServer, fullMcpServer, signedInMcpServer]))
-  .registerAgents(defs([assistant, classifier]))
+  .registerAgents(defs([assistant, classifier, xanoAiAgent]))
   .registerTasks(defs([nightlyCleanup]))
   .registerWorkflowTests(defs([
     doubleFnTest,

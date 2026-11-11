@@ -785,6 +785,64 @@ export async function resolveNamedProfile(
 }
 
 /**
+ * What {@link readStoredProfileQuietly} found for the profile this run would act
+ * as. `oauth` hands back the stored record and a `bearer()` that refreshes it
+ * when stale; every other kind says why there is no OAuth sign-in to use.
+ */
+export type QuietProfileRead =
+  | {
+      kind: "oauth";
+      profile: string;
+      path: string;
+      record: OAuthCredential;
+      /** A usable access token, refreshed (and the rotation persisted) when stale. Throws when it cannot be. */
+      bearer: () => Promise<string>;
+    }
+  | { kind: "token"; profile: string; path: string }
+  | { kind: "none"; profile: string; path: string }
+  | { kind: "unreadable"; message: string };
+
+/**
+ * The stored profile this run would act as, read WITHOUT prompting, warning or
+ * throwing — for a step that wants a credential if one is there and carries on
+ * when it is not (a local deploy's Xano AI credential).
+ *
+ * Only the ambient selection chain is read: no `--profile`, `--config`,
+ * `--local-auth` or `--origin`, because a command reaching this did not take
+ * them. The profile is the one the project's pin names, else `$XANO_PROFILE`,
+ * else the credential file's default — the order every other command reads
+ * them in. An environment credential (`XANO_META_TOKEN`, `XANO_REFRESH_TOKEN`)
+ * is not consulted: it has no stored profile behind it.
+ */
+export function readStoredProfileQuietly(cwd: string = process.cwd()): QuietProfileRead {
+  try {
+    const path = resolveAuthFilePath({ authFile: undefined, local: false });
+    const file = readCredentialFile(path);
+    const selection = resolveActiveProfile({
+      fileDefault: file?.default,
+      defaultIn: path === globalAuthFilePath() ? undefined : path,
+      readPointer: () => findProjectPointer(cwd)?.profile,
+    });
+    const saved = file === null ? null : readProfile(file, selection.name, path);
+    if (saved === null) return { kind: "none", profile: selection.name, path };
+    if (saved.type === "token") return { kind: "token", profile: selection.name, path };
+    return {
+      kind: "oauth",
+      profile: selection.name,
+      path,
+      record: saved,
+      bearer: async () => {
+        const auth = await fromStoredProfile(path, selection, saved);
+        registerSecret(auth.access_token);
+        return auth.access_token;
+      },
+    };
+  } catch (err) {
+    return { kind: "unreadable", message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
  * A stored profile's record, turned into a usable bearer — the tail both
  * resolvers share once they know WHICH profile.
  */

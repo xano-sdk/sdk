@@ -11,7 +11,7 @@
  * model reports as success. Neither tool here reads `auth()`; one that did
  * would be spelled `{ tool: searchTool, auth: users }`.
  */
-import { mcpServer, agent, query, s, c, inp, obj, ref, input } from "@xano/sdk";
+import { mcpServer, agent, defineFunction, query, s, c, inp, obj, ref, input } from "@xano/sdk";
 import { api } from "../_shared.js";
 import { searchTool } from "./tool.js";
 
@@ -117,6 +117,39 @@ export const classifyTicket = query({
   input: { body: input.text({ required: true }) },
   stack: [s.ai.agent.run({ agent: classifier, args: obj({ body: inp("body") }), as: "verdict" })],
   response: ref("verdict.result"),
+});
+
+/**
+ * Gate 5 — a `xano-ai` agent: Xano AI models, with no
+ * `apiKey`. `model` is a LITERAL from the gateway's agent list (`agent.models`
+ * in `npx @xano/sdk ai models --json`). Any other name runs the default model
+ * instead, with no error; a `{{ … }}` or expression throws here, because it
+ * could never match.
+ *
+ * `location` lives on the agent; `s.ai.agent.run` has no location of its own.
+ * Set, it wins over the workspace's Xano AI location (`"eu"` in
+ * kinds/workspaceConfig.ts), so `"global"` here opts this agent out of it. Left
+ * out or `""`, the agent inherits the workspace's.
+ */
+export const xanoAiAgent = agent({
+  name: "ex_agent_xano_ai",
+  canonical: "xano-ai-agent",
+  llm: {
+    type: "xano-ai",
+    model: "gemini-3.8-flash",
+    location: "global",
+    systemPrompt: "You are a concise assistant.",
+    prompt: "{{ $args.question }}",
+    maxSteps: 3,
+  },
+});
+
+/** Runs the `xano-ai` agent; the completion is at `.result` of the run envelope. */
+export const askXanoAiAgent = defineFunction({
+  name: "ex_ask_xano_ai_agent",
+  input: { question: input.text({ required: true }) },
+  stack: [s.ai.agent.run({ agent: xanoAiAgent, args: obj({ question: inp("question") }), as: "run" })],
+  response: ref("run.result"),
 });
 
 /**

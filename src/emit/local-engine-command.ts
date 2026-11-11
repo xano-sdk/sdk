@@ -73,6 +73,8 @@ import {
 import { confirm } from "./prompt.js";
 import { yesRerun } from "./retry-command.js";
 import { restartMismatchedEngine, type RestartedEngine } from "../deploy/local-engine-deploy.js";
+import { aiOutcomeDocument, aiOutcomeLine } from "../deploy/local-engine-ai.js";
+import { resolveAiBilling } from "./project-config.js";
 import { readPin, writePin } from "../deploy/local-engine-pin.js";
 import { pinWrittenText } from "./local-engine-choice.js";
 import { resolveProjectEntry } from "./deploy-source.js";
@@ -101,7 +103,7 @@ import {
   type EngineSpawn,
   type StopOutcome,
 } from "../deploy/local-engine-process.js";
-import { acquireEngine, type EngineFetch } from "../deploy/local-engine-release.js";
+import { acquireEngine, ENGINE_LICENSE_NOTICE, type EngineFetch } from "../deploy/local-engine-release.js";
 import {
   clearEngineRecordsNamed,
   clearEngineRecordsStillMatching,
@@ -620,6 +622,8 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
   }
   // A project with no package.json reads like no pin: the write below creates one holding it.
   const current = typeof read === "object" || read === undefined ? null : read;
+  // Before anything is downloaded: a bad setting is refused first.
+  const aiBilling = resolveAiBilling(args.aiBilling, dir);
 
   const fetch = opts.fetch === undefined ? {} : { fetch: opts.fetch };
   const target = await requestedEngineVersion(args.engineVersion ?? "latest", opts, env, "update to");
@@ -631,6 +635,7 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
     ...fetch,
     ...(opts.platform === undefined ? {} : { platform: opts.platform }),
     ...(opts.arch === undefined ? {} : { arch: opts.arch }),
+    onDownloaded: () => info(ENGINE_LICENSE_NOTICE),
   });
 
   // Every outcome is said on stderr whatever stdout is, as `cache clear` says
@@ -654,6 +659,8 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
     dir,
     acquired,
     env,
+    // The restarted engine gets a fresh Xano AI credential, as a deploy's would.
+    ai: { billing: aiBilling },
     ...(opts.run === undefined ? {} : { run: opts.run }),
     ...(opts.spawn === undefined ? {} : { spawn: opts.spawn }),
   });
@@ -666,6 +673,7 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
   info(pinWrittenText({ path: pin.path, version: target, created: pin.created, moved: current !== null }));
   if (replaced !== undefined) {
     info(`Restarted ${replaced.name} on ${target}. It starts empty — run your deploy to seed it.`);
+    if (replaced.ai !== undefined) info(aiOutcomeLine(replaced.ai));
     if (replaced.url !== replaced.previousUrl) {
       info("New Xano Engine URL:");
       link(replaced.url);
@@ -685,6 +693,7 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
       pinPath: pin.path,
       restarted: replaced?.name ?? null,
       url: replaced?.url ?? null,
+      ...(replaced?.ai === undefined ? {} : { ai: aiOutcomeDocument(replaced.ai) }),
     });
   }
 }

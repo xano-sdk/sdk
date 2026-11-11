@@ -1,0 +1,620 @@
+{
+  "generated_at": "2026-11-11T00:06:05.822Z",
+  "source": "https://app.dev.xano.com",
+  "statements": {
+    "text": [
+      {
+        "model": "gemini-3.8-flash",
+        "label": "Gemini 3.8 Flash",
+        "suggested": true,
+        "listed": true,
+        "locations": [
+          "us",
+          "global",
+          "eu"
+        ],
+        "options": {
+          "files": [
+            "image",
+            "pdf",
+            "video",
+            "audio"
+          ],
+          "protocol": "gemini",
+          "temperature_max": 2
+        }
+      },
+      {
+        "model": "gemini-4-argon",
+        "label": "Gemini 4 Argon",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "us",
+          "global",
+          "eu"
+        ],
+        "options": {
+          "files": [
+            "image",
+            "pdf",
+            "video",
+            "audio"
+          ],
+          "protocol": "gemini",
+          "temperature_max": 2
+        }
+      },
+      {
+        "model": "gemini-3.5-flash-lite",
+        "label": "Gemini 3.5 Flash-Lite",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "us",
+          "global",
+          "eu"
+        ],
+        "options": {
+          "files": [
+            "image",
+            "pdf",
+            "video",
+            "audio"
+          ],
+          "protocol": "gemini",
+          "temperature_max": 2
+        }
+      },
+      {
+        "model": "gemini-3.5-flash",
+        "label": "Gemini 3.5 Flash",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "us",
+          "global",
+          "eu"
+        ],
+        "options": {
+          "files": [
+            "image",
+            "pdf",
+            "video",
+            "audio"
+          ],
+          "protocol": "gemini",
+          "temperature_max": 2
+        }
+      },
+      {
+        "model": "claude-fable-5-1",
+        "label": "Claude Fable 5.1",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "files": [
+            "image",
+            "pdf"
+          ],
+          "protocol": "anthropic",
+          "temperature_max": 1,
+          "max_output_tokens": 8000
+        }
+      },
+      {
+        "model": "claude-opus-5-5",
+        "label": "Claude Opus 5.5",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "us",
+          "global",
+          "eu"
+        ],
+        "options": {
+          "files": [
+            "image",
+            "pdf"
+          ],
+          "protocol": "anthropic",
+          "temperature_max": 1,
+          "max_output_tokens": 8000
+        }
+      },
+      {
+        "model": "claude-sonnet-5-5",
+        "label": "Claude Sonnet 5.5",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "us",
+          "global",
+          "eu"
+        ],
+        "options": {
+          "files": [
+            "image",
+            "pdf"
+          ],
+          "protocol": "anthropic",
+          "temperature_max": 1,
+          "max_output_tokens": 8000
+        }
+      },
+      {
+        "model": "claude-haiku-5-5",
+        "label": "Claude Haiku 5.5",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "files": [
+            "image",
+            "pdf"
+          ],
+          "protocol": "anthropic",
+          "temperature_max": 1,
+          "max_output_tokens": 8000
+        }
+      }
+    ],
+    "image": [
+      {
+        "model": "gemini-3.1-flash-image",
+        "label": "Nano Banana 2 (Gemini 3.1 Flash Image)",
+        "suggested": true,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "image_sizes": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "aspect_ratios": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "3:4",
+            "4:3",
+            "4:5",
+            "5:4",
+            "9:16",
+            "16:9",
+            "21:9"
+          ],
+          "input_mime_types": [
+            "image/"
+          ]
+        }
+      },
+      {
+        "model": "gemini-3-pro-image",
+        "label": "Nano Banana Pro (Gemini 3 Pro Image)",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "image_sizes": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "aspect_ratios": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "3:4",
+            "4:3",
+            "4:5",
+            "5:4",
+            "9:16",
+            "16:9",
+            "21:9"
+          ],
+          "input_mime_types": [
+            "image/"
+          ]
+        }
+      },
+      {
+        "model": "gemini-3.1-flash-lite-image",
+        "label": "Gemini 3.1 Flash-Lite Image",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "image_sizes": [
+            "1K"
+          ],
+          "aspect_ratios": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "3:4",
+            "4:3",
+            "4:5",
+            "5:4",
+            "9:16",
+            "16:9",
+            "21:9"
+          ],
+          "input_mime_types": [
+            "image/"
+          ]
+        }
+      },
+      {
+        "model": "gemini-nano-banana-2.1",
+        "label": "Nano Banana 2.1",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "image_sizes": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "aspect_ratios": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "3:4",
+            "4:3",
+            "4:5",
+            "5:4",
+            "9:16",
+            "16:9",
+            "21:9"
+          ],
+          "input_mime_types": [
+            "image/"
+          ]
+        }
+      }
+    ],
+    "video": [
+      {
+        "model": "veo-3.1-fast-generate-001",
+        "label": "Veo 3.1 Fast",
+        "suggested": true,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "durations": [
+            4,
+            6,
+            8
+          ],
+          "max_samples": 4,
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "frame_inputs": [
+            "image",
+            "lastFrame"
+          ],
+          "aspect_ratios": [
+            "16:9",
+            "9:16"
+          ],
+          "input_mime_types": [
+            "image/"
+          ]
+        }
+      },
+      {
+        "model": "veo-3.1-generate-001",
+        "label": "Veo 3.1",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "durations": [
+            4,
+            6,
+            8
+          ],
+          "max_samples": 4,
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "frame_inputs": [
+            "image",
+            "lastFrame"
+          ],
+          "aspect_ratios": [
+            "16:9",
+            "9:16"
+          ],
+          "input_mime_types": [
+            "image/"
+          ]
+        }
+      },
+      {
+        "model": "veo-3.1-lite-generate-001",
+        "label": "Veo 3.1 Lite",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "durations": [
+            4,
+            6,
+            8
+          ],
+          "max_samples": 4,
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "frame_inputs": [
+            "image",
+            "lastFrame"
+          ],
+          "aspect_ratios": [
+            "16:9",
+            "9:16"
+          ],
+          "input_mime_types": [
+            "image/"
+          ]
+        }
+      }
+    ],
+    "speech": [
+      {
+        "model": "gemini-3.8-flash-tts",
+        "label": "Gemini 3.8 Flash TTS",
+        "suggested": true,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "voices": [
+            "Zephyr",
+            "Puck",
+            "Charon",
+            "Kore",
+            "Fenrir",
+            "Leda",
+            "Orus",
+            "Aoede",
+            "Callirrhoe",
+            "Autonoe",
+            "Enceladus",
+            "Iapetus",
+            "Umbriel",
+            "Algieba",
+            "Despina",
+            "Erinome",
+            "Algenib",
+            "Rasalgethi",
+            "Laomedeia",
+            "Achernar",
+            "Alnilam",
+            "Schedar",
+            "Gacrux",
+            "Pulcherrima",
+            "Achird",
+            "Zubenelgenubi",
+            "Vindemiatrix",
+            "Sadachbia",
+            "Sadaltager",
+            "Sulafat"
+          ],
+          "max_style_chars": 2000
+        }
+      },
+      {
+        "model": "gemini-3.8-flash-lite-tts",
+        "label": "Gemini 3.8 Flash-Lite TTS",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "voices": [
+            "Zephyr",
+            "Puck",
+            "Charon",
+            "Kore",
+            "Fenrir",
+            "Leda",
+            "Orus",
+            "Aoede",
+            "Callirrhoe",
+            "Autonoe",
+            "Enceladus",
+            "Iapetus",
+            "Umbriel",
+            "Algieba",
+            "Despina",
+            "Erinome",
+            "Algenib",
+            "Rasalgethi",
+            "Laomedeia",
+            "Achernar",
+            "Alnilam",
+            "Schedar",
+            "Gacrux",
+            "Pulcherrima",
+            "Achird",
+            "Zubenelgenubi",
+            "Vindemiatrix",
+            "Sadachbia",
+            "Sadaltager",
+            "Sulafat"
+          ],
+          "max_style_chars": 2000
+        }
+      }
+    ],
+    "transcribe": [
+      {
+        "model": "gemini-3.5-transcribe",
+        "label": "Gemini 3.5 Transcribe",
+        "suggested": true,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "max_languages": 10,
+          "max_vocabulary": 1000,
+          "input_mime_types": [
+            "audio/"
+          ]
+        }
+      }
+    ],
+    "embedding": [
+      {
+        "model": "gemini-embedding-2",
+        "label": "Gemini Embedding 2",
+        "suggested": true,
+        "listed": true,
+        "locations": [
+          "us",
+          "global",
+          "eu"
+        ],
+        "options": {
+          "inputs": [
+            "text",
+            "image",
+            "audio",
+            "video"
+          ],
+          "task_format": "prefix",
+          "max_dimensions": 3072,
+          "input_mime_types": [
+            "image/",
+            "audio/",
+            "video/",
+            "application/pdf"
+          ]
+        }
+      },
+      {
+        "model": "gemini-embedding-001",
+        "label": "Gemini Embedding 001",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "inputs": [
+            "text"
+          ],
+          "task_format": "field",
+          "max_dimensions": 3072
+        }
+      }
+    ],
+    "rerank": [],
+    "music": [
+      {
+        "model": "lyria-002",
+        "label": "Lyria 2",
+        "suggested": true,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "mime": "audio/wav",
+          "seed": true,
+          "lyrics": false,
+          "vocals": false,
+          "duration": 32.8,
+          "protocol": "predict",
+          "max_samples": 4,
+          "negative_prompt": true
+        }
+      },
+      {
+        "model": "lyria-3-clip-preview",
+        "label": "Lyria 3 Clip",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "mime": "audio/mpeg",
+          "seed": false,
+          "lyrics": true,
+          "vocals": true,
+          "duration": 30,
+          "protocol": "interactions",
+          "negative_prompt": false,
+          "input_mime_types": [
+            "image/"
+          ],
+          "max_input_images": 10
+        }
+      },
+      {
+        "model": "lyria-3-pro-preview",
+        "label": "Lyria 3 Pro",
+        "suggested": false,
+        "listed": true,
+        "locations": [
+          "global"
+        ],
+        "options": {
+          "mime": "audio/mpeg",
+          "seed": false,
+          "lyrics": true,
+          "vocals": true,
+          "duration": 184,
+          "protocol": "interactions",
+          "negative_prompt": false,
+          "input_mime_types": [
+            "image/"
+          ],
+          "max_input_images": 10
+        }
+      }
+    ]
+  },
+  "agent": {
+    "default": "gemini-3.8-flash",
+    "models": [
+      "gemini-3.8-flash",
+      "gemini-4-argon",
+      "gemini-3.5-flash-lite",
+      "gemini-3.5-flash"
+    ]
+  }
+}

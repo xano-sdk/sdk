@@ -1,4 +1,4 @@
-# xanosdk v1.0.19
+# xanosdk v1.0.20
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 
@@ -16,18 +16,18 @@ TAGGED value — `ref("x")` a stack variable, `inp("x")` an input, `auth("id")` 
 caller, `c.*` a constant — resolved at request time; JS operators over them do not
 compute (see Gotchas). Requests share no memory — state persists in tables or redis.
 
-Authorable: statement surfaces 219/219, filters 246 (246 typed).
+Authorable: statement surfaces 227/227, filters 246 (246 typed).
 Not authorable here: branch, market_item, realtime_channel (legacy; author realtimeServer + realtimeChannel instead), tablemap — these cannot be authored and do not survive a pull; reasons in `coverage.objectKinds.unmodeled`.
 
 Per-surface detail is in the topic files below: open the one whose condition matches the task.
 Per-entry detail (a statement's field schema with engine defaults, a filter's full argument
 list, the `storedName` mapping) is in the shipped `manifest.json` — do a TARGETED lookup;
-it is ~70k tokens, so never read it whole. A program imports it as `@xano/sdk/manifest.json`
+it is ~80k tokens, so never read it whole. A program imports it as `@xano/sdk/manifest.json`
 (Node ESM needs `with { type: "json" }`). Its top-level keys are `name`, `version`, `description`, `coverage`, `values`, `objectKinds`, `fieldTypes`, `statements`, `filters`, `cli`, `cliGlobalFlags`. `statements` and `filters` are ARRAYS, not maps — SELECT, do not index:
   jq '.statements[] | select(.sPath=="db.get")' manifest.json
   jq '.filters[]    | select(.name=="json_decode")' manifest.json
 ⚠ `fields` is null on the 66 `declarative: false` statements (`db.get`, …): typed wrappers whose arguments are the factory's `.d.ts` signature. Null ≠ missing.
-Select a statement on `sPath` (the `s.*` path you write), NOT `surface` (the XanoScript term): 24 of 219 differ — `var`→`set_var`, `break`→`foreach_break`, `foreach.remove`→`foreach_remove`, and every `expect.*`.
+Select a statement on `sPath` (the `s.*` path you write), NOT `surface` (the XanoScript term): 24 of 227 differ — `var`→`set_var`, `break`→`foreach_break`, `foreach.remove`→`foreach_remove`, and every `expect.*`.
 
 ## Topic files
 
@@ -54,7 +54,8 @@ plain file read resolves them at the version you have.
 - [Lambda bodies (JavaScript)](llms/lambda.md): Read when writing a JavaScript body, or weighing whether to reach for one at all — `lam.fn`, `fl.lambda`, `fl.reduce`, `s.lambda`; each surface binds a different set of identifiers.
 - [Lock file](llms/lock.md): Read when a `xano.lock` exists or should — renaming/pruning/importing identities, seeding the lock programmatically, or asking which commands write it.
 - [Legacy paradigms and retired statements](llms/legacy.md): Read when the code was PULLED from an existing Xano instance — how a codegen'd tree reads, the shapes in it that must not be "fixed", and any `raw({ name: "mvp:…" })`, `realtimeTrigger()`, or name the catalogs do not list.
-- [Statement catalog](llms/statements-catalog.md): Read for the field signature of a specific statement — every surface, grouped by `s.*` namespace.
+- [Statement catalog](llms/statements-catalog.md): Read for the field signature of a specific statement — every surface but `s.ai.*`, grouped by `s.*` namespace.
+- [AI statements](llms/statements-ai.md): Read when the stack calls `s.ai.*` (a Xano AI model, an external MCP server) or you choose where a Xano AI call runs.
 
 ## Quickstart
 
@@ -448,7 +449,7 @@ Non-obvious authoring rules:
 
 Reachable through the `s` namespace: `s.<path>({...})`. Declarative statements
 take one typed args object (field names match the engine); every surface's field
-signature is in `llms/statements-catalog.md`. Specials (`[special]`) are
+signature is in `llms/statements-catalog.md` (`s.ai.*`: `llms/statements-ai.md`). Specials (`[special]`) are
 hand-authored: control flow is below, the rest are in the `llms/statements-*` topic files.
 Fields marked `value` take a `Value` (`c.*`/`ref`/`inp`); `comparison` takes an
 `expr(...)`. A `→ as: <type>` suffix names what the statement's `as:` output var

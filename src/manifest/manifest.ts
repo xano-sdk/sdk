@@ -15,6 +15,7 @@
 import "../kinds/all.js";
 import "../statements/s.js";
 import { GENERATED_SPECS } from "../statements/generated/specs.generated.js";
+import { XANO_AI_SUGGESTIONS } from "../statements/generated/xano-ai-models.generated.js";
 import { SUPERSEDED_STATEMENTS } from "../statements/superseded.js";
 import { DECODE_ONLY_STATEMENTS } from "../statements/decode-only.js";
 import { UNCONFIRMED_STATEMENTS, UNCONFIRMED_NOTE } from "../statements/byte-evidence.js";
@@ -85,6 +86,13 @@ export interface ManifestField {
    * outside the set is rejected at authoring time.
    */
   enum?: string[];
+  /**
+   * Known values for a field that takes any text (a Xano AI `model` or
+   * `voice`). Suggestions, never a closed set: any other string is accepted
+   * unchecked, and the list is the SDK's catalog snapshot, so a value released
+   * after it is legal too.
+   */
+  examples?: string[];
 }
 
 /** One statement authoring surface. */
@@ -584,6 +592,18 @@ const NAMESPACE_NOTES: Readonly<Record<string, string>> = {
   // lines down says it and a call omitting one does not compile. A warning that
   // restates the type costs every reader of this section and changes nothing an
   // agent writes.
+  // Rendered at the top of `llms/statements-ai.md`, which holds the whole `ai`
+  // namespace (see renderSections).
+  ai:
+    "On the Xano AI model statements, `model` takes any string and autocompletes the known models; the suggestions come from a snapshot and can lag. " +
+    "For the current list, what each model allows and where it can run, run `npx @xano/sdk ai models --json` " +
+    "(`--all` adds unlisted models). " +
+    "It keys `statements` by short name: `text`→`s.ai.text.generate`, `image`→`s.ai.image.generate`, `video`→`s.ai.video.generate`, " +
+    "`music`→`s.ai.music.generate`, `speech`→`s.ai.speech.generate`, `transcribe`→`s.ai.speech.transcribe`, " +
+    "`embedding`→`s.ai.embedding.create`, `rerank`→`s.ai.rerank`; `agent.models` are the `xano-ai` agent models. " +
+    "Leave `model` out to run the statement's default. " +
+    "`s.ai.text.generate` needs `prompt` or `messages`. " +
+    "⚠ `save_to_files` on `s.ai.video.generate`, `s.ai.music.generate` and `s.ai.speech.generate` needs a paid plan (`s.ai.image.generate` does not).",
   array:
     "`by` is a `$this` expression, NOT a column name: `by: ref(\"$this.id\")` (warns `stack.array-key-constant`). A predicate's `if` binds `$this` only; `$index` only in `partition` (warns `stack.array-index-unbound`).",
   debug:
@@ -930,6 +950,43 @@ const STATEMENT_RESULTS: Record<string, { name: string; type: string; note?: str
   "object.keys": { name: "as", type: "(string | number)[]", note: "an integer-like key comes back as a NUMBER (PHP coerces it), not a string" },
   "object.values": { name: "as", type: "unknown[]" },
   "object.entries": { name: "as", type: "{ key: string | number; value: unknown }[]", note: "each entry is a { key, value } OBJECT, NOT a [key, value] tuple; an integer-like key comes back as a number" },
+  // ai.* — the eight Xano AI statements; mirrors the result types InferResponse traces.
+  "ai.text.generate": {
+    name: "as",
+    type: "{ text: string; json: unknown; model: string; finish_reason: string | null; usage: { input_tokens?: number; output_tokens?: number } }",
+    note: "json is the parsed reply when response_format is \"json\" (throws if it does not parse), else null. finish_reason is stop | max_tokens | safety | ..., null when none. usage can be {}",
+  },
+  "ai.image.generate": {
+    name: "as",
+    type: "{ image: <file resource> | XanoFileRef; text: string; model: string; usage: { input_tokens?: number; output_tokens?: number } }",
+    note: "image is the file resource (pass it to s.storage.create_image to keep it), or the stored file value when save_to_files is \"public\"/\"private\". text is \"\" when the model returns none",
+  },
+  "ai.video.generate": {
+    name: "as",
+    type: "{ video: <file resource> | XanoFileRef; model: string; duration: number }",
+    note: "video is the file resource, or the stored file value when save_to_files is set. duration in SECONDS",
+  },
+  "ai.speech.generate": {
+    name: "as",
+    type: "{ audio: <file resource> | XanoFileRef; model: string; usage: { input_tokens?: number; output_tokens?: number } }",
+    note: "audio is the file resource, or the stored file value when save_to_files is set",
+  },
+  "ai.music.generate": {
+    name: "as",
+    type: "{ audio: <file resource> | XanoFileRef; model: string; lyrics: string | null; description: string | null }",
+    note: "audio is the file resource, or the stored file value when save_to_files is set. lyrics/description are null when the model gives none (some never do)",
+  },
+  "ai.speech.transcribe": { name: "as", type: "{ text: string; model: string; usage: { input_tokens?: number; output_tokens?: number } }" },
+  "ai.embedding.create": {
+    name: "as",
+    type: "{ embeddings: number[][]; model: string; usage: { input_tokens?: number; output_tokens?: number } }",
+    note: "one vector per input, in input order; a single input still binds a list of one — read embeddings[0]",
+  },
+  "ai.rerank": {
+    name: "as",
+    type: "{ results: { index: number; id: string; score: number; content: string }[]; model: string }",
+    note: "results best first (top_n limits them). index is the position in documents; id is the document's id, or its index as a string when it had none",
+  },
 };
 
 /**
@@ -968,6 +1025,10 @@ function fieldsOf(spec: StatementSpec): ManifestField[] {
     const curated = CONTEXT_FIELD_ENUMS[`${spec.name}:${r.field}`];
     if (r.enum !== undefined) f.enum = r.enum;
     else if (curated) f.enum = [...curated];
+    // Keyed by the STORED input name, as the open-field table is.
+    const examples =
+      r.open && r.route.kind === "input" ? XANO_AI_SUGGESTIONS[`${spec.name}:${r.route.name}`] : undefined;
+    if (examples?.length) f.examples = [...examples];
     return f;
   });
 }
@@ -1424,6 +1485,8 @@ interface RenderedSections {
   stmtRuntime: string[];
   stmtCalls: string[];
   stmtCatalog: string[];
+  /** The `ai` statement namespace, its note, and where a Xano AI call runs. */
+  xanoAi: string[];
   values: string[];
   fields: string[];
   filters: string[];
@@ -1544,7 +1607,7 @@ function renderSections(m: Manifest): RenderedSections {
     "Per-surface detail is in the topic files below: open the one whose condition matches the task.",
     "Per-entry detail (a statement's field schema with engine defaults, a filter's full argument",
     "list, the `storedName` mapping) is in the shipped `manifest.json` — do a TARGETED lookup;",
-    "it is ~70k tokens, so never read it whole. A program imports it as `@xano/sdk/manifest.json`",
+    "it is ~80k tokens, so never read it whole. A program imports it as `@xano/sdk/manifest.json`",
     "(Node ESM needs `with { type: \"json\" }`). Its top-level keys are `" +
       Object.keys(m).join("`, `") +
       "`. `statements` and `filters` are ARRAYS, not maps — SELECT, do not index:",
@@ -2346,8 +2409,10 @@ function renderSections(m: Manifest): RenderedSections {
     "- `s.mcp.oauth.request({ request, as? })` — a pending sign-in's verified details for your `loginUrl` page to show before the user approves: `{ client_name, client_logo, callback_host, client_verified, server_name }`. Does not consume it.",
     "- `s.mcp.oauth.revoke({ mcp_server, user_id? | grant_id? | all?, as? })` — end hosted sign-ins on a server: EXACTLY ONE of `user_id`, `grant_id`, `all: c.bool(true)`, else `export()` fails (`mcp.oauth-revoke-target`). Binds `{ revoked }`.",
     "- `agent({ name, guid?, description?, docs?, enabled?, canonical?, tags?, history?, llm, tools?, output? })` — an LLM orchestrator. No top-level `instructions`/`prompt`/`spec` — the prompt lives under `llm`. Invoke from a stack with `s.ai.agent.run({ agent, args })`.",
-    "  - `llm` (REQUIRED): typed provider settings, a discriminated union on `type` (`\"xano-free\" | \"anthropic\" | \"openai\" | \"google-genai\"`). Shared fields: `systemPrompt?`, `maxSteps?` (default `5`), and `prompt?` XOR `messages?` (mutually exclusive; both is a type error and throws); plus provider fields (`apiKey?`, `model?`, `temperature?`, `reasoningEffort?`, …). String fields accept Twig placeholders — `{{ $args.x }}` for run inputs (the `args` of `s.ai.agent.run`), `{{ $env.NAME }}` for env vars.",
+    "  - `llm` (REQUIRED): typed provider settings, a discriminated union on `type` (`\"xano-free\" | \"xano-ai\" | \"anthropic\" | \"openai\" | \"google-genai\"`). Shared fields: `systemPrompt?`, `maxSteps?` (default `5`), and `prompt?` XOR `messages?` (mutually exclusive; both is a type error and throws); plus provider fields (`apiKey?`, `model?`, `temperature?`, `reasoningEffort?`, …). String fields accept Twig placeholders — `{{ $args.x }}` for run inputs (the `args` of `s.ai.agent.run`), `{{ $env.NAME }}` for env vars.",
     "  - `xano-free` runs only on Xano's cloud: on the Xano Engine on this machine a run fails `ERROR_FATAL` `The free model is not available in this process.` — use a keyed provider there.",
+    "  - `xano-ai` on the Xano Engine on this machine: each `deploy` (and the restart `local update` makes) gives the engine a Xano AI credential from the `xanosdk login` sign-in — the profile the project pins, `XANO_PROFILE`, or the default. It lasts as long as the engine runs, A DAY AT MOST, and the next deploy renews it with no restart. Billed to the signed-in user; `--ai-billing instance`, or `\"aiBilling\": \"instance\"` under `\"xanosdk\".\"@xano/sdk\"` in package.json, bills the owner of the instance signed in to (the flag wins). Without a usable sign-in (none, a pasted meta token, one without Xano AI access) the deploy still succeeds and prints why Xano AI is off and the fix; `--json` carries `ai: { status, billing, expiresAt?, reason? }`. An engine started by an SDK before this needs `xanosdk local stop <name>`, then a deploy.",
+    "  - `xano-ai` runs Xano AI models, with no `apiKey`: `model?` must be a literal name (a `{{ … }}` or expression THROWS, since the run would use the default model), and `location?` is `\"\" | \"us\" | \"global\" | \"eu\"` (or a `{{ … }}` template), set on the agent, not per run (which location wins: `llms/statements-ai.md`). ⚠ A literal `model` the gateway does not list for agents (`agent.models` in `ai models`) runs the default model instead, with no error.",
     "  - `tools?`: same `ToolsetToolEntry[]` as `mcpServer` — bare `tool()` handles, or a `{ tool, enabled?, auth? }` wrapper when one needs `enabled`/`auth`. A tool reading `auth()` needs the wrapper naming its auth table (see `mcpServer`'s `tools?`).",
     "  - `output?`: `{ schema: Record<string, input.*>, enabled? }` — structured-output schema. With `tools`, the run executes them first, then shapes its answer into the schema. `schema` is a named-field record authored with the `input.*` catalog, exactly like a `defineFunction`/`query` `input:` map. e.g. `output: { schema: { priority: input.enum([\"low\",\"high\"]), summary: input.text() } }`. When you pass the agent *handle* to `s.ai.agent.run({ agent })`, `.result` is typed from this schema; `resultShape` only overrides that, or types an agent referenced by bare name.",
     "  - **Run + read recipe (`s.ai.agent.run`):** bind the run to a var (`s.ai.agent.run({ agent, args, as: \"run\" })`) — it produces a rich envelope, and the completion is at **`.result`**. Read one structured field with a dotted ref (`response: ref(\"run.result.priority\")`) or the whole completion (`ref(\"run.result\")`, typed from `output.schema`). `args` is a plain object of run inputs (`{ topic: inp(\"topic\") }` — raw literals are fine, e.g. `{ max_steps: 3 }`) surfaced to the agent as `{{ $args.topic }}`. `.toolCalls` is the FINAL step's calls only (often `[]`); every call is a `.steps[].content[]` entry of `type: \"tool-call\"`. `allowToolExecution` defaults to true. ⚠ `c.bool(false)` does not hide the tools: the model still emits a call, the call never executes, and the run ends with an empty `result` (warns `stack.agent-tools-off`).",
@@ -2757,7 +2822,7 @@ function renderSections(m: Manifest): RenderedSections {
   lines.push(
     "Reachable through the `s` namespace: `s.<path>({...})`. Declarative statements",
     "take one typed args object (field names match the engine); every surface's field",
-    "signature is in `llms/statements-catalog.md`. Specials (`[special]`) are",
+    "signature is in `llms/statements-catalog.md` (`s.ai.*`: `llms/statements-ai.md`). Specials (`[special]`) are",
     "hand-authored: control flow is below, the rest are in the `llms/statements-*` topic files.",
     "Fields marked `value` take a `Value` (`c.*`/`ref`/`inp`); `comparison` takes an",
     "`expr(...)`. A `→ as: <type>` suffix names what the statement's `as:` output var",
@@ -3094,45 +3159,68 @@ function renderSections(m: Manifest): RenderedSections {
   // one-line note under its heading. The catalog is otherwise a flat list of
   // reachable surfaces, which reads as "callable anywhere" — true of nearly every
   // family, and wrong for the ones below.
+  //
+  // The `ai` namespace renders in its own topic file, `llms/statements-ai.md`,
+  // with its note and where a Xano AI call runs, rather than under a heading
+  // here: only a stack that calls a model needs them.
+  const AI_NAMESPACE = "ai";
   const groups = new Map<string, ManifestStatement[]>();
   for (const s of m.statements) {
     if (s.legacy) continue;
     const ns = s.sPath.includes(".") ? s.sPath.slice(0, s.sPath.indexOf(".")) : "(top-level)";
     (groups.get(ns) ?? groups.set(ns, []).get(ns)!).push(s);
   }
+  const catalogLine = (s: ManifestStatement): string => {
+    const call = `s.${s.sPath}`;
+    const flags = [s.declarative ? null : "special", s.registered ? null : "unregistered", s.output ? "output" : null]
+      .filter(Boolean)
+      .join(", ");
+    const flagSuffix = flags ? ` [${flags}]` : "";
+    // Signature-first: the engine `storedName` is dropped (agents author `s.path`,
+    // never `mvp:*`; it survives in manifest.json). Declarative statements keep the
+    // field signature inline (defaults dropped except DEFAULT_KEEP); specials carry
+    // no field schema in the listing — their real signature lives in the Specials
+    // block / def-shapes / `.d.ts` — so they render as a terse discovery pointer.
+    // The `as:` output binding, when curated — `→ as: <type> (<note>)`.
+    const resultSuffix = s.result
+      ? ` → ${s.result.name}: ${s.result.type}${s.result.note ? ` (${s.result.note})` : ""}`
+      : "";
+    if (s.fields) {
+      const args = s.fields.map((f) => fieldLine(f, s.sPath)).join("; ");
+      return `- \`${call}({ ${args} })\`${flagSuffix}${resultSuffix}`;
+    }
+    return `- \`${call}\`${flagSuffix}${resultSuffix}`;
+  };
     const stmtCatalog: string[] = [
     "`[special]`: hand-written signature (`llms.txt` Specials, `llms/statements-*`). " +
       "`[output]`: the engine's output flag; in-place mutators carrying it (`s.math.add`, `bitwise.*`) still take no `as`.",
     "",
   ];
   for (const ns of [...groups.keys()].sort()) {
+    if (ns === AI_NAMESPACE) continue;
     stmtCatalog.push(`### ${ns}`, "");
     const note = NAMESPACE_NOTES[ns];
     if (note) stmtCatalog.push(note, "");
-    for (const s of groups.get(ns)!) {
-      const call = `s.${s.sPath}`;
-      const flags = [s.declarative ? null : "special", s.registered ? null : "unregistered", s.output ? "output" : null]
-        .filter(Boolean)
-        .join(", ");
-      const flagSuffix = flags ? ` [${flags}]` : "";
-      // Signature-first: the engine `storedName` is dropped (agents author `s.path`,
-      // never `mvp:*`; it survives in manifest.json). Declarative statements keep the
-      // field signature inline (defaults dropped except DEFAULT_KEEP); specials carry
-      // no field schema in the listing — their real signature lives in the Specials
-      // block / def-shapes / `.d.ts` — so they render as a terse discovery pointer.
-      // The `as:` output binding, when curated — `→ as: <type> (<note>)`.
-      const resultSuffix = s.result
-        ? ` → ${s.result.name}: ${s.result.type}${s.result.note ? ` (${s.result.note})` : ""}`
-        : "";
-      if (s.fields) {
-        const args = s.fields.map((f) => fieldLine(f, s.sPath)).join("; ");
-        stmtCatalog.push(`- \`${call}({ ${args} })\`${flagSuffix}${resultSuffix}`);
-      } else {
-        stmtCatalog.push(`- \`${call}\`${flagSuffix}${resultSuffix}`);
-      }
-    }
+    for (const s of groups.get(ns)!) stmtCatalog.push(catalogLine(s));
     stmtCatalog.push("");
   }
+
+  // `llms/statements-ai.md`: the `ai` note, where a Xano AI call runs, then the
+  // namespace's signatures. Where-it-runs is stated here and nowhere else; the
+  // agent def shape points at it.
+  const xanoAi: string[] = [
+    NAMESPACE_NOTES[AI_NAMESPACE] ?? "",
+    "",
+    "- **Where a call runs (`location`)**, on these statements and on a `xano-ai` agent: its own `location` wins; " +
+      "blank inherits the workspace's Xano AI location; blank there too sends none, and the gateway runs the model at its default. " +
+      "An explicit `\"global\"` opts out of a workspace `\"eu\"`. A statement refuses, before sending anything, a location its model " +
+      "cannot run at (the model's `locations` in `ai models`); an agent's location is refused by the gateway instead.",
+    "- **The workspace's Xano AI location:** `workspaceConfig({ settings: { ai_settings: { providers: { \"xano-ai\": { location: \"eu\" } } } } })`, " +
+      "`\"\" | \"us\" | \"global\" | \"eu\"`, lowercase (anything else THROWS). A deploy that omits the `xano-ai` block keeps the live location; " +
+      "an empty block or `location: \"\"` clears it. A merge (`deploy --to`) writes no workspace settings, and `--branch <label>` leaves them alone.",
+    "",
+    ...(groups.get(AI_NAMESPACE) ?? []).map(catalogLine),
+  ];
 
   const legacy: string[] = [];
   // The legacy index: named, never specified. Everything here is supported and
@@ -3245,6 +3333,7 @@ function renderSections(m: Manifest): RenderedSections {
     stmtRuntime,
     stmtCalls,
     stmtCatalog,
+    xanoAi,
     values,
     fields,
     filters,
@@ -3467,8 +3556,15 @@ export function renderDocs(m: Manifest): Map<string, string> {
       path: "llms/statements-catalog.md",
       title: "Statement catalog",
       readWhen:
-        "Read for the field signature of a specific statement — every surface, grouped by `s.*` namespace.",
+        "Read for the field signature of a specific statement — every surface but `s.ai.*`, grouped by `s.*` namespace.",
       body: s.stmtCatalog,
+    },
+    {
+      path: "llms/statements-ai.md",
+      title: "AI statements",
+      readWhen:
+        "Read when the stack calls `s.ai.*` (a Xano AI model, an external MCP server) or you choose where a Xano AI call runs.",
+      body: s.xanoAi,
     },
   ];
 

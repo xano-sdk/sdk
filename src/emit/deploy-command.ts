@@ -304,6 +304,12 @@ export interface DeploySummary {
   };
   created?: boolean;
   /**
+   * A Xano Engine deploy only: whether Xano AI is on for the engine — `{ status:
+   * "on", billing, expiresAt }` with the credential's expiry, or `{ status:
+   * "off", billing, reason }` with a stable reason code. Never the credential.
+   */
+  ai?: import("../deploy/local-engine-ai.js").AiOutcomeDocument;
+  /**
    * What happened to the environment's table rows: `kept` when `--keep-data`
    * merged into what an earlier deploy filled, `replaced` otherwise — which is
    * every deploy without the flag.
@@ -1500,6 +1506,11 @@ async function deployToLocalEngine(
 ): Promise<void> {
   const { startedAt } = ctx;
   const dir = process.cwd();
+  // Who the engine's Xano AI is billed to — the flag, the project's setting,
+  // then the signed-in user. Read before the compile, so a bad setting is
+  // refused before any work.
+  const { resolveAiBilling } = await import("./project-config.js");
+  const aiBilling = resolveAiBilling(args.aiBilling, dir);
   // Carried as a value: a fetched source has both a spec and the provider its
   // credential (if any) comes from, and a compiled one has neither. Pairing
   // them here is what keeps the two facts from drifting apart into a non-null
@@ -1609,24 +1620,33 @@ async function deployToLocalEngine(
   // the engine is serving AND recorded — the import below cannot run
   // before the record exists, because this call has not returned.
   const { ensureProjectEngine } = await import("../deploy/local-engine-deploy.js");
+  const { ENGINE_LICENSE_NOTICE } = await import("../deploy/local-engine-release.js");
   const pin = pinAfterAcquire(choice, dir);
+  // Said once the spinner is done, and only when this run downloaded an engine.
+  let downloadedEngine = false;
   // The completed-import marker survives the engine's record write whenever it
   // vouches for the engine serving now, whichever arm runs: the import is one
   // transaction, so a failed one leaves the rows it vouched for standing, and a
   // replace that completes re-stamps it below.
   const flags = { keepData: args.keepData, reset: args.reset };
-  const { engine, reused, previousUrl, hadRecord, priorFilled, engineVersion, replaced, sweptOrphans } =
+  const { engine, reused, previousUrl, hadRecord, priorFilled, engineVersion, replaced, sweptOrphans, ai } =
     await withSpinner("Preparing the Xano Engine…", () =>
       ensureProjectEngine({
         dir,
         source: choice.source,
+        // Never fails the deploy: a credential that cannot be had is an `off` outcome.
+        ai: { billing: aiBilling },
         rerun: rerunOf(args).command,
         rerunNote: rerunOf(args).note,
         onAcquired: pin.onAcquired,
+        onDownloaded: () => {
+          downloadedEngine = true;
+        },
         carryFilled: (ctx) => ctx.reused && ctx.priorFilled !== undefined && ctx.priorFilled.url === ctx.url,
       }).catch((err: unknown) => explainOverrideFailure(choice, err)),
     );
   pin.announce();
+  if (downloadedEngine) info(ENGINE_LICENSE_NOTICE);
   if (sweptOrphans !== undefined) {
     info(
       `Stopped ${sweptOrphans.length === 1 ? "a process" : `${sweptOrphans.length} processes`} a crashed Xano Engine ` +
@@ -1639,6 +1659,8 @@ async function deployToLocalEngine(
         `${replaced.to ?? "the resolved engine"}). It starts empty, so this deploy seeds it.`,
     );
   }
+  const { aiOutcomeDocument, aiOutcomeLine } = await import("../deploy/local-engine-ai.js");
+  if (ai !== undefined) info(aiOutcomeLine(ai));
   const arm = selectDeployArm({
     ...flags,
     created: !reused,
@@ -1821,6 +1843,7 @@ async function deployToLocalEngine(
       ...(choice.override === undefined ? {} : { override: choice.override }),
     },
     created: !reused,
+    ...(ai === undefined ? {} : { ai: aiOutcomeDocument(ai) }),
     ...dataFields(arm),
     ...mergeLossFields(merged),
     ...(staticSummary === undefined ? {} : { static: staticSummary }),
@@ -2349,6 +2372,16 @@ async function runDeploy(args: ParsedArgs): Promise<void> {
   assertNoOrphanFlags(args);
   // Before either arm: a --static-env pair is published whichever way it goes.
   warnSecretLookingStaticEnv(args.staticEnv);
+  // Only a Xano Engine is handed a Xano AI credential by this command; a hosted
+  // backend has its own, so the flag would be dropped there.
+  if (args.aiBilling !== undefined && !args.localEngine) {
+    throw new UsageError(
+      `\`--ai-billing\` chooses who a Xano Engine's Xano AI usage is billed to, and ` +
+        `${args.to !== undefined ? "`--to`" : "`--ephemeral`"} deploys to a hosted backend, which bills Xano AI to its own instance. ` +
+        `Drop \`--ai-billing\`, or deploy to the Xano Engine (\`xanosdk deploy\`).`,
+      { hintFor: { command: "deploy" } },
+    );
+  }
 
   // A real destination is a different command underneath: it merges from a
   // local build rather than full-replacing a throwaway environment.

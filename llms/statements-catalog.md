@@ -1,6 +1,6 @@
 # Statement catalog
 
-> Read for the field signature of a specific statement — every surface, grouped by `s.*` namespace.
+> Read for the field signature of a specific statement — every surface but `s.ai.*`, grouped by `s.*` namespace.
 
 `[special]`: hand-written signature (`llms.txt` Specials, `llms/statements-*`). `[output]`: the engine's output flag; in-place mutators carrying it (`s.math.add`, `bitwise.*`) still take no `as`.
 
@@ -35,13 +35,6 @@
 ### addon
 
 - `s.addon.call` [special]
-
-### ai
-
-- `s.ai.agent.run` [special]
-- `s.ai.external.mcp.server_details({ as?: string; url: value; bearer_token?: value; connection_type?: "sse" | "stream" })`
-- `s.ai.external.mcp.tool.list({ as?: string; url: value; bearer_token?: value; connection_type?: "sse" | "stream" })`
-- `s.ai.external.mcp.tool.run({ as?: string; url: value; bearer_token?: value; connection_type?: "sse" | "stream"; tool: value; args?: value })`
 
 ### api
 

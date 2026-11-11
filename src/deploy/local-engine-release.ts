@@ -483,6 +483,14 @@ function readArchiveFile(path: string): Uint8Array {
  * ------------------------------------------------------------------ */
 
 /** What {@link acquireEngine} needs: a machine, a resolved source, and a way out to the network. */
+/**
+ * The line said once when a release download lands an engine on this machine:
+ * the Xano Engine is free to run, not open source, and this is its license.
+ * The engine's own `--licenses` prints the full text and its third-party notices.
+ */
+export const ENGINE_LICENSE_NOTICE =
+  "Xano Engine is free to run under the Xano Engine License: https://docs.xano.com/legal/xano-engine-license";
+
 export interface AcquireEngineOptions {
   /**
    * Where the engine comes from, as {@link resolveEngineSource} decided it: a
@@ -501,6 +509,12 @@ export interface AcquireEngineOptions {
    * appended to the failure, as every other printed rerun carries it.
    */
   rerunNote?: string;
+  /**
+   * Told the version a release download just put on this machine, once its
+   * bytes are verified and staged. Never for a cache hit or an override, so a
+   * caller saying {@link ENGINE_LICENSE_NOTICE} here says it once per download.
+   */
+  onDownloaded?: (version: string) => void;
   /** Defaulted to the running process; taken as arguments so a test can ask about another machine. */
   platform?: string;
   arch?: string;
@@ -579,7 +593,7 @@ async function acquireEngineUnclassified(opts: AcquireEngineOptions): Promise<Ac
   }
 
   if (opts.spec.kind === "release") {
-    return acquireRelease(opts.spec.version, platform, env, opts.fetch);
+    return acquireRelease(opts.spec.version, platform, env, opts.fetch, opts.onDownloaded);
   }
   const entry = await acquireOverride(opts.spec.source, env, opts.fetch ?? defaultFetch);
   return { entry, version: undefined };
@@ -604,6 +618,7 @@ async function acquireRelease(
   platform: NonNullable<ReturnType<typeof resolveEnginePlatform>>,
   env: NodeJS.ProcessEnv,
   fetch: EngineFetch | undefined,
+  onDownloaded: ((version: string) => void) | undefined,
 ): Promise<AcquiredEngine> {
   // Normalized (and refused if malformed) before it keys anything: `0.1.5` and
   // `v0.1.5` are one entry, and `../x` never reaches a path or a request.
@@ -683,6 +698,7 @@ async function acquireRelease(
     env,
   });
   verifiedEngineExecutable(entry, env);
+  onDownloaded?.(asset.version);
   return { entry, version: asset.version };
 }
 

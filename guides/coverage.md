@@ -10,7 +10,7 @@ the real Xano engine golden fixtures, and a coverage report prints on every test
 | Surface | Coverage |
 |---|---|
 | Object kinds | **27 / 31** — counted over the engine's catalog, where each trigger type is its own kind |
-| Statements (via `s`) | **219 / 219 (100%)** — every engine statement surface has a factory |
+| Statements (via `s`) | **227 / 227 (100%)** — every engine statement surface has a factory |
 | Filters (via `fl`) | **246 / 246 (100%)** — every filter's signature is known: 144 carry arguments, 102 take none |
 
 The four engine kinds you cannot author here are `tablemap`, the superseded
@@ -24,8 +24,8 @@ SDK's own catalogs; this table is hand-written, so a test asserts every figure i
 `buildManifest()` (`@xano/sdk/internal`) — the numbers here and the numbers an agent
 reads cannot disagree.
 
-The statement catalog is generated from the engine's own schemas (`npm run codegen`): 153 of
-the 219 surfaces are declarative and carry a typed field schema, and the remaining 66 —
+The statement catalog is generated from the engine's own schemas (`npm run codegen`): 161 of
+the 227 surfaces are declarative and carry a typed field schema, and the remaining 66 —
 control flow, the `db` family, the call family — are hand-authored. **Reachable ≠ byte-verified**: every surface is
 authorable, but a structural special without a persisted golden yet emits a shape *modeled*
 on the engine schema, to be deep-equal'd against fixtures as they are captured.
@@ -64,7 +64,7 @@ can learn the SDK without reading source:
 - **`manifest.json`** — the exhaustive reference tier, reached by targeted lookup (grep or
   `jq` one entry; never read it whole). Every object kind (factory, `Xano.register*` method,
   payload key), every statement surface (the `s.<path>` accessor, stored `mvp:` name, and a
-  typed field schema for the 153 declarative statements), the value constructors, the tag
+  typed field schema for the 161 declarative statements), the value constructors, the tag
   catalog, the filter catalog, and every CLI command and flag — plus live coverage counts.
 
 Both derive from the SDK's own sources of truth (so they can't drift), regenerate with

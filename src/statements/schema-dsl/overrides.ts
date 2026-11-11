@@ -8,6 +8,7 @@
  * so the committed catalog and a fresh regeneration always agree.
  */
 import type { FieldRule, StatementSpec } from "./interpret.js";
+import { XANO_AI_LOCATIONS, type AiStatement } from "../xano-ai-statements.js";
 
 /**
  * The range of a `static:int` field, which the transform schema can't state.
@@ -356,6 +357,18 @@ export const UNREAD_INPUT: Readonly<Record<string, readonly string[]>> = {
   "mvp:connect_webflow_api_request": ["headers"],
 };
 
+/** The eight Xano AI gateway statements, by stored name. */
+const XANO_AI_STATEMENTS: readonly string[] = [
+  "mvp:ai_text_generate",
+  "mvp:ai_image_generate",
+  "mvp:ai_video_generate",
+  "mvp:ai_music_generate",
+  "mvp:ai_speech_generate",
+  "mvp:ai_speech_transcribe",
+  "mvp:ai_embedding_create",
+  "mvp:ai_rerank",
+];
+
 /**
  * Inputs the schema YAML marks REQUIRED and the engine class marks OPTIONAL.
  *
@@ -387,7 +400,113 @@ const CLASS_OPTIONAL: Readonly<Record<string, readonly string[]>> = {
   "mvp:google_cloud_storage_signed_url": ["method", "ttl"],
   "mvp:microservice_request": ["method", "params", "timeout", "follow_location"],
   "mvp:algolia_request": ["method"],
+  // The Xano AI statements. The schema YAML declares `model` bare, but the
+  // engine composes each statement's input schema at run time with `model`
+  // optional and defaulted to that statement's suggested model, and a blank or
+  // absent model falls back to the same suggestion before the request is sent.
+  // So leaving `model` out is the normal call, not a stranded statement.
+  ...Object.fromEntries(XANO_AI_STATEMENTS.map((n) => [n, ["model"]])),
 };
+
+/** Whether a generated media file is also saved to the workspace's files: off, or the access it gets. */
+const XANO_AI_SAVE_TO_FILES = ["", "public", "private"] as const;
+
+/**
+ * Enum constraints the engine class declares that the enum harvest cannot see,
+ * keyed by stored statement name, then STORED input name.
+ *
+ * The Xano AI statements build their input schema at run time: each adds its
+ * own lines to a shared set every statement in the family receives (`location`
+ * on all eight, `save_to_files` on the four that produce media). No dumped
+ * per-statement input schema carries the shared lines, so a harvest would leave
+ * those fields free text. The statement-specific enums sit in the same table
+ * rather than behind a whole input-schema harvest, which would re-derive every
+ * other statement's enums along the way.
+ *
+ * This table is AUTHORITATIVE for the fields it names. {@link applyClassEnums}
+ * runs after the harvest and after the committed-enum floor, so a later edit
+ * here lands on the next regeneration instead of being overwritten by the
+ * values already committed. Each entry is checked like {@link findInput}: a
+ * name the spec has no input for throws.
+ */
+export const CLASS_ENUMS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  "mvp:ai_text_generate": { location: XANO_AI_LOCATIONS, response_format: ["text", "json"] },
+  "mvp:ai_image_generate": {
+    location: XANO_AI_LOCATIONS,
+    save_to_files: XANO_AI_SAVE_TO_FILES,
+    aspect_ratio: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+    image_size: ["1K", "2K", "4K"],
+  },
+  "mvp:ai_video_generate": {
+    location: XANO_AI_LOCATIONS,
+    save_to_files: XANO_AI_SAVE_TO_FILES,
+    aspect_ratio: ["16:9", "9:16"],
+    resolution: ["720p", "1080p", "4k"],
+  },
+  "mvp:ai_music_generate": { location: XANO_AI_LOCATIONS, save_to_files: XANO_AI_SAVE_TO_FILES },
+  "mvp:ai_speech_generate": { location: XANO_AI_LOCATIONS, save_to_files: XANO_AI_SAVE_TO_FILES },
+  "mvp:ai_speech_transcribe": { location: XANO_AI_LOCATIONS },
+  "mvp:ai_embedding_create": { location: XANO_AI_LOCATIONS },
+  "mvp:ai_rerank": { location: XANO_AI_LOCATIONS },
+};
+
+/**
+ * Attach the {@link CLASS_ENUMS} constraints to `spec`, in place. Run it AFTER
+ * `attachEnums`, so these values win over both a harvested and a carried-forward
+ * enum for the same field. Idempotent.
+ */
+export function applyClassEnums(spec: StatementSpec): void {
+  for (const [stored, values] of Object.entries(CLASS_ENUMS[spec.name] ?? {})) {
+    findInput(spec, stored, "CLASS_ENUMS").enum = [...values];
+  }
+}
+
+/** Where an open field's suggested values come from in the Xano AI catalog. */
+export interface OpenFieldSource {
+  /** The catalog block the statement reads its models from. */
+  statement: AiStatement;
+  /** `models`: the block's listed models. `voices`: the union of their `options.voices`. */
+  list: "models" | "voices";
+}
+
+/**
+ * Fields that take any text and are SUGGESTED values rather than a closed set,
+ * keyed by stored statement name, then STORED input name.
+ *
+ * The engine checks `model` (and the speech `voice`) against the live Xano AI
+ * catalog at run time, and that catalog changes without an SDK release: a new
+ * model works the day the gateway lists it. A closed enum would refuse it at
+ * build time, so these fields are marked `open` instead. The generated factory
+ * types them as the snapshot's listed values plus any string plus `Value`; the
+ * encoder writes a bare string as a text constant and checks nothing. The
+ * values themselves come from `src/statements/generated/xano-ai-catalog.snapshot.json`
+ * and live in a generated type module, never on the spec.
+ */
+export const OPEN_FIELDS: Readonly<Record<string, Readonly<Record<string, OpenFieldSource>>>> = {
+  "mvp:ai_text_generate": { model: { statement: "text", list: "models" } },
+  "mvp:ai_image_generate": { model: { statement: "image", list: "models" } },
+  "mvp:ai_video_generate": { model: { statement: "video", list: "models" } },
+  "mvp:ai_music_generate": { model: { statement: "music", list: "models" } },
+  "mvp:ai_speech_generate": {
+    model: { statement: "speech", list: "models" },
+    voice: { statement: "speech", list: "voices" },
+  },
+  "mvp:ai_speech_transcribe": { model: { statement: "transcribe", list: "models" } },
+  "mvp:ai_embedding_create": { model: { statement: "embedding", list: "models" } },
+  "mvp:ai_rerank": { model: { statement: "rerank", list: "models" } },
+};
+
+/**
+ * Mark the {@link OPEN_FIELDS} rules of `spec` open, in place. A field that is
+ * both open and enum-constrained is a contradiction, so it throws. Idempotent.
+ */
+export function applyOpenFields(spec: StatementSpec): void {
+  for (const stored of Object.keys(OPEN_FIELDS[spec.name] ?? {})) {
+    const rule = findInput(spec, stored, "OPEN_FIELDS");
+    if (rule.enum) throw new Error(`OPEN_FIELDS["${spec.name}"].${stored} also carries an enum; a field is open or closed, not both.`);
+    rule.open = true;
+  }
+}
 
 /**
  * Inputs the engine class marks REQUIRED and the schema YAML marks OPTIONAL.

@@ -26,27 +26,29 @@ import { resolveProjectEntry } from "./deploy-source.js";
 import { info, warn } from "./ui.js";
 import { UsageError } from "./errors.js";
 import { ORIGIN_READ_ONLY_BY_REFRESH } from "./context-flags.js";
+import { LOCAL_DEPLOY_CREDENTIAL } from "./tracked-backend.js";
 
 /**
- * Refuse the credential flags on a local deploy that reads no
- * credential — the `--profile` refusal's siblings. A Xano Engine is reached
- * with its own bearer, so each was accepted and never used: `--config` (a typo
+ * Refuse the credential flags on a local deploy — the `--profile` refusal's
+ * siblings. A Xano Engine is reached with its own bearer, and the engine's Xano
+ * AI credential comes from the ambient profile, so each was accepted and never used: `--config` (a typo
  * in it, or a path that is a directory, passed without a word), `--local-auth` (the
  * project-local credential file), and `--origin` (the sign-in server). Allowed
  * when a SOURCE among `kinds` is hosted, which does read a credential.
  *
- * Their environment spellings — XANO_CONFIG, XANO_ORIGIN, XANO_PROFILE — stay
- * ignored without a word, deliberately: they are ambient, commonly exported
- * once in a shell rc for hosted work, and a note on every local deploy would be
- * noise about a setting nobody typed for THIS run. A flag is an instruction
- * for this run, so dropping one silently is what is refused.
+ * Their environment spellings are not refused: XANO_CONFIG and XANO_PROFILE
+ * are part of the ambient selection the engine's Xano AI credential is read
+ * through, and XANO_ORIGIN is commonly exported once in a shell rc for hosted
+ * work, so a note on every local deploy would be noise about a setting nobody
+ * typed for THIS run. A flag is an instruction for this run, so dropping one
+ * silently is what is refused.
  */
 export function refuseCredentialFlagsForLocal(
   args: { authFile?: string; local?: boolean; authHost?: string },
   kinds: readonly string[],
 ): void {
   if (kinds.some((k) => k !== "local")) return;
-  const why = "and a Xano Engine takes none — it is reached with the engine's own bearer.";
+  const why = LOCAL_DEPLOY_CREDENTIAL;
   const or = "or deploy from a hosted backend that reads it.";
   const refuse = (message: string): never => {
     throw new UsageError(message, { hintFor: { command: "deploy" } });

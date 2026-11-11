@@ -160,25 +160,44 @@ const defaultRun: EngineRun = (executable, args, options) => {
  * "measured clean on one build" is not a property this side can keep, and the
  * never-print-the-bearer rule counts the log this tool writes and the tail it
  * prints as its own sinks. So the shapes are removed rather than trusted: a
- * JWT, a `key=` sign-in parameter, and a bearer header.
+ * JWT, an `xai_` Xano AI key, a `key=` sign-in parameter, and a bearer header.
  */
 function redactSecrets(text: string): string {
   return text
     .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g, "[redacted]")
+    .replace(/\bxai_[A-Za-z0-9_-]+/g, "[redacted]")
     .replace(/(\bkey=)[^&\s"']+/gi, "$1[redacted]")
     .replace(/(\bBearer\s+)\S+/gi, "$1[redacted]");
 }
 
+/** The variable naming the file an engine reads its Xano AI credential from, on every run. */
+export const ENGINE_AI_TOKEN_FILE_ENV = "XANO_AI_GATEWAY_TOKEN_FILE";
+
+/** The variable naming the Xano AI gateway an engine calls. Read once, when it boots. */
+export const ENGINE_AI_GATEWAY_URL_ENV = "XANO_AI_GATEWAY_URL";
+
+/**
+ * What an engine is started with for Xano AI: the path of its credential file,
+ * and the gateway when one is known. Only the PATH is passed — the credential
+ * stays in the file, out of the process table and out of anything fixed at boot,
+ * so a later deploy can replace it without a restart.
+ */
+export interface EngineAiWiring {
+  tokenFile: string;
+  gatewayUrl?: string;
+}
+
 /**
  * The environment the child gets: the allowlist, and only what the parent
- * actually had.
+ * actually had — plus the Xano AI wiring when given, which is built here and
+ * never read from the parent.
  *
  * A variable the parent does not set is not invented, so the child sees the
  * same absence the parent did rather than an empty string standing in for one.
  * PATH is the exception — a child with no PATH cannot find anything it shells
  * out to, and an empty one is the honest default.
  */
-export function engineChildEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+export function engineChildEnv(env: NodeJS.ProcessEnv = process.env, ai?: EngineAiWiring): NodeJS.ProcessEnv {
   const built: NodeJS.ProcessEnv = {};
   for (const key of ENGINE_ENV_ALLOWLIST) {
     const value = env[key];
@@ -188,6 +207,10 @@ export function engineChildEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Pro
   // The same HOME for every spawn, under the directory this feature owns — the
   // engine's logs and runtime data land there, not in the developer's cache.
   built.HOME = engineRunHome(env);
+  if (ai !== undefined) {
+    built[ENGINE_AI_TOKEN_FILE_ENV] = ai.tokenFile;
+    if (ai.gatewayUrl !== undefined) built[ENGINE_AI_GATEWAY_URL_ENV] = ai.gatewayUrl;
+  }
   return built;
 }
 
@@ -231,6 +254,8 @@ export interface StartEngineOptions {
   timeoutMs?: number;
   /** The engine's version (`v0.1.15`), when known; decides whether it is started with `--ttl 0`. */
   version?: string;
+  /** The Xano AI wiring to start it with — see {@link EngineAiWiring}. */
+  ai?: EngineAiWiring;
 }
 
 /** The first engine release that stops an `--ephemeral` engine after an hour unless given `--ttl`. */
@@ -242,10 +267,24 @@ const FIRST_TTL_RELEASE = [0, 1, 15] as const;
  * predates the flag refuses to boot on it.
  */
 export function engineExpiresEphemerals(version: string | undefined): boolean {
-  const parts = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version?.trim() ?? "")?.slice(1).map(Number);
+  const parts = releaseParts(version);
   if (parts === undefined) return false;
   for (let i = 0; i < 3; i++) if (parts[i] !== FIRST_TTL_RELEASE[i]) return parts[i]! > FIRST_TTL_RELEASE[i]!;
   return true;
+}
+
+/**
+ * Whether an engine of this version, started by {@link startEngine}, runs until
+ * it is stopped: one that takes `--ttl` is given `--ttl 0`, and one that
+ * predates the flag has no timer. An unknown version is started without the
+ * flag, so it may stop itself after the engine's default hour.
+ */
+export function engineRunsUntilStopped(version: string | undefined): boolean {
+  return releaseParts(version) !== undefined;
+}
+
+function releaseParts(version: string | undefined): number[] | undefined {
+  return /^v?(\d+)\.(\d+)\.(\d+)/.exec(version?.trim() ?? "")?.slice(1).map(Number);
 }
 
 /**
@@ -309,7 +348,7 @@ export async function startEngine(opts: StartEngineOptions): Promise<LocalEngine
       // stdin ignored: nothing here answers a prompt, and an inherited stdin is
       // a detached process competing with the CLI for the terminal.
       stdio: ["ignore", "pipe", "pipe"],
-      env: engineChildEnv(env),
+      env: engineChildEnv(env, opts.ai),
     },
   );
 

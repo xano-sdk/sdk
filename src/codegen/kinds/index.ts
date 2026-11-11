@@ -1400,7 +1400,7 @@ export const KIND_DECODERS: readonly KindDecoder[] = [
         workspaceMiddleware(a),
         workspaceHistory(a),
         workspaceEnv(a),
-        minusDefaults(a.stored, "settings", DEFAULT_SETTINGS),
+        minusDefaults(a.stored, "settings", STORED_SETTINGS),
         // `?=`-optional in the engine schema and emitted BY PRESENCE, so the
         // encoder cannot round-trip a default it never wrote. The engine
         // materializes all four on save anyway, so a stored default is noise a
@@ -2162,6 +2162,23 @@ function workspaceMiddleware(a: KindDecodeArgs): DefEntry | null {
 }
 
 /**
+ * {@link DEFAULT_SETTINGS} plus the blank Xano AI `model` a new workspace
+ * stores, so a pulled `{ model: "", location: "eu" }` names only the location.
+ *
+ * Only the model. The encoder sends no `xano-ai` member by default (a replace
+ * import keeps a stored provider the archive leaves out), so a tree that
+ * dropped the whole stored `{ model: "", location: "" }` would re-export
+ * without it and fail the round trip. The blank location stays in the tree.
+ */
+const STORED_SETTINGS: object = (() => {
+  const ai = DEFAULT_SETTINGS.ai_settings as { providers: Record<string, unknown> };
+  return {
+    ...DEFAULT_SETTINGS,
+    ai_settings: { ...ai, providers: { ...ai.providers, "xano-ai": { model: "" } } },
+  };
+})();
+
+/**
  * A stored block minus the engine's default scaffold — the inverse of
  * {@link mergeOverDefaults}, which the encoder applies on the way back out.
  *
@@ -2704,6 +2721,10 @@ const PROVIDER_CONFIG_KEYS: ReadonlyArray<readonly [string, string, unknown]> = 
   ["headers", "headers", ""],
   ["safetySettings", "safetySettings", ""],
   ["dynamicRetrievalConfig", "dynamicRetrieval", ""],
+  // xano-ai only. No default: the encoder writes it exactly when the def has
+  // one, so a stored blank `location` is carried as `""` and an absent one
+  // stays absent.
+  ["location", "location", undefined],
 ];
 
 /**
@@ -2712,7 +2733,8 @@ const PROVIDER_CONFIG_KEYS: ReadonlyArray<readonly [string, string, unknown]> = 
  * Mirrors `buildProviderConfig` one provider at a time, and is pinned against it
  * by a drift test. The providers are not interchangeable: `xano-free` is a
  * wrapper that declares no `model`/`apiKey` of its own, even though the stored
- * config can carry both. Reading one onto the typed field emitted a generated
+ * config can carry both; `xano-ai` is the same wrapper with a `model` and a
+ * `location`, still without an `apiKey`. Reading one onto the typed field emitted a generated
  * tree that does not type-check — the failure the flat key table could not see,
  * because it did not know which provider it was reading for.
  */
@@ -2729,6 +2751,10 @@ export const PROVIDER_TYPED_KEYS: Readonly<Record<string, ReadonlySet<string>>> 
   "xano-free": new Set([
     "temperature", "useSearchGrounding", "thinkingConfig", "baseURL", "headers",
     "safetySettings", "dynamicRetrievalConfig",
+  ]),
+  "xano-ai": new Set([
+    "model", "temperature", "useSearchGrounding", "thinkingConfig", "baseURL", "headers",
+    "safetySettings", "dynamicRetrievalConfig", "location",
   ]),
 };
 
@@ -2751,7 +2777,7 @@ function providerConfigEntries(provider: string, config: Record<string, unknown>
     entries.push(["thinkingTokens", lit(thinking.budgetTokens)]);
   }
 
-  // Google-GenAI (and the xano-free wrapper) nest theirs in `thinkingConfig`.
+  // Google-GenAI (and the xano-free / xano-ai wrappers) nest theirs in `thinkingConfig`.
   const thinkingConfig = config.thinkingConfig as
     | { includeThoughts?: unknown; thinkingBudget?: unknown }
     | undefined;

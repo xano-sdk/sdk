@@ -27,6 +27,9 @@ npx @xano/sdk marketplace install @xano-sdk/auth    # add an add-on to the proje
 npx @xano/sdk marketplace reinstall <toolchain-package>  # re-ask a toolchain module its questions
 npx @xano/sdk marketplace remove <toolchain-package>     # uninstall it and drop what it contributed
 
+npx @xano/sdk ai models                           # the current Xano AI models, what each allows and where it runs (no login needed)
+npx @xano/sdk ai models --json --all              # …as JSON, retired models included
+
 npx @xano/sdk export ./xano/index.ts              # bundle to stdout
 npx @xano/sdk export ./xano/index.ts --out ws.json
 npx @xano/sdk compile ./xano/functions/get-user.ts  # a single function's JSON

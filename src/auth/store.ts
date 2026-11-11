@@ -65,6 +65,12 @@ export interface OAuthCredential {
   auth_host: string;
   /** OAuth client_id the token was minted under — required to refresh it. */
   client_id: string;
+  /**
+   * The Xano AI gateway for the bound instance, as the sign-in server named it
+   * in the token response. Shown by `ai models`, never called. Absent on older
+   * records and on instances the server named none for.
+   */
+  ai_gateway_url?: string;
 }
 
 /**
@@ -763,6 +769,10 @@ function parseOAuth(record: Record<string, unknown>, path: string, profile: stri
     workspace_id: requireWorkspaceId(record.workspace_id, at),
     auth_host: record.auth_host,
     client_id: record.client_id,
+    // Optional and display-only: a missing or malformed value leaves the key out.
+    ...(typeof record.ai_gateway_url === "string" && record.ai_gateway_url !== ""
+      ? { ai_gateway_url: record.ai_gateway_url }
+      : {}),
   };
 }
 

@@ -846,6 +846,42 @@ function isDefaultMesh0Block(v: unknown): boolean {
 }
 
 /**
+ * A table's audit trail settings and audit-log binding at their defaults.
+ *
+ * Xano Cloud returns both on every table since its table audit trail shipped:
+ * `audit: {enabled: false, mask: [], exclude: []}` on a table that is not
+ * audited, and `audit_log: {table_id: 0, table_guid: ""}` on a table that is
+ * not some other table's audit log. The SDK authors neither, and an engine
+ * generation before the feature omits both, so the absent block and the default
+ * one mean the same thing: an absent member reads as its default, which also
+ * makes an empty block (`{}`, or the `[]` an empty map comes back as) the
+ * default.
+ *
+ * Narrow on purpose: every member has to sit at its default. Auditing turned
+ * on, a mask or an exclude list, or a log bound to a table still compares.
+ */
+const DEFAULT_TABLE_BLOCK_MEMBERS: Record<"audit" | "audit_log", Record<string, (value: unknown) => boolean>> = {
+  audit: {
+    enabled: (value) => value === false,
+    mask: isEmptyArray,
+    exclude: isEmptyArray,
+  },
+  audit_log: {
+    table_id: (value) => value === 0,
+    table_guid: (value) => value === "",
+  },
+};
+
+function isDefaultTableBlock(key: "audit" | "audit_log", v: unknown): boolean {
+  if (isEmptyArray(v)) return true;
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
+  const members = DEFAULT_TABLE_BLOCK_MEMBERS[key];
+  return Object.entries(v as Record<string, unknown>).every(
+    ([member, value]) => Object.hasOwn(members, member) && members[member]!(value),
+  );
+}
+
+/**
  * Envelope members whose value, when it equals the listed default, is a
  * representational artifact rather than authored data. The SDK emits the
  * **full** persisted statement/object envelope (every member always present
@@ -1098,6 +1134,11 @@ export function isDefaultEnvelopeMember(key: string, v: unknown): boolean {
     // {@link isDefaultMesh0Block}.
     case "mesh0":
       return isDefaultMesh0Block(v);
+    // A table that is not audited and is not an audit log. See
+    // {@link isDefaultTableBlock}.
+    case "audit":
+    case "audit_log":
+      return isDefaultTableBlock(key, v);
     // Two unrelated `offset`s, both at a default. An addon's is the response path
     // its rows are spliced into, `""` when spliced at the root. A list context's
     // paging offset is declared to default to 0. Neither carries information at

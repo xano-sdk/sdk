@@ -179,6 +179,9 @@ brings one up and deploys into it; it is where a deploy goes by default.
   `impersonate` and `status` target the engine without a flag, and with no account.
 - **An MCP server for your agent.** `init` connects Claude Code and Cursor to it: they read tables and
   rows, seed data, and run functions and tests. Code still changes in `xano/` and ships with a deploy.
+- **Xano AI, from your sign-in.** Signed in with `xanosdk login`, each deploy gives the engine's agents a
+  Xano AI credential that lasts as long as the engine (a day at most), billed to you (`--ai-billing instance`: the instance owner). Signed out,
+  the deploy still works and says how to turn Xano AI on.
 
 ```bash
 npx @xano/sdk local list          # the engines running on this machine
@@ -248,8 +251,8 @@ export default workspace("blog")
 ```
 
 Tab-complete `s.` to discover the entire statement catalog: `s.db.*`, `s.math.*`,
-`s.array.*`, `s.text.*`, `s.storage.*`, `s.api.*`, `s.cloud.*`, control flow, AI agent runs,
-and more. **All 219 engine statement surfaces are authorable**: every field name matches
+`s.array.*`, `s.text.*`, `s.storage.*`, `s.api.*`, `s.cloud.*`, control flow, Xano AI
+(`s.ai.text.generate`, image, video, speech, embeddings, rerank), AI agent runs, and more. **All 227 engine statement surfaces are authorable**: every field name matches
 the Xano engine, and the emitted shape is checked against bytes a real engine stored. Where
 a surface has no stored instance behind it, it is built from the engine's own schema;
 [Coverage](https://github.com/xano-sdk/sdk/blob/main/guides/coverage.md) says which is which.
