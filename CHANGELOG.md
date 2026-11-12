@@ -8,6 +8,34 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.20 — Xano AI in the SDK
+
+_2026-11-11_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.20)
+
+This release brings Xano AI to the SDK. You can author the eight AI statements, run agents on Xano AI, and set where those models run, at the statement, agent or workspace level. Xano AI also works on a local Xano Engine with no key to copy. A new `ai models` command shows the current models, so an agent can pick one without waiting for an SDK release. It also fixes preflight against Xano Cloud's new table audit blocks.
+
+- The eight Xano AI statements are authorable under `s.ai`
+- Model fields accept any model and autocomplete the known ones
+- `xanosdk ai models` prints the live Xano AI catalog
+- Agents can run on Xano AI with a chosen model and location
+- Set the workspace's Xano AI location in code
+- Xano AI works on the local Xano Engine with no key to copy
+- Preflight ignores Xano Cloud's default table audit blocks
+- A downloaded Xano Engine names its license once
+
+---
+
+## 1.0.19 — Agentic signup paused
+
+_2026-11-02_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.19)
+
+This release pauses the agentic signup flow. When nothing is signed in, the CLI, `status` and the agent docs go back to pointing at `xanosdk login`, a stored meta API token, or the CI environment variables. The removal is temporary.
+
+- Agentic signup is paused
+- ⚠️ `status` drops `agentSignup` and `suggest`
+
+---
+
 ## 1.0.18 — Preflight reads the default mesh0 block
 
 _2026-10-30_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.18)

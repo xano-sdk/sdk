@@ -145,6 +145,7 @@ import { isExpired } from "../deploy/ephemeral.js";
 import { readTrackedBackend } from "./tracked-backend.js";
 import type { AnyWarningCode } from "../codes.js";
 import { shellWord } from "./command-line.js";
+import { noteUserAgentCommand } from "../util/user-agent.js";
 import { isUnwritableError, unwritableError } from "./writable.js";
 import {
   UsageError,
@@ -829,6 +830,16 @@ function helpTargetFor(command: string | undefined, subcommand: string | undefin
   return subcommand !== undefined && getSubcommand(command, subcommand) !== undefined
     ? { command, subcommand }
     : { command };
+}
+
+/**
+ * The run's command as the `User-Agent` names it (`deploy`, `workspace
+ * export`): only a command the CLI declares, never a positional or a typo.
+ */
+function knownCommand(args: ParsedArgs): string | undefined {
+  const target = helpTargetFor(args.command, args.subcommand);
+  if (target === undefined) return undefined;
+  return target.subcommand === undefined ? target.command : `${target.command} ${target.subcommand}`;
 }
 
 /**
@@ -3805,6 +3816,7 @@ export function run(argv: string[]): Promise<void> {
     noteRunScope(undefined);
     runArgs = undefined;
     noteRunArgs(undefined);
+    noteUserAgentCommand(undefined);
     offeredPull = undefined;
     mergeExcusedEnv = undefined;
     mergeExcusedDocToken = undefined;
@@ -4346,6 +4358,7 @@ async function dispatch(rawArgv: string[]): Promise<void> {
   setHintContext(args);
   runArgs = args;
   noteRunArgs(args);
+  noteUserAgentCommand(knownCommand(args));
   // A `--json` run's update nudge rides in its document, not after it.
   if (isMachineOutput(args)) (await import("./update-check.js")).routeUpdateNoticeToDocument();
   const { command } = args;

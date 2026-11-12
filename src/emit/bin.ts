@@ -19,6 +19,7 @@ import { installCliPrefix } from "./invocation.js";
 import { fileURLToPath } from "node:url";
 import { installSentWriteTracking } from "../util/sent-writes.js";
 import { installSecretRedaction } from "../util/secrets.js";
+import { installUserAgent } from "../util/user-agent.js";
 
 // Every token a credential reader registered prints as `<redacted>` — on
 // stderr and in a `--json` document alike — whatever message quoted it.
@@ -30,6 +31,8 @@ installInterruptHandler();
 // Every write request on the wire is recorded until it is answered, so a
 // signal mid-write reports the write as sent (exit 9), never "Cancelled.".
 installSentWriteTracking();
+// Every request names the SDK (`xanosdk/<version> (<command>; …)`), not Node.
+installUserAgent(readVersion());
 // A workspace's build warnings print as every other CLI warning does (`! …`).
 installCliDiagnosticSink();
 // A reader that closed stdout early ends the output, not the command.
