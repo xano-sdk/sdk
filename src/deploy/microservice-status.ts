@@ -33,6 +33,7 @@
 import type { ResolvedAuth } from "../auth/token.js";
 import { READ_AFTERMATH, explainFetchFailure, httpFailure, readBodyText } from "../util/http.js";
 import { hasString, listAnswer } from "./answer-shape.js";
+import { withUserAgentHeaders } from "../util/user-agent.js";
 
 /** Bound each read so a stalled endpoint can't hang the CLI/CI. */
 const TIMEOUT_MS = 30_000;
@@ -194,7 +195,7 @@ export async function listMicroservices(
     try {
       res = await fetchFn(url, {
         method: "GET",
-        headers: { accept: "application/json", Authorization: `Bearer ${auth.access_token}` },
+        headers: withUserAgentHeaders({ accept: "application/json", Authorization: `Bearer ${auth.access_token}` }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (err) {

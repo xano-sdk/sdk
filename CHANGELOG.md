@@ -8,6 +8,17 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.21 — A User-Agent and npm provenance
+
+_2026-11-12_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.21)
+
+The CLI now identifies itself to Xano with a `xanosdk` User-Agent. The package is now published to npm from the public `xano-sdk/sdk` repository with a provenance attestation, so you can check that the tarball was built from the tagged source.
+
+- Every CLI request sends a `xanosdk` User-Agent
+- Releases ship with npm provenance
+
+---
+
 ## 1.0.20 — Xano AI in the SDK
 
 _2026-11-11_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.20)

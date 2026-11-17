@@ -19,6 +19,7 @@ import {
   type CredentialRecord,
 } from "../auth/store.js";
 import { shellQuote } from "../util/shell-quote.js";
+import { withUserAgentHeaders } from "../util/user-agent.js";
 
 /** One workspace the credential can see. */
 export interface ReachableWorkspace {
@@ -86,7 +87,7 @@ export async function refuseUnreachableWorkspace(auth: ResolvedAuth): Promise<vo
 export async function readReachableWorkspaces(auth: ResolvedAuth, timeoutMs = 30_000): Promise<ReachableWorkspace[] | undefined> {
   try {
     const res = await fetch(new URL("/api:meta/workspace", auth.instance).href, {
-      headers: { accept: "application/json", Authorization: `Bearer ${auth.access_token}` },
+      headers: withUserAgentHeaders({ accept: "application/json", Authorization: `Bearer ${auth.access_token}` }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return undefined;

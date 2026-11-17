@@ -7,8 +7,8 @@
  * really called `expect` in the product:
  *
  * - `expect.*` (this module) builds a `{type, vars[]}` **assertion record**
- *   stored on a `tests` entry of a query/function/middleware. It is data, not a
- *   step, and it only ever appears inside `tests: [{ expect: [...] }]`.
+ *   stored on a `tests` entry of an object that carries `test[]` (query,
+ *   function, middleware, tool, prompt, resource). It is data, not a step, and it only ever appears inside `tests: [{ expect: [...] }]`.
  * - `s.expect.*` builds an assertion **statement** that runs inside a
  *   `workflowTest()` stack. It is a stack item like any other.
  *

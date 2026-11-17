@@ -1296,6 +1296,7 @@ export const KIND_DECODERS: readonly KindDecoder[] = [
         toolOutputSchema(a),
         response(a),
         stack(a),
+        decodeTests(a),
       ]),
   },
   {
@@ -1318,6 +1319,7 @@ export const KIND_DECODERS: readonly KindDecoder[] = [
         inputs(a),
         response(a),
         stack(a),
+        decodeTests(a),
       ]),
   },
   {
@@ -1343,6 +1345,7 @@ export const KIND_DECODERS: readonly KindDecoder[] = [
         inputs(a),
         response(a),
         stack(a),
+        decodeTests(a),
       ]),
   },
   {

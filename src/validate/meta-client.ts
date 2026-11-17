@@ -25,6 +25,7 @@ import { decodeWorkspaceArchive, encodeWorkspaceArchive } from "./archive.js";
 import type { ResolvedAuth } from "../auth/token.js";
 import type { ValidateConfig } from "./config.js";
 import { explainFetchFailure, fetchReadOrExplain, httpFailureError } from "../util/http.js";
+import { withUserAgentHeaders } from "../util/user-agent.js";
 
 /** Bound each read/run so a stalled endpoint can't hang the CLI. */
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -267,7 +268,7 @@ export class MetaClient {
     try {
       res = await fetch(url.href, {
         method: "POST",
-        headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+        headers: withUserAgentHeaders({ ...this.authHeaders(), "Content-Type": "application/json" }),
         body: JSON.stringify({ name, input: input ?? {} }),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });

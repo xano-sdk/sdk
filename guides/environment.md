@@ -58,6 +58,21 @@ are what you get when the variable is unset.
 | `XANOSDK_ENGINE_HOME` | Moves everything the Xano Engine writes off `~/.xanosdk/local-engine`: the engine cache, the running-engine records, and the engine's own logs and runtime data — see [where the engine keeps its data](deploying.md#where-the-engine-keeps-its-data). |
 | `XANOSDK_ENGINE_RELEASES_URL` | A different engine release service for version lookups. Its engines are fetched fresh each deploy, the pin is not read or written, and `npx @xano/sdk local update` refuses while it is set. |
 
+The engine itself starts with a minimal environment, not your shell's: the platform basics
+(`PATH`, `TMPDIR`, `LANG`, `LC_ALL`, `USER`, `LOGNAME`, `SHELL`, `TERM`, and a `HOME` of its
+own under `~/.xanosdk/local-engine`, or `XANOSDK_ENGINE_HOME`) plus the usage-telemetry
+variables, passed through as you set them so the engine sees your choice: `DO_NOT_TRACK`,
+`CI`, `XANO_TELEMETRY`, `XANO_TELEMETRY_URL` and `XANO_TELEMETRY_ANONYMOUS_ID`. An unset one
+stays unset. Nothing else from your shell reaches it, so no credential in your shell does. An
+engine gets them when it starts, so a deploy checks them before it reuses a running engine.
+While `XANO_TELEMETRY` is unset or off (empty, `0`, `false`, `off` or `no`, in any case) both
+for the engine and for you, it is reused whatever else differs. Otherwise, when any of the five
+differs (set or unset, or another value), the deploy restarts the engine with yours, and like an
+engine update it starts empty and that deploy seeds it. An engine an earlier SDK version
+recorded is reused unless your values opt out or turn reporting on; then it is restarted and
+recorded from then on, so after upgrading, a deploy that opts out restarts it (and drops its
+rows) one time.
+
 **Escape hatches**
 
 | Variable | What it does |

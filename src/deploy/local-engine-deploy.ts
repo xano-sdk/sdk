@@ -29,6 +29,17 @@
  * no rows, so it is recorded without the completed-import marker and a
  * `--keep-data` deploy seeds it.
  *
+ * **The same engine also means the same telemetry choice.** The engine reads
+ * `DO_NOT_TRACK`, `CI` and the `XANO_TELEMETRY*` variables once, at boot, so an
+ * engine an opted-in launcher started would keep reporting for a later caller
+ * who opted out. The record keeps what each engine was started with. When
+ * neither that nor the caller's own could make an engine report (see
+ * `engineMayReport`), the engine is reused whatever else differs: restarting
+ * it would drop its rows and change nothing. Otherwise any difference in the
+ * five variables takes the same replace, as does a snapshot the record holds
+ * but cannot be read. A record with no snapshot (an older SDK wrote it) is
+ * reused only by a caller who neither may report nor opts out.
+ *
  * Node-only, reached by a lazy import from the command layer.
  */
 import { rmSync } from "node:fs";
@@ -40,7 +51,11 @@ import { assertLoopbackUrl, type LocalEngine } from "./local-engine-handshake.js
 import {
   engineVersion as askEngineVersion,
   engineRunsUntilStopped,
+  engineMayReport,
+  engineTelemetryEnv,
+  telemetryOptedOut,
   engineVersionToken,
+  ENGINE_TELEMETRY_ENV,
   listEngines,
   resolveRecordedEngine,
   startEngine,
@@ -132,6 +147,38 @@ export interface ReplacedEngine {
   from: string | undefined;
   /** The version started in its place, when known. */
   to: string | undefined;
+  /**
+   * Set only when the binary was the same and the engine was restarted because
+   * it was started with other telemetry variables than this run's: the names
+   * that differ, or `"unknown"` when its record does not say (an unreadable
+   * snapshot, or none for a caller who opts out or may report).
+   */
+  telemetry?: readonly string[] | "unknown";
+}
+
+/**
+ * The line a deploy says when it replaced a live engine: what changed, and that
+ * the new engine starts empty. A replace is a binary change unless
+ * {@link ReplacedEngine.telemetry} says otherwise.
+ */
+export function replacedEngineLine(replaced: ReplacedEngine): string {
+  const empty = "It starts empty, so this deploy seeds it.";
+  if (replaced.telemetry === "unknown") {
+    return (
+      `Restarted Xano Engine ${replaced.name}: its record does not say which telemetry settings it was started ` +
+      `with, so they may differ from this deploy's. ${empty}`
+    );
+  }
+  if (replaced.telemetry !== undefined) {
+    return (
+      `Restarted Xano Engine ${replaced.name}: it was started with other telemetry settings ` +
+      `(${replaced.telemetry.join(", ")}) than this deploy's. ${empty}`
+    );
+  }
+  return (
+    `Replaced Xano Engine ${replaced.name} (${replaced.from ?? "an unrecorded version"} → ` +
+    `${replaced.to ?? "the resolved engine"}). ${empty}`
+  );
 }
 
 /** The engine a deploy is about to import into, and how it got there. */
@@ -262,7 +309,11 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
   // A started engine was given the credential file, and the gateway URL when the
   // answer named one; a reused one keeps what it was started with.
   const aiGatewayUrl = reused ? record?.aiGatewayUrl : ai?.gatewayUrl;
-  writeRecord(opts.dir, engine, entry, shownVersion, reused && carry ? priorFilled : undefined, env, aiGatewayUrl);
+  // What the engine serving now was started with: a fresh start was just given
+  // the caller's; a reused one keeps its own, which may differ where neither
+  // could report, and stays unknown when its record had none.
+  const telemetryEnv = reused ? record?.telemetryEnv : engineTelemetryEnv(env);
+  writeRecord(opts.dir, engine, entry, shownVersion, reused && carry ? priorFilled : undefined, env, aiGatewayUrl, telemetryEnv);
   // A DEPLOY to this engine, so the project's bare commands now follow it.
   // Here, beside the deploy's record write — never inside `writeRecord`, which
   // the `local update` restart also reaches: a restart is not a deploy,
@@ -390,7 +441,8 @@ export interface RestartEngineOptions {
  * Replace this project's live engine when it is not the acquired binary — the
  * same KTD6 path {@link ensureProjectEngine} takes, with no deploy around it.
  *
- * Only a LIVE engine of another digest is touched: it is stopped by name, the
+ * Only a LIVE engine of another digest, or of this one started with other
+ * telemetry variables, is touched: it is stopped by name, the
  * acquired binary is started under the same name, and the record is rewritten
  * as a fresh start (no completed-import marker, so the next `--keep-data`
  * deploy seeds it). No engine serving, or one already on this binary, is left
@@ -412,13 +464,14 @@ export async function restartMismatchedEngine(opts: RestartEngineOptions): Promi
     ...(opts.spawn === undefined ? {} : { spawn: opts.spawn }),
     ai: wiringFor(name, ai, env),
   });
-  writeRecord(opts.dir, engine, entry, shownVersion, undefined, env, ai?.gatewayUrl);
+  writeRecord(opts.dir, engine, entry, shownVersion, undefined, env, ai?.gatewayUrl, engineTelemetryEnv(env));
   return { ...replaced, url: engine.url, previousUrl: record?.url, ...(ai === undefined ? {} : { ai }) };
 }
 
 /**
- * The engine serving this project, reconciled against the binary `entry`: kept
- * when it IS that binary, stopped by name when it is not.
+ * The engine serving this project, reconciled against the binary `entry` and
+ * the caller's telemetry variables: kept when it IS that binary AND its record
+ * says it was started with the same variables, stopped by name otherwise.
  *
  * `live` is the engine to reuse; `replaced` is set when one was stopped, and
  * the caller then starts `entry` under `name`.
@@ -434,9 +487,56 @@ function reconcileLive(
   const name = record?.name ?? engineNameForProject(dir);
   const running = listEngines({ entry, env, ...(run === undefined ? {} : { run }) });
   const found = reuseCandidate(name, record, running);
-  if (found === undefined || record?.engineDigest === entry.digest) return { record, name, live: found };
-  stopMismatched(found.name, record, entry, env, run);
-  return { record, name, live: undefined, replaced: { name: found.name, from: record?.engineVersion, to: shownVersion } };
+  if (found === undefined) return { record, name, live: undefined };
+  const sameBinary = record?.engineDigest === entry.digest;
+  const telemetry = sameBinary ? telemetryChange(record?.telemetryEnv, engineTelemetryEnv(env)) : undefined;
+  if (sameBinary && telemetry === undefined) return { record, name, live: found };
+  stopMismatched(found.name, record, entry, env, run, telemetry === undefined ? undefined : "telemetry");
+  return {
+    record,
+    name,
+    live: undefined,
+    replaced: {
+      name: found.name,
+      from: record?.engineVersion,
+      to: shownVersion,
+      ...(telemetry === undefined ? {} : { telemetry }),
+    },
+  };
+}
+
+/**
+ * Why a live engine started with `recorded` must not serve a caller who would
+ * start one with `current`: the names whose value differs, in
+ * {@link ENGINE_TELEMETRY_ENV} order and then any other recorded name;
+ * `"unknown"` when the record cannot say; and `undefined` to reuse it.
+ *
+ * Reused when neither could report ({@link engineMayReport}): the restart would
+ * drop the engine's rows and leave it as silent as before, which is what a
+ * shell exporting `DO_NOT_TRACK=1` meets when it alternates with a launcher that
+ * passes nothing. Otherwise exact strings over all five, set against unset
+ * included: once either side may report, the opt-outs, the relay and the id all
+ * decide what is sent, and a needless restart is the cheaper mistake.
+ *
+ * A record with no snapshot was written by an SDK from before it was kept. Most
+ * such engines were started with none of the five, and a caller who neither
+ * may report nor opts out reuses one, so upgrading the SDK does not restart
+ * every engine. But that SDK also rewrites the whole row when it reuses an
+ * engine, dropping the snapshot of one started opted in, so a caller who opts
+ * out (or may report) restarts it once rather than trusting the gap.
+ */
+function telemetryChange(
+  recorded: Record<string, string> | null | undefined,
+  current: Record<string, string>,
+): readonly string[] | "unknown" | undefined {
+  if (recorded === null) return "unknown";
+  if (recorded === undefined) {
+    return engineMayReport(current) || telemetryOptedOut(current) ? "unknown" : undefined;
+  }
+  if (!engineMayReport(recorded) && !engineMayReport(current)) return undefined;
+  const names = [...new Set([...ENGINE_TELEMETRY_ENV, ...Object.keys(recorded), ...Object.keys(current)])];
+  const changed = names.filter((key) => recorded[key] !== current[key]);
+  return changed.length === 0 ? undefined : changed;
 }
 
 /**
@@ -454,6 +554,7 @@ function writeRecord(
   filled: FilledMarker | undefined,
   env: NodeJS.ProcessEnv,
   aiGatewayUrl: string | undefined,
+  telemetryEnv: Record<string, string> | null | undefined,
 ): void {
   setEngineRecord(
     dir,
@@ -468,6 +569,7 @@ function writeRecord(
       startedAt: Date.now(),
       ...(filled === undefined ? {} : { filled }),
       ...(aiGatewayUrl === undefined ? {} : { aiGatewayUrl }),
+      ...(telemetryEnv === undefined ? {} : { telemetryEnv }),
     },
     env,
   );
@@ -494,7 +596,9 @@ function overrideVersion(
 }
 
 /**
- * Stop the live engine this project no longer resolves to, by name.
+ * Stop the live engine this project no longer resolves to, by name. `why` is
+ * `"telemetry"` when it is the right binary started with other telemetry
+ * variables, which only the refusal's wording turns on.
  *
  * First through the binary just acquired — engine run records are kept under
  * the user's home, so one version can normally stop another. If that binary
@@ -508,6 +612,7 @@ function stopMismatched(
   entry: EngineCacheEntry,
   env: NodeJS.ProcessEnv,
   run: EngineRun | undefined,
+  why: "telemetry" | undefined,
 ): void {
   const seam = run === undefined ? {} : { run };
   const attempt = (binary: EngineCacheEntry): boolean => {
@@ -519,13 +624,18 @@ function stopMismatched(
   };
   if (attempt(entry)) return;
 
+  // Only another binary is a second try: a telemetry restart is of this one.
   const previous = recordedBinary(record, env);
-  if (previous !== undefined && previous.digest !== entry.digest && attempt(previous)) return;
+  const second = previous !== undefined && previous.digest !== entry.digest ? previous : undefined;
+  if (second !== undefined && attempt(second)) return;
 
+  const mismatch =
+    why === "telemetry"
+      ? `was started with other telemetry settings than this deploy's`
+      : `is not the engine this deploy resolved to`;
   throw new Error(
-    `The Xano Engine "${name}" already serving this project is not the engine this deploy ` +
-      `resolved to, and it could not be stopped` +
-      (previous === undefined ? `` : ` by either engine version`) +
+    `The Xano Engine "${name}" already serving this project ${mismatch}, and it could not be stopped` +
+      (second === undefined ? `` : ` by either engine version`) +
       `.\nStop it with \`xanosdk local stop ${name}\` (or end the process), then deploy ` +
       `again.`,
   );

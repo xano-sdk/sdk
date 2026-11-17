@@ -79,13 +79,13 @@ export const DEF_KEYS: Readonly<Record<string, readonly string[]>> = {
   ),
   tool: keys(
     { ...COMMON, ...STACK, docs: 1, enabled: 1, instructions: 1, toolsetId: 1, diagnostics: 1, title: 1, annotations: 1,
-      icons: 1, output: 1 } satisfies Roster<ToolDef>,
+      icons: 1, output: 1, tests: 1 } satisfies Roster<ToolDef>,
   ),
   prompt: keys(
-    { ...COMMON, ...STACK, docs: 1, title: 1, icons: 1, diagnostics: 1 } satisfies Roster<PromptDef>,
+    { ...COMMON, ...STACK, docs: 1, title: 1, icons: 1, diagnostics: 1, tests: 1 } satisfies Roster<PromptDef>,
   ),
   resource: keys(
-    { ...COMMON, ...STACK, docs: 1, uri: 1, mimeType: 1, title: 1, icons: 1, annotations: 1, diagnostics: 1 } satisfies Roster<ResourceDef>,
+    { ...COMMON, ...STACK, docs: 1, uri: 1, mimeType: 1, title: 1, icons: 1, annotations: 1, diagnostics: 1, tests: 1 } satisfies Roster<ResourceDef>,
   ),
   realtime_server: keys(
     { ...COMMON, diagnostics: 1, middleware: 1, history: 1, enabled: 1, canonical: 1 } satisfies Roster<RealtimeServerDef>,

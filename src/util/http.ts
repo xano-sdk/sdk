@@ -470,6 +470,7 @@ import { isIP } from "node:net";
 import { readEnvVar } from "./env.js";
 import { UsageError } from "../emit/errors.js";
 import { noteMetaAnswer } from "./last-credential.js";
+import { withUserAgent } from "./user-agent.js";
 import { profileSourceLabel, type ProfileSelection } from "../auth/profile-select.js";
 import type { ResolvedAuth } from "../auth/token.js";
 
@@ -1040,8 +1041,10 @@ export function lastRateLimitRetryAfter(): number | undefined {
  * report; the wait it asked for is kept for {@link lastRateLimitRetryAfter}.
  */
 async function fetchPastRateLimit(url: string, init: RequestInit, read: boolean): Promise<Response> {
+  // Every request through the shared transport names the SDK (a caller's own `User-Agent` wins).
+  const sent = withUserAgent(init);
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(url, init);
+    const res = await fetch(url, sent);
     if (res.status !== 429) return res;
     noteRateLimit(res);
     const after = lastRetryAfterS;

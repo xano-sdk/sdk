@@ -118,8 +118,8 @@ export function resolveMockKeys(
 /**
  * Refuse any mock key left unresolved after a kind finished encoding.
  *
- * `mock` is offered on EVERY statement, but only the three kinds that carry
- * `test[]` run {@link resolveMockKeys}. On a task, tool, trigger, agent, or
+ * `mock` is offered on EVERY statement, but only the kinds that carry `test[]`
+ * run {@link resolveMockKeys}. On a task, trigger, agent, or
  * workflow-test stack a mock would otherwise encode still keyed by name, and
  * the engine ignores a mock whose key is not a test id — so it would deploy
  * clean and silently never apply, which is the exact failure the name→id
@@ -151,7 +151,7 @@ export function assertMockKeysResolved(xdo: unknown, kindName: string): void {
         const step = typeof stored === "string" ? `\`${statementLabel(stored)}\`` : "a statement";
         throw new Error(
           `${owner}: ${step} carries \`mock: { "${key}": … }\`, but ${withArticle(kind)} does not store unit tests — ` +
-            `only a query, function, or middleware does. A mock is stored against a test's id, ` +
+            `only a query, function, middleware, tool, prompt, or resource does. A mock is stored against a test's id, ` +
             `so this one would deploy clean and never apply. Move the step into a function ` +
             `that declares the test, or drop the mock.`,
         );

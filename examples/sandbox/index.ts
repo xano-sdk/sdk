@@ -36,7 +36,7 @@ import {
 } from "./kinds/mcp.js";
 import { nightlyCleanup } from "./kinds/task.js";
 import { doubleFnTest } from "./kinds/workflowTest.js";
-import { scoreQuery } from "./kinds/unitTest.js";
+import { scoreQuery, scoreTool } from "./kinds/unitTest.js";
 // The `Run …` statement examples. Hand-wired rather than collected by `_auto`
 // because each one must register as a WORKFLOW TEST — its statement only runs
 // inside one — and the barrel's shape rule would file them as functions.
@@ -91,7 +91,7 @@ export default workspace("xanosdk-examples")
   .registerFunctions(defs([doubleFn, addFunction, askXanoAiAgent, ...autoFunctions]))
   .registerQueries(defs([getUserQuery, userPostQuery, listItemsQuery, createItemQuery, scoreQuery, askAssistant, classifyTicket, ...autoQueries]))
   .registerTriggers(defs([onUserInsert, onMessage, onBranchLive, onChatConnect, onRoomJoin, onRoomDeliver]))
-  .registerTools(defs([searchTool, valueToolset, countPostsTool, archivePostTool]))
+  .registerTools(defs([searchTool, valueToolset, countPostsTool, archivePostTool, scoreTool]))
   .registerPrompts(defs([summarizePrompt]))
   .registerResources(defs([readmeResource, postResource]))
   .registerMcpServers(defs([exampleMcpServer, fullMcpServer, signedInMcpServer]))

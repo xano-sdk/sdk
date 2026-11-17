@@ -1,7 +1,7 @@
 /**
  * The one live-datasource warning, shared by every surface that runs against a
  * datasource the engine CLONES first: standalone workflow tests and the saved
- * unit tests on a query/function/middleware.
+ * unit tests on a query, function, middleware, tool, prompt or resource.
  *
  * Running either clones the named datasource before the run. Against
  * production-sized data that is slow enough to fail the run outright, so `""`

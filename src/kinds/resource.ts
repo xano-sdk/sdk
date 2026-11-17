@@ -28,6 +28,9 @@ import { buildMiddlewareBlock } from "./middleware-attach.js";
 import type { MiddlewareAttach } from "./middleware-attach.js";
 import { assertStoredName } from "./stored-name.js";
 import { brandDef } from "./def-brand.js";
+import { encodeTests } from "./test.js";
+import type { TestDef, TestXdo } from "./test.js";
+import { resolveMockKeys } from "./test-mocks.js";
 import { assertResourceInput, encodeIcons, encodeResourceAnnotations, encodeTitle } from "./mcp-metadata.js";
 import type { McpIcon, McpIconXdo, ResourceAnnotations, ResourceAnnotationsXdo } from "./mcp-metadata.js";
 
@@ -101,6 +104,18 @@ export interface ResourceDef<
    * `_customize` flag. There is no workspace-wide resource middleware.
    */
   middleware?: MiddlewareAttach;
+  /**
+   * Saved UNIT TESTS — named input sets run against this resource, with
+   * assertions on the response. The same tests the Xano editor shows.
+   * Assert with the top-level `expect.*` helpers, not `s.expect.*`. A statement
+   * in this resource's stack can return a mock instead of running, per test, via
+   * its `mock` option.
+   *
+   * `npx @xano/sdk test run-all` and `deploy --test` run them with the
+   * rest, named `resource:<name>/<test name>`. A backend whose engine predates
+   * tests on a resource lists none of them.
+   */
+  tests?: TestDef[];
 }
 
 export interface ResourceXdo {
@@ -118,6 +133,7 @@ export interface ResourceXdo {
   middleware: MiddlewareBlock;
   tag: Array<{ tag: string }>;
   history: { inherit: boolean; enabled: boolean; limit: number };
+  test: TestXdo[];
 }
 
 /** Any resource def, whatever its inputs/stack/response. */
@@ -138,7 +154,7 @@ export function encodeResource(def: AnyResourceDef): ResourceXdo {
   const title = encodeTitle(owner, def.title);
   const icons = encodeIcons(owner, def.icons);
   const annotations = encodeResourceAnnotations(owner, def.annotations);
-  return {
+  const xdo: ResourceXdo = {
     name: def.name,
     uri: def.uri,
     description: def.description ?? "",
@@ -154,7 +170,10 @@ export function encodeResource(def: AnyResourceDef): ResourceXdo {
     middleware: buildMiddlewareBlock(def.middleware),
     tag: encodeTags(def.tags),
     history: encodeHistory("resource", def.history),
+    test: encodeTests(def.tests, "resource", def.name),
   };
+  resolveMockKeys(xdo.run, xdo.test, "resource", def.name);
+  return xdo;
 }
 
 export const resourceKind: ObjectKind<AnyResourceDef, ResourceXdo> = {

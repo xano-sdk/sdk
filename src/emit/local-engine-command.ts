@@ -672,7 +672,13 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
   success(`Xano Engine ${current ?? "(unpinned)"} → ${target}`);
   info(pinWrittenText({ path: pin.path, version: target, created: pin.created, moved: current !== null }));
   if (replaced !== undefined) {
-    info(`Restarted ${replaced.name} on ${target}. It starts empty — run your deploy to seed it.`);
+    const why =
+      replaced.telemetry === undefined
+        ? ""
+        : replaced.telemetry === "unknown"
+          ? " (its record did not say which telemetry settings it was started with)"
+          : ` (it was started with other telemetry settings: ${replaced.telemetry.join(", ")})`;
+    info(`Restarted ${replaced.name} on ${target}${why}. It starts empty — run your deploy to seed it.`);
     if (replaced.ai !== undefined) info(aiOutcomeLine(replaced.ai));
     if (replaced.url !== replaced.previousUrl) {
       info("New Xano Engine URL:");
@@ -693,6 +699,8 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
       pinPath: pin.path,
       restarted: replaced?.name ?? null,
       url: replaced?.url ?? null,
+      // Set only when the restart was for the telemetry variables (DEV-9718), as replacedEngineLine reads it.
+      ...(replaced?.telemetry === undefined ? {} : { telemetry: replaced.telemetry }),
       ...(replaced?.ai === undefined ? {} : { ai: aiOutcomeDocument(replaced.ai) }),
     });
   }

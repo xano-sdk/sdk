@@ -1006,7 +1006,7 @@ The other scripts:
   and \`npx @xano/sdk publish ./frontend/dist --to workspace\` puts the same build in front
   of your real workspace.
 - \`npm run xano:test\` runs the tests the DEPLOYED environment carries — the \`tests\`
-  on a query/function/middleware and any \`workflowTest()\`. It compiles nothing, so
+  on a query, function, middleware, tool, prompt or resource and any \`workflowTest()\`. It compiles nothing, so
   deploy first. A failing suite exits 5, distinct from a crash. \`npx @xano/sdk deploy
   ./xano/index.ts --test\` does both in one step.
 - \`npm run xano:export\` compiles the backend to \`workspace.json\` (don't commit it).
@@ -1099,7 +1099,7 @@ workspace you are bound to, and which environment this project last deployed to.
 The other scripts:
 
 - \`npm run xano:test\` runs the tests the DEPLOYED environment carries — the \`tests\`
-  on a query/function/middleware and any \`workflowTest()\`. It compiles nothing, so
+  on a query, function, middleware, tool, prompt or resource and any \`workflowTest()\`. It compiles nothing, so
   deploy first. A failing suite exits 5, distinct from a crash. \`npx @xano/sdk deploy
   ./xano/index.ts --test\` does both in one step.
 - \`npm run xano:typecheck\` type-checks \`xano/\` and its lambdas.
@@ -1245,7 +1245,7 @@ xano/
 
 ## Testing
 
-Unit tests (\`tests: [...]\` on a query, function or middleware, asserting with \`expect.*\`)
+Unit tests (\`tests: [...]\` on a query, function, middleware, tool, prompt or resource, asserting with \`expect.*\`)
 and workflow tests (\`workflowTest({ name, stack })\`, asserting with \`s.expect.*\`) both
 run against what is DEPLOYED:
 

@@ -81,11 +81,92 @@ export const MAX_HANDSHAKE_BYTES = 64 * 1024;
 const MAX_STDERR_BYTES = 64 * 1024;
 
 /**
+ * The engine's usage-telemetry variables, passed through as the user set them.
+ *
+ * Passed so the engine sees the user's choice, whatever it later does with it: a
+ * no (`DO_NOT_TRACK`, `CI`, `XANO_TELEMETRY=0`) must never be lost on the way.
+ * `XANO_TELEMETRY_URL` names the relay, and `XANO_TELEMETRY_ANONYMOUS_ID` is the
+ * analytics id a tool that runs the deploy (Xano Studio) passes for the engine's use.
+ * None of them is a credential. An unset one stays unset in the child.
+ */
+export const ENGINE_TELEMETRY_ENV: readonly string[] = [
+  "DO_NOT_TRACK",
+  "CI",
+  "XANO_TELEMETRY",
+  "XANO_TELEMETRY_URL",
+  "XANO_TELEMETRY_ANONYMOUS_ID",
+];
+
+/**
+ * The `XANO_TELEMETRY` values that leave an `--ephemeral` engine unable to
+ * report, compared trimmed and lowercased as the engine compares them.
+ *
+ * The SDK always starts an engine `--ephemeral` with no `--telemetry` flag, and
+ * such an engine reports only when `XANO_TELEMETRY` is explicitly on (one of
+ * `1`, `on`, `true`, `yes`, trimmed and in any case). Unset, empty, or one of
+ * its off words leaves it off whatever the other four variables say. A word the engine does not know also
+ * leaves it off, but is not listed here: reading it as "may report" costs at
+ * most a restart, never a missed opt-out.
+ */
+export const ENGINE_TELEMETRY_OFF_WORDS: readonly string[] = ["", "0", "false", "off", "no"];
+
+/**
+ * Whether an engine started with `snapshot` (an {@link engineTelemetryEnv}
+ * result) could report usage: only when its `XANO_TELEMETRY` is set to
+ * something other than an off word ({@link ENGINE_TELEMETRY_OFF_WORDS}).
+ */
+export function engineMayReport(snapshot: Readonly<Record<string, string>>): boolean {
+  const value = snapshot.XANO_TELEMETRY;
+  return value !== undefined && !ENGINE_TELEMETRY_OFF_WORDS.includes(value.trim().toLowerCase());
+}
+
+/**
+ * Whether `snapshot` carries an explicit opt-out: `DO_NOT_TRACK` or `CI` set to
+ * anything but empty, `0` or `false` (which is how the engine reads them), or
+ * `XANO_TELEMETRY` set to one of its non-empty off words. Read wide on purpose:
+ * a value taken as an opt-out that is not one costs at most a restart.
+ */
+export function telemetryOptedOut(snapshot: Readonly<Record<string, string>>): boolean {
+  const word = (key: string) => snapshot[key]?.trim().toLowerCase();
+  const optOut = (key: string) => {
+    const value = word(key);
+    return value !== undefined && value !== "" && value !== "0" && value !== "false";
+  };
+  const telemetry = word("XANO_TELEMETRY");
+  return (
+    optOut("DO_NOT_TRACK") ||
+    optOut("CI") ||
+    (telemetry !== undefined && telemetry !== "" && ENGINE_TELEMETRY_OFF_WORDS.includes(telemetry))
+  );
+}
+
+/**
+ * The telemetry variables an engine started from `env` is handed: each one of
+ * {@link ENGINE_TELEMETRY_ENV} the child would see, with its value, and none it
+ * would not. Read off {@link engineChildEnv} itself, so it cannot disagree with
+ * what a start passes.
+ *
+ * The engine reads them once, at boot, so a running engine keeps the ones it
+ * started with. The engine record keeps this snapshot, and a deploy that would
+ * reuse an engine compares it with the caller's own (see `local-engine-deploy.ts`).
+ */
+export function engineTelemetryEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const child = engineChildEnv(env);
+  const picked: Record<string, string> = {};
+  for (const key of ENGINE_TELEMETRY_ENV) {
+    const value = child[key];
+    if (value !== undefined) picked[key] = value;
+  }
+  return picked;
+}
+
+/**
  * Everything the child is allowed to see.
  *
  * HOME is listed but never passed through: {@link engineChildEnv} replaces it
- * with {@link engineRunHome} — see the module note. The rest is the platform
- * minimum a process needs to run at all. The
+ * with {@link engineRunHome} — see the module note. Then the platform minimum a
+ * process needs to run at all, and the telemetry switches
+ * ({@link ENGINE_TELEMETRY_ENV}). The
  * release credential is deliberately absent, and so is every hosted credential:
  * an engine has no use for either.
  */
@@ -99,6 +180,7 @@ export const ENGINE_ENV_ALLOWLIST: readonly string[] = [
   "LOGNAME",
   "SHELL",
   "TERM",
+  ...ENGINE_TELEMETRY_ENV,
 ];
 
 /** The child a spawn seam hands back — the part of it this module touches. */

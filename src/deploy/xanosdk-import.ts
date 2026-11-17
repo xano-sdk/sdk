@@ -73,6 +73,7 @@ import type { ImportMode, MergeOptions } from "./import.js";
 import { readArchiveEntries } from "../validate/archive.js";
 import { calcSignatureJson, signatureHolds } from "../workspace/export.js";
 import { tarGz, type TarFile } from "../util/tar.js";
+import { withUserAgentHeaders } from "../util/user-agent.js";
 import { HOSTED_FILE_SCHEME, HOSTED_ICON_KINDS, HOSTED_ROW_PATH_PREFIX } from "../fields/hosted-file.js";
 
 /** One planned change from a dry run. Mirrors the server's `operations[]` entries. */
@@ -491,7 +492,7 @@ async function probeXanoSdkImportRoute(auth: BearerTarget, target: XanoSdkImport
   try {
     res = await fetchFn(endpoint(target, "?dry_run=true"), {
       method: "POST",
-      headers: { accept: "application/json", Authorization: `Bearer ${auth.access_token}` },
+      headers: withUserAgentHeaders({ accept: "application/json", Authorization: `Bearer ${auth.access_token}` }),
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
     await noteMetaAnswer(endpoint(target, ""), res);
@@ -966,7 +967,7 @@ async function post(auth: BearerTarget, url: string, opts: XanoSdkImportRequest,
       const send = (): Promise<Response> =>
         fetchFn(url, {
           method: "POST",
-          headers: { accept: "application/json", Authorization: `Bearer ${auth.access_token}` },
+          headers: withUserAgentHeaders({ accept: "application/json", Authorization: `Bearer ${auth.access_token}` }),
           body: body(opts.archive),
           signal: AbortSignal.timeout(IMPORT_TIMEOUT_MS),
         });

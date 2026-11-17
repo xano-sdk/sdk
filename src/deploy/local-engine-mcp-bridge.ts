@@ -26,6 +26,7 @@ import { isLoopbackUrl } from "./local-engine-handshake.js";
 import type { EngineLookup } from "./local-engine-lookup.js";
 import { isRecord as isObject } from "./answer-shape.js";
 import { PROJECT_CLI } from "../emit/invocation.js";
+import { withUserAgentHeaders } from "../util/user-agent.js";
 
 /** Protocol revisions the bridge's own `initialize` answer can speak, newest first. */
 const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -272,11 +273,12 @@ class Bridge {
     try {
       const reply = await this.post(
         state.mcpUrl,
-        {
+        // `node:http` sends no `User-Agent` of its own, so the bridge names the SDK here.
+        withUserAgentHeaders({
           "content-type": "application/json",
           accept: "application/json, text/event-stream",
           authorization: `Bearer ${state.engine.token}`,
-        },
+        }),
         raw,
       );
       return { kind: "reply", reply, frames: parseReply(reply) };

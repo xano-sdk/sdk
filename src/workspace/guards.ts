@@ -7397,7 +7397,7 @@ const ORDINARY_STACK_FACTORIES = proseList(
 );
 
 /**
- * A workflow test, or a saved unit test on a query/function/middleware, run
+ * A workflow test, or a saved unit test on any object that carries `test[]`, run
  * against the `"live"` datasource — see {@link liveDatasourceMessage}. Raised
  * here rather than while encoding, so the owning def's `diagnostics.allow` is
  * counted like every other def's.

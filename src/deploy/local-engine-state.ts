@@ -91,6 +91,18 @@ export interface LocalEngineRecord {
    * (signed out, say), which only a restart can repair.
    */
   aiGatewayUrl?: string;
+  /**
+   * The usage-telemetry variables the engine was started with (`DO_NOT_TRACK`,
+   * `CI`, `XANO_TELEMETRY`, `XANO_TELEMETRY_URL`, `XANO_TELEMETRY_ANONYMOUS_ID`):
+   * each one that was set, with its value; `{}` when none was. The engine reads
+   * them once, at boot, and a deploy compares them with the caller's own before
+   * reusing it (see `local-engine-deploy.ts`). Absent on a record an SDK from
+   * before it was kept wrote: usually an engine started with none, but such an
+   * SDK also rewrites the whole row when it reuses an engine, so it can drop the
+   * snapshot of one started with them. `null` when the file holds one that is
+   * not an object of strings.
+   */
+  telemetryEnv?: Record<string, string> | null;
 }
 
 /** The on-disk file: one record per project path. */
@@ -135,6 +147,24 @@ function isRecord(value: unknown): value is LocalEngineRecord {
 }
 
 /**
+ * A record with its telemetry snapshot kept when it is an object of string
+ * values, left absent when the row has none, and `null` (unknown) otherwise.
+ * Never dropped to absent: a deploy reuses an engine with no snapshot for a
+ * caller who neither may report nor opts out, and a malformed snapshot may
+ * stand for an engine that reports.
+ */
+function withValidTelemetryEnv(record: LocalEngineRecord): LocalEngineRecord {
+  if (!("telemetryEnv" in record) || record.telemetryEnv === undefined) return record;
+  const { telemetryEnv, ...rest } = record;
+  const valid =
+    telemetryEnv !== null &&
+    typeof telemetryEnv === "object" &&
+    !Array.isArray(telemetryEnv) &&
+    Object.values(telemetryEnv as Record<string, unknown>).every((v) => typeof v === "string");
+  return { ...rest, telemetryEnv: valid ? { ...telemetryEnv } : null };
+}
+
+/**
  * Read the file. A missing, unparseable or invalid one reads as empty, and a
  * row that is not a record is dropped rather than handed out — a bad state file
  * must never block a deploy, and is rewritten on the next write.
@@ -155,7 +185,9 @@ export function readLocalEngineState(env: NodeJS.ProcessEnv = process.env): Loca
         for (const [key, value] of Object.entries(rows)) {
           // A malformed marker is dropped rather than trusted: "never filled"
           // is the reading that cannot merge into something unproven.
-          if (isRecord(value)) engines[key] = withValidFilled(value);
+          // So is a malformed telemetry snapshot: "unknown" restarts the engine,
+          // where a wrong value read as a match could keep a no from reaching it.
+          if (isRecord(value)) engines[key] = withValidTelemetryEnv(withValidFilled(value));
         }
         return { version: 1, engines };
       }

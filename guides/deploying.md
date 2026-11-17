@@ -638,10 +638,19 @@ configured:
   engine stops itself after an hour by default, so the SDK starts one with `--ttl 0`, and the
   data and frontend it holds survive between deploys. An ephemeral engine you start by hand
   keeps the one-hour default; its `--ttl <duration>` flag changes it.
+- **Its environment is not your shell's.** From your shell the engine gets the platform basics
+  and the usage-telemetry variables (`DO_NOT_TRACK`, `CI`, `XANO_TELEMETRY`,
+  `XANO_TELEMETRY_URL`, `XANO_TELEMETRY_ANONYMOUS_ID`) and nothing else, so no credential in
+  your shell reaches it. It gets them when it starts. A deploy reuses a running engine while
+  `XANO_TELEMETRY` is unset or off for both it and you; otherwise, when any of them differs from
+  what the engine started with, the deploy restarts it with yours, as an update does. The full
+  list is in [Environment variables](environment.md).
 
-An engine update restarts the engine, and a restarted engine starts **empty**: the next
-`--keep-data` run (which the scaffolded `npm run xano:deploy` passes) seeds it
-rather than merging, so rows entered through your app do not survive the upgrade.
+An engine update restarts the engine, as can a telemetry change (above), and a restarted
+engine starts **empty**: a `--keep-data` run (which the scaffolded
+`npm run xano:deploy` passes) seeds it rather than merging (the deploy that restarted it, or
+the next deploy after `local update`), so rows entered through your app do not survive the
+restart.
 
 **Operating on it.** After a local deploy, the engine is the backend this project
 tracks, so bare `npx @xano/sdk test run-all`, `env set`, `env pull`, `tables`, `impersonate` and

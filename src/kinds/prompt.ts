@@ -25,6 +25,9 @@ import { buildMiddlewareBlock } from "./middleware-attach.js";
 import type { MiddlewareAttach } from "./middleware-attach.js";
 import { assertStoredName } from "./stored-name.js";
 import { brandDef } from "./def-brand.js";
+import { encodeTests } from "./test.js";
+import type { TestDef, TestXdo } from "./test.js";
+import { resolveMockKeys } from "./test-mocks.js";
 import { encodeIcons, encodeTitle } from "./mcp-metadata.js";
 import type { McpIcon, McpIconXdo } from "./mcp-metadata.js";
 
@@ -89,6 +92,18 @@ export interface PromptDef<
    * `_customize` flag. There is no workspace-wide prompt middleware.
    */
   middleware?: MiddlewareAttach;
+  /**
+   * Saved UNIT TESTS — named input sets run against this prompt, with
+   * assertions on the response. The same tests the Xano editor shows.
+   * Assert with the top-level `expect.*` helpers, not `s.expect.*`. A statement
+   * in this prompt's stack can return a mock instead of running, per test, via
+   * its `mock` option.
+   *
+   * `npx @xano/sdk test run-all` and `deploy --test` run them with the
+   * rest, named `prompt:<name>/<test name>`. A backend whose engine predates
+   * tests on a prompt lists none of them.
+   */
+  tests?: TestDef[];
 }
 
 export interface PromptXdo {
@@ -103,6 +118,7 @@ export interface PromptXdo {
   middleware: MiddlewareBlock;
   tag: Array<{ tag: string }>;
   history: { inherit: boolean; enabled: boolean; limit: number };
+  test: TestXdo[];
 }
 
 /** Any prompt def, whatever its inputs/stack/response — see {@link AnyToolDef} for why `Res` is `unknown`. */
@@ -114,7 +130,7 @@ export function encodePrompt(def: AnyPromptDef): PromptXdo {
   assertStoredName(owner, def.name, "route");
   const title = encodeTitle(owner, def.title);
   const icons = encodeIcons(owner, def.icons);
-  return {
+  const xdo: PromptXdo = {
     name: def.name,
     description: def.description ?? "",
     docs: def.docs ?? "",
@@ -127,7 +143,10 @@ export function encodePrompt(def: AnyPromptDef): PromptXdo {
     middleware: buildMiddlewareBlock(def.middleware),
     tag: encodeTags(def.tags),
     history: encodeHistory("prompt", def.history),
+    test: encodeTests(def.tests, "prompt", def.name),
   };
+  resolveMockKeys(xdo.run, xdo.test, "prompt", def.name);
+  return xdo;
 }
 
 export const promptKind: ObjectKind<AnyPromptDef, PromptXdo> = {

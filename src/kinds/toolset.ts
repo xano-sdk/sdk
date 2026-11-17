@@ -46,6 +46,9 @@ import { resolveCanonicalToken } from "./canonical.js";
 import { assertStoredName, assertCanonical } from "./stored-name.js";
 import { emitDiagnostic } from "../workspace/diagnostics.js";
 import { brandDef } from "./def-brand.js";
+import { encodeTests } from "./test.js";
+import type { TestDef, TestXdo } from "./test.js";
+import { resolveMockKeys } from "./test-mocks.js";
 import { encodeIcons, encodeTitle, encodeToolAnnotations } from "./mcp-metadata.js";
 import type { McpIcon, McpIconXdo, ToolAnnotations, ToolAnnotationsXdo } from "./mcp-metadata.js";
 
@@ -149,6 +152,18 @@ export interface ToolDef<
    * overrides with nothing.
    */
   middleware?: MiddlewareAttach;
+  /**
+   * Saved UNIT TESTS — named input sets run against this tool, with
+   * assertions on the response. The same tests the Xano editor shows.
+   * Assert with the top-level `expect.*` helpers, not `s.expect.*`. A statement
+   * in this tool's stack can return a mock instead of running, per test, via
+   * its `mock` option.
+   *
+   * `npx @xano/sdk test run-all` and `deploy --test` run them with the
+   * rest, named `tool:<name>/<test name>`. A backend whose engine predates
+   * tests on a tool lists none of them.
+   */
+  tests?: TestDef[];
 }
 
 export interface ToolXdo {
@@ -165,7 +180,7 @@ export interface ToolXdo {
   input: InputXdo[];
   result: ResultItemXdo[];
   run: StackItemXdo[];
-  test: unknown[];
+  test: TestXdo[];
   /** The MCP metadata — each written only when authored. */
   title?: string;
   annotations?: ToolAnnotationsXdo;
@@ -191,7 +206,7 @@ export function encodeTool(def: AnyToolDef): ToolXdo {
   const annotations = encodeToolAnnotations(owner, def.annotations);
   const icons = encodeIcons(owner, def.icons);
   const output = Object.entries(def.output ?? {}).map(([name, d]) => encodeInput(name, d));
-  return {
+  const xdo: ToolXdo = {
     name: def.name,
     description: def.description ?? "",
     instructions: def.instructions ?? "",
@@ -205,7 +220,7 @@ export function encodeTool(def: AnyToolDef): ToolXdo {
     input: Object.entries(def.input ?? {}).map(([name, d]) => encodeInput(name, d)),
     result: encodeResponse(def.response),
     run: encodeStack("tool", def.name, def.stack),
-    test: [],
+    test: encodeTests(def.tests, "tool", def.name),
     // Omitted at their defaults, so a tool that sets none of them keeps the
     // exact bytes it had before they existed.
     ...(title !== undefined ? { title } : {}),
@@ -213,6 +228,8 @@ export function encodeTool(def: AnyToolDef): ToolXdo {
     ...(icons !== undefined ? { icons } : {}),
     ...(output.length > 0 ? { output_schema: output } : {}),
   };
+  resolveMockKeys(xdo.run, xdo.test, "tool", def.name);
+  return xdo;
 }
 
 export const toolKind: ObjectKind<AnyToolDef, ToolXdo> = {

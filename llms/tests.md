@@ -1,10 +1,10 @@
 # Saved unit tests, assertions, and mocks
 
-> Read when authoring a `workflowTest()` stack, when a query/function/middleware carries `tests`, when a statement needs a `mock`, or when running a deployed environment's tests.
+> Read when authoring a `workflowTest()` stack, when a query, function, middleware, tool, prompt or resource carries `tests`, when a statement needs a `mock`, or when running a deployed environment's tests.
 
 Named input sets run against one object, with assertions on its response — the tests the Xano editor shows. NOT `workflowTest()`, which is a standalone object with its own stack that calls other objects.
 
-- `tests?: TestDef[]` on `query()`, `defineFunction()`, and `middleware()`. No other kind stores them.
+- `tests?: TestDef[]` on `query()`, `defineFunction()`, `middleware()`, `tool()`, `prompt()` and `resource()`. No other kind stores them.
 - `{ name, id?, description?, datasource?, input?, expect?, token? }`.
 - `name` is unique within the object and is the key a statement's `mock` resolves against; a duplicate throws.
 - `id` defaults to a derivation from the owning object plus the name. A pulled test carries the id Xano minted, emitted explicitly.
@@ -70,3 +70,4 @@ Isolation rules; each fails a correct test with a misleading message.
 - A failing suite exits 5; exit 6 when the suite could not be reached — retry it; a backend that can't be looked up exits 8 (see errors). Having no tests is success.
 - For CI: the exit code says THAT something failed, the JSON says WHICH. Progress goes to stderr; stdout carries one JSON document when not a terminal, or with `--json`. `run-all` and `run`: `{ kind, env, name, display, total, passed, failed, tests: [{ kind, name, qualified, object?, status: "pass"|"fail", message?, expectations?: [{ index, status, message? }], timing? }] }` (`message`: the first failure; `expectations`: a unit test's every expectation in order, `index` from 0; `env`: an ephemeral's or tenant's name; `name`: the backend's own, a Xano Engine's too; null if none), same keys on an empty suite. `list` is `{ kind, env, name, display, total, tests }`; `deploy --test` nests the run under `testRun`.
 - `npx @xano/sdk deploy ./index.ts --test` deploys and then runs the suite against what it just shipped. A failure exits 5 WITHOUT retracting the deploy — the environment is live either way.
+- A `tool()`/`prompt()`/`resource()` test runs with the rest, qualified `tool:<name>/<test>` (`prompt:`, `resource:`). ⚠ A backend whose engine predates tests on these kinds lists none of them, so the suite passes without running them.

@@ -145,7 +145,7 @@ import { isExpired } from "../deploy/ephemeral.js";
 import { readTrackedBackend } from "./tracked-backend.js";
 import type { AnyWarningCode } from "../codes.js";
 import { shellWord } from "./command-line.js";
-import { noteUserAgentCommand } from "../util/user-agent.js";
+import { noteUserAgentCommand, noteUserAgentVersion } from "../util/user-agent.js";
 import { isUnwritableError, unwritableError } from "./writable.js";
 import {
   UsageError,
@@ -4359,6 +4359,8 @@ async function dispatch(rawArgv: string[]): Promise<void> {
   runArgs = args;
   noteRunArgs(args);
   noteUserAgentCommand(knownCommand(args));
+  // The SDK's own transports name this version, a library `run()` included.
+  noteUserAgentVersion(readVersion());
   // A `--json` run's update nudge rides in its document, not after it.
   if (isMachineOutput(args)) (await import("./update-check.js")).routeUpdateNoticeToDocument();
   const { command } = args;

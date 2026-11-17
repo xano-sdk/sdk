@@ -1,6 +1,6 @@
 /**
- * A saved UNIT TEST — one entry of the `test[]` a query, function, or
- * middleware carries. This is the thing the Xano UI calls a unit test: a named
+ * A saved UNIT TEST — one entry of the `test[]` a query, function, middleware,
+ * tool, prompt, or resource carries. This is the thing the Xano UI calls a unit test: a named
  * set of inputs, run against the object it hangs off, with assertions on the
  * response.
  *

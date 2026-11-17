@@ -1,5 +1,6 @@
 /**
- * SAVED UNIT TESTS — `tests` on a `query`, `defineFunction`, or `middleware`.
+ * SAVED UNIT TESTS — `tests` on a `query`, `defineFunction`, `middleware`,
+ * `tool`, `prompt`, or `resource`. All of them run under `npx @xano/sdk test run-all`.
  *
  * These are what the Xano editor calls unit tests: a named set of inputs run
  * against THIS object, with assertions on its response. Distinct from
@@ -22,7 +23,7 @@
  * STORED on the test, so clear it before you promote or the same test
  * clones the real database.
  */
-import { query, expect, resp, c, ref, inp, s, input, expr } from "@xano/sdk";
+import { query, tool, expect, resp, c, ref, inp, s, input, expr } from "@xano/sdk";
 import { api } from "../_shared.js";
 
 export const scoreQuery = query({
@@ -72,4 +73,23 @@ export const scoreQuery = query({
   // The saved request/response sample the editor records. Free-form JSON, not
   // tagged values — and a pull DOES bring it back.
   example: { input: { score: 1 }, output: { total: 2 } },
+});
+
+// The same shape on an MCP tool (a `prompt` or `resource` takes it too). The
+// runner names it `tool:ex_kind_score_tool/<test name>`.
+export const scoreTool = tool({
+  name: "ex_kind_score_tool",
+  description: "Add one to a score",
+  input: { score: input.int({ required: true }) },
+  tests: [
+    { name: "adds one", input: { score: c.int(1) }, expect: [expect.to_equal(resp(), c.int(2))] },
+    {
+      name: "mocked total",
+      input: { score: c.int(1) },
+      // The mock below answers for this test only.
+      expect: [expect.to_equal(resp(), c.int(100))],
+    },
+  ],
+  stack: [s.set_var("total", c.expression("$input.score + 1"), { mock: { "mocked total": c.int(100) } })],
+  response: ref("total"),
 });

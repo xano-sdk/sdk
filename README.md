@@ -406,7 +406,7 @@ identity model, `--json` and exit codes, and headless CI runs are in
 
 ### Testing
 
-The tests you author (a `tests` entry on a query, function, or middleware, or a standalone
+The tests you author (a `tests` entry on a query, function, middleware, tool, prompt or resource, or a standalone
 `workflowTest()`) run against a deployed environment:
 
 ```bash

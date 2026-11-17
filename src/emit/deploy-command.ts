@@ -1619,7 +1619,7 @@ async function deployToLocalEngine(
   // Lazily, like everything Node-only this command reaches. Returns only once
   // the engine is serving AND recorded — the import below cannot run
   // before the record exists, because this call has not returned.
-  const { ensureProjectEngine } = await import("../deploy/local-engine-deploy.js");
+  const { ensureProjectEngine, replacedEngineLine } = await import("../deploy/local-engine-deploy.js");
   const { ENGINE_LICENSE_NOTICE } = await import("../deploy/local-engine-release.js");
   const pin = pinAfterAcquire(choice, dir);
   // Said once the spinner is done, and only when this run downloaded an engine.
@@ -1653,12 +1653,7 @@ async function deployToLocalEngine(
         `left running (pid ${sweptOrphans.join(", ")}).`,
     );
   }
-  if (replaced !== undefined) {
-    info(
-      `Replaced Xano Engine ${replaced.name} (${replaced.from ?? "an unrecorded version"} → ` +
-        `${replaced.to ?? "the resolved engine"}). It starts empty, so this deploy seeds it.`,
-    );
-  }
+  if (replaced !== undefined) info(replacedEngineLine(replaced));
   const { aiOutcomeDocument, aiOutcomeLine } = await import("../deploy/local-engine-ai.js");
   if (ai !== undefined) info(aiOutcomeLine(ai));
   const arm = selectDeployArm({

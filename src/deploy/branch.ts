@@ -28,6 +28,7 @@ import { shellWord } from "../emit/command-line.js";
 import { suggestAll } from "../util/suggest.js";
 import { asTimestamp } from "../util/timestamp.js";
 import { noteMetaAnswer } from "../util/last-credential.js";
+import { withUserAgentHeaders } from "../util/user-agent.js";
 import {
   describeTransportFailure,
   httpFailure,
@@ -221,11 +222,11 @@ function requestInit(auth: ResolvedAuth, init: RequestInit): RequestInit {
   return {
     signal: AbortSignal.timeout(BRANCH_TIMEOUT_MS),
     ...init,
-    headers: {
+    headers: withUserAgentHeaders({
       accept: "application/json",
       Authorization: `Bearer ${auth.access_token}`,
       ...((init.headers ?? {}) as Record<string, string>),
-    },
+    }),
   };
 }
 
