@@ -45,7 +45,7 @@ import {
   verifiedEngineExecutable,
 } from "./local-engine-cache.js";
 import { readPin } from "./local-engine-pin.js";
-import { engineCacheDir, engineRunHome, localEngineHome } from "./local-engine-config.js";
+import { engineCacheDir, engineRunDirsEnv, engineRunHome, localEngineHome } from "./local-engine-config.js";
 import {
   assertLoopbackUrl,
   parseEngineHandshake,
@@ -164,8 +164,10 @@ export function engineTelemetryEnv(env: NodeJS.ProcessEnv = process.env): Record
  * Everything the child is allowed to see.
  *
  * HOME is listed but never passed through: {@link engineChildEnv} replaces it
- * with {@link engineRunHome} — see the module note. Then the platform minimum a
- * process needs to run at all, and the telemetry switches
+ * with {@link engineRunHome} — see the module note — and on Windows replaces
+ * USERPROFILE, LOCALAPPDATA and APPDATA the same way. Then the platform minimum a
+ * process needs to run at all (on Windows, SYSTEMROOT is what loads the
+ * networking libraries, so an engine without it cannot listen), and the telemetry switches
  * ({@link ENGINE_TELEMETRY_ENV}). The
  * release credential is deliberately absent, and so is every hosted credential:
  * an engine has no use for either.
@@ -180,6 +182,16 @@ export const ENGINE_ENV_ALLOWLIST: readonly string[] = [
   "LOGNAME",
   "SHELL",
   "TERM",
+  // Windows: the system directories, the temp directory and how commands resolve.
+  // Absent elsewhere, so not invented there (see engineChildEnv).
+  "SYSTEMROOT",
+  "SYSTEMDRIVE",
+  "WINDIR",
+  "COMSPEC",
+  "PATHEXT",
+  "TEMP",
+  "TMP",
+  "USERNAME",
   ...ENGINE_TELEMETRY_ENV,
 ];
 
@@ -288,7 +300,8 @@ export function engineChildEnv(env: NodeJS.ProcessEnv = process.env, ai?: Engine
   built.PATH = env.PATH ?? "";
   // The same HOME for every spawn, under the directory this feature owns — the
   // engine's logs and runtime data land there, not in the developer's cache.
-  built.HOME = engineRunHome(env);
+  // On Windows the engine reads USERPROFILE, LOCALAPPDATA and APPDATA instead.
+  Object.assign(built, engineRunDirsEnv(env));
   if (ai !== undefined) {
     built[ENGINE_AI_TOKEN_FILE_ENV] = ai.tokenFile;
     if (ai.gatewayUrl !== undefined) built[ENGINE_AI_GATEWAY_URL_ENV] = ai.gatewayUrl;

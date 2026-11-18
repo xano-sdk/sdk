@@ -8,6 +8,18 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.23 — xano-free runs as Xano AI
+
+_2026-11-18_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.23)
+
+`xano-free` is deprecated. Xano now runs every `xano-free` agent as Xano AI, on the cloud and on the Xano Engine on your machine, so new agents should use `xano-ai`. Existing `xano-free` code keeps compiling and deploys unchanged.
+
+- `xano-free` is deprecated in favor of `xano-ai`
+- A `xano-free` agent no longer fails on the Xano Engine
+- Examples and the scaffolded brief use `xano-ai`
+
+---
+
 ## 1.0.22 — Unit tests on tools, prompts and resources
 
 _2026-11-17_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.22)

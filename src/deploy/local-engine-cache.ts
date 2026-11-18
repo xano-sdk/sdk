@@ -46,8 +46,15 @@ import { atomicWrite } from "../util/atomic-write.js";
 import { sha256Hex } from "../util/sha256.js";
 import { localEngineBinDir, localEngineHome } from "./local-engine-config.js";
 
-/** The executable inside a cache entry. Named by US, not by the archive. */
-export const ENGINE_EXECUTABLE_FILE = "engine";
+/**
+ * The executable inside a cache entry. Named by US, not by the archive — with
+ * `.exe` on Windows, which starts a program only by its extension.
+ */
+export const ENGINE_EXECUTABLE_FILE = engineExecutableFile();
+
+export function engineExecutableFile(platform: string = process.platform): string {
+  return platform === "win32" ? "engine.exe" : "engine";
+}
 
 /** The record beside it: where it came from and the digest of its bytes. */
 export const ENGINE_RECORD_FILE = "engine.json";
@@ -138,7 +145,7 @@ export function engineEntryDir(key: EngineEntryKey, env: NodeJS.ProcessEnv = pro
 }
 
 function ownerUid(): number | undefined {
-  // Absent on Windows — which has no engine build, so this never runs there.
+  // Absent on Windows, where the mode check below is skipped too.
   return typeof process.getuid === "function" ? process.getuid() : undefined;
 }
 
@@ -191,7 +198,9 @@ export function assertSafeCacheDir(dir: string, env: NodeJS.ProcessEnv = process
           `XANOSDK_ENGINE_HOME.`,
       );
     }
-    if ((st.mode & 0o022) !== 0) {
+    // Windows has no mode bits to read: Node reports every directory as 0777,
+    // and access is decided by the ACLs, which keep a user's profile private.
+    if (process.platform !== "win32" && (st.mode & 0o022) !== 0) {
       throw new Error(
         `The Xano Engine cache is writable by other users on this machine: ${current}\n` +
           `Anything that can write there can replace the engine executable, and an executable ` +

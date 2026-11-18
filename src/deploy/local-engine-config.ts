@@ -28,19 +28,22 @@ import { LOOPBACK_HOSTS } from "./local-engine-handshake.js";
  * `process.platform` and `process.arch` joined — the form the cache path and
  * the refusal message both want.
  */
-export type EnginePlatform = "darwin-arm64" | "linux-x64" | "linux-arm64";
+export type EnginePlatform = "darwin-arm64" | "linux-x64" | "linux-arm64" | "win32-x64";
 
 /**
  * Every platform the engine has an asset for, measured against its published
  * release rather than assumed from what the SDK runs on.
  *
- * Everything absent here — Windows, Intel Macs — has no binary at all, so on
- * those machines the refusal IS the feature until the engine publishes one.
+ * Everything absent here — Intel Macs, Windows on Arm — has no binary at all,
+ * so on those machines the refusal IS the feature until the engine publishes one.
+ * `win32-x64` is the release manager's own label for the engine's
+ * `windows_amd64` archive.
  */
 export const SUPPORTED_PLATFORMS: readonly EnginePlatform[] = [
   "darwin-arm64",
   "linux-x64",
   "linux-arm64",
+  "win32-x64",
 ];
 
 /**
@@ -98,12 +101,42 @@ export function engineRunHome(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /**
- * The per-user cache directory the engine derives from {@link engineRunHome}'s
- * HOME (`Library/Caches` on macOS, `.cache` on Linux). Its data directory —
- * the one holding `logs/`, one file per started engine — is inside.
+ * The per-user cache directory the engine derives from {@link engineRunHome}
+ * (`Library/Caches` on macOS, `.cache` on Linux, `AppData/Local` on Windows,
+ * where the engine reads it from LOCALAPPDATA rather than HOME — see
+ * {@link engineRunDirsEnv}). Its data directory — the one holding `logs/`, one
+ * file per started engine — is inside.
  */
 export function engineCacheDir(env: NodeJS.ProcessEnv = process.env, platform: string = process.platform): string {
-  return join(engineRunHome(env), ...(platform === "darwin" ? ["Library", "Caches"] : [".cache"]));
+  return join(engineRunHome(env), ...userCacheSegments(platform));
+}
+
+function userCacheSegments(platform: string): string[] {
+  if (platform === "darwin") return ["Library", "Caches"];
+  if (platform === "win32") return ["AppData", "Local"];
+  return [".cache"];
+}
+
+/**
+ * The variables that place the engine's per-user directories under
+ * {@link engineRunHome}. HOME is enough on macOS and Linux; Windows has no
+ * HOME to the engine, which reads its home from USERPROFILE and its cache and
+ * config directories from LOCALAPPDATA and APPDATA, so all three are pointed
+ * there too. Every spawn, `list` and `stop` must use the same ones, or an
+ * engine started under one set is invisible to the others.
+ */
+export function engineRunDirsEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: string = process.platform,
+): Record<string, string> {
+  const home = engineRunHome(env);
+  if (platform !== "win32") return { HOME: home };
+  return {
+    HOME: home,
+    USERPROFILE: home,
+    LOCALAPPDATA: engineCacheDir(env, platform),
+    APPDATA: join(home, "AppData", "Roaming"),
+  };
 }
 
 /**
@@ -115,8 +148,10 @@ export function engineCacheDir(env: NodeJS.ProcessEnv = process.env, platform: s
  * and `logs` folders.
  */
 export function legacyRuntimeDirs(env: NodeJS.ProcessEnv = process.env, platform: string = process.platform): string[] {
+  // No build ever ran the engine under the real home on Windows: there is nothing to find.
+  if (platform === "win32") return [];
   const home = env.HOME !== undefined && env.HOME !== "" ? env.HOME : homedir();
-  const cache = join(home, ...(platform === "darwin" ? ["Library", "Caches"] : [".cache"]));
+  const cache = join(home, ...userCacheSegments(platform));
   if (resolve(cache) === resolve(engineCacheDir(env, platform))) return [];
   let names: string[];
   try {
