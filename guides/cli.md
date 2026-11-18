@@ -32,6 +32,7 @@ npx @xano/sdk ai models --json --all              # …as JSON, retired models i
 
 npx @xano/sdk export ./xano/index.ts              # bundle to stdout
 npx @xano/sdk export ./xano/index.ts --out ws.json
+npx @xano/sdk export ./xano/index.ts --archive-out backend.tar.gz  # …the archive deploy uploads, byte for byte: workspace.json (compiled with its seed) + content/<table-guid>-<page>.json seed pages + vault/… hosted files; written 0600, deterministic for the same project; combine with --out for the bundle too; `-` and --check are refused
 npx @xano/sdk compile ./xano/functions/get-user.ts  # a single function's JSON
 npx @xano/sdk routes ./xano/index.ts              # every route, realtime socket/channel and MCP server address (`paths` is an alias)
 

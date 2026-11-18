@@ -40,7 +40,8 @@
 import { writeData } from "../util/secrets.js";
 import type { AiBilling } from "../deploy/local-engine-ai.js";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { andList } from "../util/and-list.js";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 // Type-only, so the emitter module itself stays a lazy import (see the export path).
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -300,6 +301,12 @@ export interface ParsedArgs {
   /** `compile --export <name>`: which named export of a several-def module to compile. */
   exportName: string | undefined;
   emit: string | undefined;
+  /**
+   * `export --archive-out <path>`: also write the archive `deploy` uploads —
+   * `encodeWorkspaceArchive(bundle, [...content, ...files])` over the bundle
+   * compiled with its seed — owner-only.
+   */
+  archiveOut: string | undefined;
   /** `deploy --static <dir>`: archive this directory and deploy it to the environment's static host. */
   static: string | undefined;
   /**
@@ -1136,6 +1143,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let allowBranchDeletion = false;
   let backupBranch: string | boolean | undefined;
   let emit: string | undefined;
+  let archiveOut: string | undefined;
   let exportName: string | undefined;
   let json = false;
   let noRefresh = false;
@@ -1225,7 +1233,11 @@ export function parseArgs(argv: string[]): ParsedArgs {
       exportName = requireValue(arg);
     } else if (arg.startsWith("--export=")) {
       exportName = attachedValue(arg, "--export=");
-} else if (arg === "--emit") {
+    } else if (arg === "--archive-out") {
+      archiveOut = requireValue(arg);
+    } else if (arg.startsWith("--archive-out=")) {
+      archiveOut = attachedValue(arg, "--archive-out=");
+    } else if (arg === "--emit") {
       emit = requireValue(arg);
     } else if (arg.startsWith("--emit=")) {
       emit = attachedValue(arg, "--emit=");
@@ -2154,6 +2166,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   if (command === "export" && check) {
     const pointless = [
       ...(out !== undefined ? ["--out"] : []),
+      ...(archiveOut !== undefined ? ["--archive-out"] : []),
       ...(envFile !== undefined ? ["--backend-env-file"] : []),
       ...(Object.keys(envVars).length > 0 ? ["--env-var"] : []),
       ...(allowEmptyEnv.length > 0 ? ["--allow-empty-env"] : []),
@@ -2356,6 +2369,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     allowBranchDeletion,
     backupBranch,
     emit,
+    archiveOut,
     exportName,
     json,
     noRefresh,
@@ -4654,7 +4668,19 @@ async function dispatch(rawArgv: string[]): Promise<void> {
     const { assertWritableTarget } = await import("./output-target.js");
     assertWritableTarget(out, "--out");
   }
-  const { bundle: json, bundleObject, omittedSeedTables, lock: lockOutcome, declaredEnvNames } = await compileBundle(args);
+  // `--archive-out` too, and before the compile, for the same reason.
+  const archiveOut = args.archiveOut;
+  if (archiveOut !== undefined) await assertArchiveTarget(archiveOut);
+  const {
+    bundle: json,
+    bundleObject,
+    omittedSeedTables,
+    content: seedContent,
+    files: hostedFileMembers,
+    nonPublicSeedValues,
+    lock: lockOutcome,
+    declaredEnvNames,
+  } = await compileBundle(args, archiveOut !== undefined ? { seed: true } : {});
   if (omittedSeedTables.length > 0 && !args.check) {
     const names = omittedSeedTables.map((n) => `"${n}"`).join(", ");
     info(
@@ -4665,7 +4691,7 @@ async function dispatch(rawArgv: string[]): Promise<void> {
   }
   const { hostedIconOwners } = await import("../fields/hosted-file.js");
   const hostedOwners = hostedIconOwners(((bundleObject as { payload?: Record<string, unknown> }).payload ?? {}));
-  if (hostedOwners.length > 0 && !args.check) {
+  if (hostedOwners.length > 0 && !args.check && archiveOut === undefined) {
     warn(
       `Exported bundle names hostedFile() icons whose files it does not carry: ${hostedOwners.join(", ")}. ` +
         `Deploying it with \`--bundle\` is refused; \`xanosdk deploy ${shellWord(pastePath(args.file))}\` ships the files.`,
@@ -4808,6 +4834,28 @@ async function dispatch(rawArgv: string[]): Promise<void> {
     info(`${hadEnvExample ? "Updated" : "Wrote"} ${displayPath(refreshed)} to list the env names this source declares.`);
   }
 
+  // The archive goes first and nothing is reported until every file is
+  // written, so a refused write is never preceded by a success line or a
+  // `written: true` document.
+  const writtenSoFar: string[] = lockOutcome?.changed ? [lockOutcome.path] : [];
+  const writtenPhrase = (): string | undefined =>
+    writtenSoFar.length === 0 ? undefined : `Only ${andList(writtenSoFar)} ${writtenSoFar.length === 1 ? "was" : "were"} written`;
+  let archiveReport: ArchiveReport | undefined;
+  if (archiveOut !== undefined) {
+    const { secretsCarriedBy } = await import("../deploy/live-diff.js");
+    const { writePrivateExportFile } = await import("./output-target.js");
+    const { encodeWorkspaceArchive } = await import("../validate/archive.js");
+    const archive = encodeWorkspaceArchive(json, [...seedContent, ...hostedFileMembers]);
+    const secrets = [...secretsCarriedBy(bundleObject), ...(nonPublicSeedValues.length > 0 ? ["non-public seed values"] : [])];
+    writePrivateExportFile(archiveOut, archive, secrets, "--archive-out", writtenPhrase());
+    writtenSoFar.push(archiveOut);
+    archiveReport = {
+      path: resolve(archiveOut),
+      seedPages: seedContent.length,
+      tables: new Set(seedContent.flatMap((c) => (c.table === undefined ? [] : [c.table]))).size,
+      hostedFiles: hostedFileMembers.length,
+    };
+  }
   if (out) {
     // A bundle carries the env values and documentation tokens it was built
     // with, in cleartext — that is what makes it deployable. On disk it is then
@@ -4818,10 +4866,10 @@ async function dispatch(rawArgv: string[]): Promise<void> {
     const { secretsCarriedBy } = await import("../deploy/live-diff.js");
     const { writeExportFile } = await import("./output-target.js");
     // The pre-check above cannot see everything (a disk filling up), and by now
-    // the lock may have landed: the refusal must not claim nothing was written.
-    const written = lockOutcome?.changed ? `Only ${lockOutcome.path} was written` : undefined;
-    writeExportFile(out, json + "\n", secretsCarriedBy(bundleObject), "--out", written);
-    reportWrote(args, out, lockOutcome);
+    // the lock (and the archive) may have landed: the refusal must not claim
+    // nothing was written.
+    writeExportFile(out, json + "\n", secretsCarriedBy(bundleObject), "--out", writtenPhrase());
+    reportWrote(args, out, lockOutcome, archiveReport);
   } else {
     process.stdout.write(json + "\n");
     // A file holding these is written owner-only and says so; stdout has no
@@ -4843,6 +4891,47 @@ async function dispatch(rawArgv: string[]): Promise<void> {
       );
     }
   }
+  // Without `--out`, stdout IS the bundle, so the archive is reported on stderr.
+  if (!out && archiveReport !== undefined) info(archiveSummary(archiveReport));
+}
+
+/** What `--archive-out` wrote, as the `--json` document's `archive` field carries it. */
+interface ArchiveReport {
+  path: string;
+  seedPages: number;
+  tables: number;
+  hostedFiles: number;
+}
+
+function archiveSummary(r: ArchiveReport): string {
+  return (
+    `Wrote the deploy archive ${displayPath(r.path)}: ${countOf(r.seedPages, "seed page")} for ${countOf(r.tables, "table")}` +
+    (r.hostedFiles > 0 ? `, ${countOf(r.hostedFiles, "hosted file")}` : "") +
+    "."
+  );
+}
+
+/**
+ * `export --archive-out`: refused before anything is written. `-` is refused:
+ * the archive is binary, and stdout already carries the bundle without
+ * `--out`. A dangling symlink is refused too: the write would follow it to
+ * wherever it points.
+ */
+async function assertArchiveTarget(path: string): Promise<void> {
+  if (path === "-") {
+    throw new UsageError("`--archive-out` names a file; `-` (stdout) is refused, as the archive is binary.");
+  }
+  let link: ReturnType<typeof lstatSync> | undefined;
+  try {
+    link = lstatSync(path);
+  } catch {
+    link = undefined;
+  }
+  if (link?.isSymbolicLink() && !existsSync(path)) {
+    throw new UsageError(`Cannot write ${path}: it is a symlink to a path that does not exist. Nothing was written. Pass a different \`--archive-out\`.`);
+  }
+  const { assertWritableTarget } = await import("./output-target.js");
+  assertWritableTarget(path, "--archive-out");
 }
 
 /**
@@ -4854,12 +4943,21 @@ function reportWrote(
   args: ParsedArgs,
   out: string,
   lock?: CompiledBundle["lock"],
+  archive?: ArchiveReport,
 ): void {
   // `lock` for a workspace export — `compile` builds one def and keeps no lock.
   if (isMachineOutput(args)) {
     // `written` as `--check` reports it, so one field answers "did this write" either way.
-    writeJson({ out: resolve(out), written: true, ...(lock === undefined ? {} : { lock }) });
-  } else success(`Wrote ${out}`);
+    writeJson({
+      out: resolve(out),
+      written: true,
+      ...(lock === undefined ? {} : { lock }),
+      ...(archive === undefined ? {} : { archive }),
+    });
+  } else {
+    success(`Wrote ${out}`);
+    if (archive !== undefined) success(archiveSummary(archive));
+  }
 }
 
 /**

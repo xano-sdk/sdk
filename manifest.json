@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.24",
+  "version": "1.0.25",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -10153,6 +10153,10 @@
         {
           "flag": "--out, -o <path>",
           "description": "Write the artifact to this path instead of stdout (`-` is stdout)"
+        },
+        {
+          "flag": "--archive-out <path>",
+          "description": "Also write the archive `deploy` uploads for this project: `workspace.json` (the bundle compiled with its seed), the seed rows as `content/<table-guid>-<page>.json` and any hosted file as `vault/…`, byte for byte as deploy builds it. Written owner-only (0600)"
         },
         {
           "flag": "--lock[=<path>]",

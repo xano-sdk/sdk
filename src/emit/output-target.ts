@@ -176,6 +176,35 @@ export function writeExportFile(
 }
 
 /**
+ * Write `bytes` owner-only (0600), always: an export ARCHIVE (`export
+ * --archive-out`) is binary and carries the bundle and, with it, any seed row.
+ * When it carries a secret (`secrets`, as {@link writeExportFile} names them),
+ * it is said once and the path is kept out of git, as `--out` does.
+ */
+export function writePrivateExportFile(
+  path: string,
+  bytes: Uint8Array,
+  secrets: readonly string[] = [],
+  flag = "--path",
+  written = "Nothing was written",
+): void {
+  let regular = true;
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, bytes, { mode: 0o600 });
+    // `mode` applies only when the file is created; an existing one keeps its own.
+    regular = statSync(path).isFile();
+    if (regular) chmodSync(path, 0o600);
+  } catch (err) {
+    throw unwritable(path, err, flag, written);
+  }
+  if (secrets.length > 0 && regular) {
+    warn(`${path} carries ${secretsPhrase(secrets)} in cleartext — written owner-only (0600); do not commit it.`, "secrets.cleartext-export");
+    ensureExportGitignored(path);
+  }
+}
+
+/**
  * The secret labels (`secretsCarriedBy`, `secretsInMultidoc`) as a sentence
  * names them: the one singular label takes its article — "carries a
  * documentation token", never "carries documentation token".

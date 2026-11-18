@@ -565,6 +565,11 @@ export const FLAGS = {
   prune: { spec: "--prune", summary: "Also delete workspace objects your project no longer defines" },
   "reset-data": { spec: "--reset-data", summary: "Empty every table the bundle carries before importing" },
   seed: { spec: "--seed", summary: "Write the bundle's table rows (off by default; `--replace` always writes them)" },
+  "archive-out": {
+    spec: "--archive-out <path>",
+    summary:
+      "Also write the archive `deploy` uploads for this project: `workspace.json` (the bundle compiled with its seed), the seed rows as `content/<table-guid>-<page>.json` and any hosted file as `vault/…`, byte for byte as deploy builds it. Written owner-only (0600)",
+  },
   table: {
     spec: "--table <guid>",
     summary: `Which table to act on, by guid (repeatable) — \`${tablesCommand("workspace")}\` lists them`,
@@ -949,6 +954,7 @@ export const COMMANDS = {
     args: [{ name: "file", required: true, path: true }],
     flags: [
       "out",
+      "archive-out",
       ...COMPILE,
       {
         key: "check",

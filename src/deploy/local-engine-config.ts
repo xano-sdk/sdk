@@ -28,19 +28,23 @@ import { LOOPBACK_HOSTS } from "./local-engine-handshake.js";
  * `process.platform` and `process.arch` joined — the form the cache path and
  * the refusal message both want.
  */
-export type EnginePlatform = "darwin-arm64" | "linux-x64" | "linux-arm64" | "win32-x64";
+export type EnginePlatform = "darwin-arm64" | "darwin-x64" | "linux-x64" | "linux-arm64" | "win32-x64";
 
 /**
  * Every platform the engine has an asset for, measured against its published
  * release rather than assumed from what the SDK runs on.
  *
- * Everything absent here — Intel Macs, Windows on Arm — has no binary at all,
- * so on those machines the refusal IS the feature until the engine publishes one.
- * `win32-x64` is the release manager's own label for the engine's
- * `windows_amd64` archive.
+ * Everything absent here — Windows on Arm, Linux on anything but x64 and arm64 —
+ * has no binary at all, so on those machines the refusal IS the feature until
+ * the engine publishes one. `darwin-x64` (Intel Macs) and `win32-x64` are the
+ * release manager's own labels for the engine's `darwin_amd64` and
+ * `windows_amd64` archives. Releases from before the engine built for Intel
+ * Macs have no `darwin-x64` archive, so `latest` there takes the newest release
+ * that has one, and says so when none does.
  */
 export const SUPPORTED_PLATFORMS: readonly EnginePlatform[] = [
   "darwin-arm64",
+  "darwin-x64",
   "linux-x64",
   "linux-arm64",
   "win32-x64",
@@ -51,7 +55,7 @@ export const SUPPORTED_PLATFORMS: readonly EnginePlatform[] = [
  * for it.
  *
  * Takes both halves as arguments (defaulting to the running process) so a test
- * can ask about an Intel Mac from an Apple Silicon one — the unsupported arms
+ * can ask about Windows on Arm from an Apple Silicon one — the unsupported arms
  * are the ones that most need covering and the ones a developer's own machine
  * can never exercise.
  */

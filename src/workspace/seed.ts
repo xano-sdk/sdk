@@ -36,6 +36,12 @@ export interface SeedContentFile {
   name: string;
   /** The serialized signed `type:"content"` envelope. */
   content: string;
+  /**
+   * The table these rows belong to (its authored name): set on every page
+   * {@link buildSeedContentFiles} builds, absent on one read back from an
+   * archive. For counts only; not an archive field.
+   */
+  table?: string;
 }
 
 /**
@@ -261,7 +267,7 @@ export async function buildSeedContentFiles(
     const guid = resolveRef("dbo", def);
     const pages = paginateRows(coerced);
     pages.forEach((page, i) => {
-      files.push({ name: contentFileName(guid, i + 1), content: JSON.stringify(buildContentEnvelope(page)) });
+      files.push({ name: contentFileName(guid, i + 1), content: JSON.stringify(buildContentEnvelope(page)), table: def.name });
     });
   }
   if (problems.length > 0) throw seedFailure(problems);

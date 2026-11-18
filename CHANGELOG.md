@@ -8,6 +8,17 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.24 — The Xano Engine runs on Windows
+
+_2026-11-18_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.24)
+
+`deploy --local` now runs the Xano Engine on Windows x64. Before this release the SDK refused Windows outright, saying no engine build existed, although the engine has shipped a signed Windows build since v0.1.27. Update to deploy to an engine on a Windows computer.
+
+- `deploy --local` runs the Xano Engine on Windows x64
+- The engine keeps its files in the SDK's own folder on Windows
+
+---
+
 ## 1.0.23 — xano-free runs as Xano AI
 
 _2026-11-18_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.23)

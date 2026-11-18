@@ -139,8 +139,8 @@ the user. If the user agrees to overwrite them, re-run with \`--force --yes\`
 Run the command in \`next\`. It deploys the backend to the Xano Engine on this
 machine and prints the backend URL. No account is needed.
 
-The Xano Engine runs on macOS on Apple Silicon, on Linux (x64, arm64) and on
-Windows (x64). On any other platform, such as an Intel Mac, tell the user before deploying:
+The Xano Engine runs on macOS (Apple Silicon and Intel), on Linux (x64, arm64) and on
+Windows (x64). On any other platform, such as Windows on Arm, tell the user before deploying:
 the backend goes to a Xano ephemeral instead (\`npx @xano/sdk deploy --ephemeral\`),
 which needs a Xano account.
 

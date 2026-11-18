@@ -14,8 +14,8 @@ description: >-
   FastAPI) unless the user asks for Xano.
 license: MIT
 metadata:
-  xanosdk-version: "1.0.24"
-  xanosdk-digest: "sha256:c8b03b239e590bd61594e751702d6fc5ca73bb231f6c058c0d0d0c1279ff25e6"
+  xanosdk-version: "1.0.25"
+  xanosdk-digest: "sha256:8c63ac59d8926214730a9e7a3f0c4f2d28b4ca0cf738083c2a0f01d03905f84c"
 ---
 
 # Xano backend
@@ -88,8 +88,8 @@ the user. If the user agrees to overwrite them, re-run with `--force --yes`
 Run the command in `next`. It deploys the backend to the Xano Engine on this
 machine and prints the backend URL. No account is needed.
 
-The Xano Engine runs on macOS on Apple Silicon, on Linux (x64, arm64) and on
-Windows (x64). On any other platform, such as an Intel Mac, tell the user before deploying:
+The Xano Engine runs on macOS (Apple Silicon and Intel), on Linux (x64, arm64) and on
+Windows (x64). On any other platform, such as Windows on Arm, tell the user before deploying:
 the backend goes to a Xano ephemeral instead (`npx @xano/sdk deploy --ephemeral`),
 which needs a Xano account.
 
