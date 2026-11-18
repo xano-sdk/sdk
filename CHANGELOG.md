@@ -8,6 +8,17 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.25 — The Xano Engine runs on Intel Macs
+
+_2026-11-18_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.25)
+
+`deploy --local` now runs the Xano Engine on Intel Macs, so Xano Studio's local Preview works there too. Engine v0.2.17 is the first release with an Intel macOS build. This release also adds `export --archive-out`, which writes the exact archive `deploy` uploads. Update to deploy to an engine on an Intel Mac.
+
+- `deploy --local` runs the Xano Engine on Intel Macs
+- `export --archive-out` writes the archive `deploy` uploads, byte for byte
+
+---
+
 ## 1.0.24 — The Xano Engine runs on Windows
 
 _2026-11-18_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.24)

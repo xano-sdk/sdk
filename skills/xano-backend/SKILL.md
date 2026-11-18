@@ -14,8 +14,8 @@ description: >-
   FastAPI) unless the user asks for Xano.
 license: MIT
 metadata:
-  xanosdk-version: "1.0.25"
-  xanosdk-digest: "sha256:8c63ac59d8926214730a9e7a3f0c4f2d28b4ca0cf738083c2a0f01d03905f84c"
+  xanosdk-version: "1.0.26"
+  xanosdk-digest: "sha256:050985c8a86c57f531cd19346eab0a35802e076da37fe7e1c2fcc3eb18add2a2"
 ---
 
 # Xano backend

@@ -1,6 +1,8 @@
-# Saved unit tests, assertions, and mocks
+# Tests, assertions, and mocks
 
-> Read when authoring a `workflowTest()` stack, when a query, function, middleware, tool, prompt or resource carries `tests`, when a statement needs a `mock`, or when running a deployed environment's tests.
+> Read when writing ANY test — a `workflowTest()` (shape, registration, `s.expect.*`, `s.api.call`), `tests` on an object, a statement `mock` — or running a deployed environment's tests.
+
+Both kinds of test: saved unit tests (this section) and `workflowTest()` objects (**Workflow tests: `workflowTest()`**). **Running them** covers both.
 
 Named input sets run against one object, with assertions on its response — the tests the Xano editor shows. NOT `workflowTest()`, which is a standalone object with its own stack that calls other objects.
 
@@ -39,6 +41,27 @@ A statement returns a value instead of doing its work, for one named test.
 ### `example`
 
 `example?: { input?, output? }` on `query()` — the saved request/response sample the editor records. Free-form JSON, not tagged values. A pull DOES bring it back.
+
+### Workflow tests: `workflowTest()`
+
+A standalone object whose stack calls other objects and asserts on what they bind.
+
+- `workflowTest({ name, guid?, description?, docs?, datasource?, active?, tags?, stack? })` — an end-to-end test. NO `input`/`response`: `.call` something with an `as`, then assert on that var — `s.function.call({ fn, input, as: "r" })`, `s.expect.to_equal({ expr: ref("r"), value: c.int(42) })`. `s.expect.*` belongs here — it is not inert elsewhere (a failure 500s the request), so treat one in a query/function/task as a mistake to remove. `active?` defaults `true`; `active: false` parks the test — `test run-all`/`deploy --test` SKIP it (reported `status: "skipped"`, never failing the suite), `test list` shows it `inactive`, and `test run "<name>"` still runs it. Chain tests with `s.workflow_test.call({ workflowTest: <def handle>, as: "child" })` then `s.expect.to_be_null({ expr: ref("child") })`, or a failing child passes the parent.
+  - `datasource?`: Default `""` is an EMPTY datasource (recommended), not "no datasource". Any non-empty name is CLONED before EVERY run — against production-sized data, slow enough to fail the run; `"live"` warns at compile time. On an EPHEMERAL, `"live"` holds only the seed fixtures (plus rows a `--keep-data` deploy kept): the way to read `table({ seed })` rows — a small clone, dropped after the run. ⚠ The value is STORED, so clear it before you promote or the same test clones the real database.
+- Register each one with `.registerWorkflowTests([...])` on the workspace, as `.registerQueries([...])` registers a query. `export()` fails (`reference.unresolved`) when `s.workflow_test.call` targets one that is not registered.
+- `s.expect.*` takes the `expect.*` names in ONE argument object, the subject as `expr`: subject only `{ expr }`; subject + operand `{ expr, value }`; `to_be_within` `{ expr, min, max }`; `to_throw` `{ body, exception? }`.
+
+Calls that run ONLY in a workflow test:
+
+- `s.api.call({ api, input?, headers?, auth?, as? })` — invoke an endpoint. WORKFLOW-TEST ONLY (see Gotchas in `llms.txt`).
+  - `api` takes the `query()` def HANDLE (or a `{ name, guid }` pair) — a bare name is refused (identity = api group + verb + name).
+  - `headers` REPLACES the request headers the callee sees and takes the same shapes as `s.api.request`'s, or one `Value`.
+  - `auth` is `{ token, ignoreExpiration? }`: `token` must be a BARE STRING — a tagged `Value` deploys clean and then fails the run with `Param: token - Text filter requires an integer, float, string or boolean value`.
+  - Neither slot authenticates the call; see **What a `workflowTest()` run actually sees**.
+- `s.task.call({ task, as? })` — runs the task's stack once, now; takes NO `input` (a task declares none). `as` binds the task's `s.return` value (null without one), which is how a `workflowTest` asserts a task has a result. WORKFLOW-TEST ONLY (see Gotchas in `llms.txt`).
+- `s.trigger.call({ trigger, input?, as? })` — runs the trigger's stack once, now. WORKFLOW-TEST ONLY (see Gotchas in `llms.txt`).
+  - `s.trigger.call`'s `input` is UNTYPED and must carry the inputs the target trigger reads, which the `t` accessor names: a `tableTrigger` needs `action` (`"insert"`/`"edit"`/`"delete"`), `datasource` (REQUIRED — without it the run fails `Missing param: datasource`), and `new`/`old` row objects; a misspelled key type-checks and is just ignored.
+- `s.workflow_test.call({ workflowTest, datasource?, as? })` — run another workflow test from inside one, which is the only place it runs (see Gotchas in `llms.txt`). NO `input`; `datasource?` has the kind's clone caveat.
 
 ### What a `workflowTest()` run actually sees
 
