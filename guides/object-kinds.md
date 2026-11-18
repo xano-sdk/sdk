@@ -90,7 +90,8 @@ workflowTest({
 ```
 
 **Saved unit tests are a different thing, and they hang off the object.** A `query`,
-`defineFunction` or `middleware` takes a `tests` array — the tests the Xano editor shows.
+`defineFunction`, `middleware`, `tool`, `prompt` or `resource` takes a `tests` array — the
+tests the Xano editor shows.
 Each is a named set of inputs run against *that* object, asserted with the top-level
 `expect.*` helpers. (`s.expect.*` — see [Authoring reference](authoring.md) — builds a
 *statement* for a workflow-test stack;
@@ -240,7 +241,7 @@ mcpServer({ name: "books", tools: [{ tool: searchTool, auth: users }] });
 
 const assistant = agent({
   name: "assistant",
-  llm: { type: "xano-free", systemPrompt: "Be helpful.", prompt: "Answer the question." },
+  llm: { type: "xano-ai", systemPrompt: "Be helpful.", prompt: "Answer the question." },
   // Pass the handles directly; the `{ tool, enabled?, auth? }` wrapper (above)
   // is only for per-tool auth or `enabled: false`.
   tools: [searchTool],
@@ -259,7 +260,8 @@ query({
   — `ref("answer")` is the whole metadata object (`finishReason`, `steps`, …). Both are
   typed, so `InferResponse` reflects either.
 - **`llm` is a provider-discriminated union** — `anthropic` / `openai` / `google-genai` /
-  `xano-free` (which needs no API key) — each with its provider's typed fields.
+  `xano-ai` (which Xano bills, so it needs no API key) — each with its provider's typed
+  fields. `xano-free` is deprecated: it runs as `xano-ai`.
 - **Structured output types the call site.** Author `output: { schema: { … } }` on the agent
   with the `input.*` catalog and `.result` is typed from it wherever the handle is passed —
   no second witness. The type-only `resultShape` is only for overriding that, or for an

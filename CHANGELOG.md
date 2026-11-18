@@ -8,6 +8,18 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.22 — Unit tests on tools, prompts and resources
+
+_2026-11-17_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.22)
+
+Tools, prompts and resources can now carry saved unit tests, and `npx @xano/sdk test run-all` runs them with the rest. Every request the SDK makes now carries its `xanosdk` User-Agent, not only the CLI's, and a local Xano Engine now gets your telemetry settings.
+
+- Tools, prompts and resources carry unit tests
+- Every SDK request sends the `xanosdk` User-Agent
+- The local Xano Engine honors your telemetry choice
+
+---
+
 ## 1.0.21 — A User-Agent and npm provenance
 
 _2026-11-12_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.21)

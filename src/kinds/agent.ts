@@ -19,9 +19,9 @@
  * top-level snake_case, the two structured-output keys camelCase, and the
  * provider config nested under `configs.<provider>` with the engine's camelCase
  * keys (`apiKey`, `sendReasoning`, `thinking.budgetTokens`, `useSearchGrounding`,
- * `reasoningEffort`, …). `xano-free` is a Google-GenAI wrapper minus
- * `apiKey`/`model`; `xano-ai` is the same wrapper minus `apiKey` only, plus an
- * optional `location`. Agents have **no** `instructions` field (the transform has
+ * `reasoningEffort`, …). `xano-ai` is a Google-GenAI wrapper minus `apiKey`,
+ * plus an optional `location`; the deprecated `xano-free` is the same wrapper
+ * minus `apiKey`/`model` too. Agents have **no** `instructions` field (the transform has
  * none) and no toolset-level middleware.
  *
  * The `agent_settings` wire shape is golden-verified: the openai provider config
@@ -50,7 +50,7 @@
  *
  * ```ts
  * agent({ name: "greeter", llm: {
- *   type: "xano-free",
+ *   type: "xano-ai",
  *   systemPrompt: "You greet {{ $args.name }} in {{ $args.locale }}.",
  * }});
  * // invoked via: s.ai.agent.run({ agent: greeter, args: obj({ name: inp("name"), locale: c.text("en") }) })
@@ -164,8 +164,17 @@ interface GoogleGenAiProvider extends LlmCommon {
   dynamicRetrieval?: string;
 }
 
-/** Xano Free provider settings → `configs.xano-free` (a Google-GenAI wrapper with no `apiKey`/`model`). */
+/**
+ * Xano Free provider settings → `configs.xano-free`. Deprecated: it runs as
+ * `xano-ai`, so author `xano-ai` instead. Still typed and encoded byte for byte,
+ * so a pulled workspace that holds one deploys unchanged.
+ */
 interface XanoFreeProvider extends LlmCommon {
+  /**
+   * @deprecated Use `xano-ai`. A `xano-free` agent runs as `xano-ai`, on Xano
+   * AI's default model and the workspace's Xano AI location, billed as Xano AI,
+   * on the Xano Engine on this machine too.
+   */
   type: "xano-free";
   /** 0–2; outside it is refused at register. */
   temperature?: LlmNumber;
@@ -189,9 +198,9 @@ export type XanoAiLocation = XanoAiLocationName | `${string}{{${string}}}${strin
 const TEMPLATED = /\{\{|\{%/;
 
 /**
- * Xano AI provider settings → `configs.xano-ai`: Xano's billed models, the same
- * Google-GenAI wrapper as `xano-free` without an `apiKey` (the credential is
- * Xano's), but with a `model` and a `location` of its own.
+ * Xano AI provider settings → `configs.xano-ai`: Xano's billed models. A
+ * Google-GenAI wrapper without an `apiKey` (the credential is Xano's), with a
+ * `model` and a `location` of its own.
  */
 interface XanoAiProvider extends LlmCommon {
   type: "xano-ai";

@@ -11,14 +11,14 @@
  *
  * Run:  node dist/bin.js validate examples/sandbox/_capture.ts --capture --out validate-out
  */
-import { workspace, query, workflowTest, s, c, inp, input, ref } from "@xano/sdk";
+import { workspace, query, workflowTest, agent, s, c, inp, input, ref } from "@xano/sdk";
 import { api, users, posts, doubleFn } from "./_shared.js";
 import { fieldTableRef } from "./fields/tableRef.js";
 import { productTable } from "./kinds/table.js";
 import { getUserQuery } from "./kinds/query.js";
 import { onUserInsert, onMessage, onBranchLive } from "./kinds/trigger.js";
 import { searchTool } from "./kinds/tool.js";
-import { exampleMcpServer, assistant, askAssistant } from "./kinds/ai.js";
+import { exampleMcpServer, askAssistant } from "./kinds/ai.js";
 import { nightlyCleanup } from "./kinds/task.js";
 import { doubleFnTest } from "./kinds/workflowTest.js";
 import { rateLimit } from "./kinds/middleware.js";
@@ -71,6 +71,22 @@ const workflowTestGolden = workflowTest({
   ],
 });
 
+// The shipped `assistant` example authors `xano-ai`. Its golden was captured on
+// the deprecated `xano-free` provider, which pulled workspaces still hold and
+// must still encode byte for byte, so the capture keeps that provider here. Same
+// name, so `askAssistant`'s run still targets it.
+const freeAssistantGolden = agent({
+  name: "ex_assistant",
+  canonical: "assistant-agent",
+  llm: {
+    type: "xano-free",
+    systemPrompt: "You are a helpful assistant.",
+    prompt: "Answer this question: {{ $args.question }}",
+    maxSteps: 5,
+  },
+  tools: [{ tool: searchTool, enabled: true }],
+});
+
 // register* buckets are typed per kind; the examples span many kinds.
 const defs = (xs: unknown[]) => xs as never[];
 
@@ -81,7 +97,7 @@ export default workspace("xanosdk-capture-kinds")
   .registerTriggers(defs([onUserInsert, onMessage, onBranchLive, onChatConnect, onRoomJoin, onRoomDeliver]))
   .registerTools(defs([searchTool]))
   .registerMcpServers(defs([exampleMcpServer]))
-  .registerAgents(defs([assistant]))
+  .registerAgents(defs([freeAssistantGolden]))
   .registerFunctions(defs([doubleFn, microserviceRequest, microserviceRequestPort, microserviceRequestInstanceHost]))
   .registerTasks(defs([nightlyCleanup]))
   .registerWorkflowTests(defs([doubleFnTest, workflowTestGolden]))

@@ -25,7 +25,6 @@
 - A lambda returns error TEXT with HTTP 200 (`Could not resolve "node:crypto"`, an undefined-binding message) — the body threw; use the preloaded globals, the surface's bindings, and `capture`. `llms/lambda.md`.
 - `Unable to locate request.` (404) on an endpoint that deployed — a lowercase verb, a `.` in the name, or a CORS `mode` typo that dropped the whole API group. `llms/kinds-core.md`.
 - A browser call fails on a missing `access-control-allow-origin` while deploy looks fine — CORS `mode: "custom"` with `"*"` or an unmatched origin. `llms/kinds-core.md`.
-- `ERROR_FATAL` `The free model is not available in this process.` — an `xano-free` agent run on a Xano Engine; it runs only on Xano's cloud. `llms/kinds-agent-mcp.md`.
 - `Not supported. Please upgrade your Xano instance.` (HTTP 403) — a capability the instance lacks; on the Xano Engine on this machine, every `s.storage.sign_private_url` answers it. Test it with `deploy --ephemeral`. `llms/fields.md`.
 - An MCP `tools/call` answers `isError: true` with `Unable to get successful response from executing tool` — the tool's run failed without a usable `{code, message}`, and the authored message is dropped. Common cause: a tool reading `auth()` behind an entry naming no auth table (`export()` warns `toolset.tool-reads-auth-ungated`); wrap it `{ tool: <handle>, auth: <auth table> }`. `llms/kinds-agent-mcp.md`.
 - A websocket is closed right after the handshake — a refused `connect` gate: an empty/falsy return, a crash, or a gating trigger with no `response`. `llms/triggers.md`.

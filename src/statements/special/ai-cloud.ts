@@ -39,8 +39,8 @@ function vf(v: Value): { value: string; tag: string; filters: unknown[] } {
  * the engine's agent-run result envelope. **The completion is at
  * `.result`**, not the top level; the surrounding fields are run metadata.
  *
- * `R` is the completion type: `string` for a text agent (the default — including
- * `xano-free`), or an object when structured outputs (a schema) are enabled. When
+ * `R` is the completion type: `string` for a text agent (the default), or an
+ * object when structured outputs (a schema) are enabled. When
  * the run targets an agent *handle* it is inferred from that agent's `output.schema`
  * automatically; the `resultShape` witness on {@link AiAgentRunArgs} overrides it.
  *

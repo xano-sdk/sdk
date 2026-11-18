@@ -28,14 +28,15 @@ export const exampleMcpServer = mcpServer({
 });
 
 /**
- * Gate 2 — a zero-config `xano-free` agent (no API key needed). Its `name` is
- * referenced from an endpoint via `s.ai.agent.run` (see kinds/query.ts).
+ * Gate 2 — a `xano-ai` agent: Xano bills it, so it needs no API key, and with no
+ * `model` it runs Xano AI's default model. Its `name` is referenced from an
+ * endpoint via `s.ai.agent.run` (see kinds/query.ts).
  */
 export const assistant = agent({
   name: "ex_assistant",
   canonical: "assistant-agent",
   llm: {
-    type: "xano-free",
+    type: "xano-ai",
     systemPrompt: "You are a helpful assistant.",
     // `{{ $args.* }}` is a Twig placeholder resolved at run time from the `args`
     // object passed to s.ai.agent.run (below). `{{ $env.NAME }}` reads env vars.
@@ -57,7 +58,7 @@ export const classifier = agent({
   name: "ex_agent_classifier",
   canonical: "classifier-agent",
   llm: {
-    type: "xano-free",
+    type: "xano-ai",
     systemPrompt: "Classify the support ticket.",
     prompt: "Ticket: {{ $args.body }}",
     maxSteps: 5,
