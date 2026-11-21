@@ -68,6 +68,7 @@ import { listBranches, liveBranchLabel } from "../deploy/branch.js";
 import {
   buildStaticEnv,
   deployStaticTo,
+  refuseBadStaticSource,
   retryCommand,
   warnSecretLookingStaticEnv,
   withheldNote,
@@ -150,6 +151,12 @@ export interface PublishSummary {
    * Absent on a declined publish and when there was no config to inject.
    */
   staticEnv?: StaticEnvReport;
+  /**
+   * `--static-source`: the source archive sent beside the build, and its size —
+   * `deploy --static`'s field, the same shape. Sent is not kept: a platform
+   * that predates the field ignores it. Absent when none was given.
+   */
+  source?: { bytes: number };
   /**
    * Every warning the run printed, which did not stop it — a `--static-env` key
    * that looks like a secret (`static-env.secret-like`), an `index.html` that
@@ -264,6 +271,8 @@ export async function runPublishCommand(args: ParsedArgs): Promise<void> {
   // warning printed is carried in the `--json` document too — a success's
   // `warnings[]`, a failure's `error.details.warnings` — by the run's collector.
   warnSecretLookingStaticEnv(args.staticEnv);
+  // A source archive that cannot be sent, refused as the directory is: before auth.
+  refuseBadStaticSource(args.staticSource, "publish", "Nothing was uploaded.");
   // `--to`, or bare: the backend this project last deployed to, through the one
   // tracked-backend resolver — a Xano Engine included, so a bare publish
   // after a local deploy lands on that engine.
@@ -483,7 +492,7 @@ async function publishChecked(
     args.skipLiveness,
     args.staticRouting,
     undefined,
-    { rerun: publishRerun(args, dir).command },
+    { rerun: publishRerun(args, dir).command, source: args.staticSource },
   ).catch((err: unknown) => {
     throw uploadOutcomeUnknown(err, args, dir);
   });
@@ -514,6 +523,7 @@ async function publishChecked(
       ...(published.canonical !== undefined ? { canonical: published.canonical } : {}),
       ...(published.routing !== undefined ? { routing: published.routing } : {}),
       ...(published.staticEnv !== undefined ? { staticEnv: published.staticEnv } : {}),
+      ...(published.source !== undefined ? { source: published.source } : {}),
     };
     writeJson(summary);
     return;
@@ -572,7 +582,7 @@ async function publishToLocalEngine(
     true,
     args.staticRouting,
     undefined,
-    { serverRendered: true, rerun: publishRerun(args, dir).command },
+    { serverRendered: true, rerun: publishRerun(args, dir).command, source: args.staticSource },
   ).catch((err: unknown) => {
     if ((err as { status?: unknown }).status === 501) {
       throw new Error(
@@ -606,6 +616,7 @@ async function publishToLocalEngine(
       ...(published.canonical !== undefined ? { canonical: published.canonical } : {}),
       ...(published.routing !== undefined ? { routing: published.routing } : {}),
       ...(published.staticEnv !== undefined ? { staticEnv: published.staticEnv } : {}),
+      ...(published.source !== undefined ? { source: published.source } : {}),
     };
     writeJson(summary);
     return;

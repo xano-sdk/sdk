@@ -293,15 +293,15 @@ export async function assertStaticHostExists(
  *
  * `publish`, not the deploy again: a redeploy would re-import the backend that
  * just landed to retry an upload that has nothing to do with it.
- * `--static-routing` and `--static-env` are carried — dropping routing lets the
- * retry re-infer what the caller overrode. `--static-host` is carried too,
+ * `--static-routing`, `--static-env` and `--static-source` are carried — dropping
+ * routing lets the retry re-infer what the caller overrode. `--static-host` is carried too,
  * unless it IS the failure: repeating a host the target does not hold hands
  * the reader a command that fails the same way.
  */
 export function staticRetryHint(
   dir: string,
   to: string,
-  args: Pick<ParsedArgs, "staticHost" | "staticRouting" | "staticEnv"> & Partial<ContextArgs>,
+  args: Pick<ParsedArgs, "staticHost" | "staticRouting" | "staticEnv"> & Partial<Pick<ParsedArgs, "staticSource">> & Partial<ContextArgs>,
   err: unknown,
 ): string {
   // By name: this module must not pull the upload transport in to ask.
@@ -319,7 +319,7 @@ export function staticRetryHint(
 export function staticRetryCommand(
   dir: string,
   to: string,
-  args: Pick<ParsedArgs, "staticHost" | "staticRouting" | "staticEnv"> & Partial<ContextArgs>,
+  args: Pick<ParsedArgs, "staticHost" | "staticRouting" | "staticEnv"> & Partial<Pick<ParsedArgs, "staticSource">> & Partial<ContextArgs>,
   err: unknown,
 ): string {
   const badHost = err instanceof Error && err.name === "StaticHostNotFoundError";
@@ -331,6 +331,7 @@ export function staticRetryCommand(
     `xanosdk publish ${shellQuote(pastePath(dir))} --to ${shellQuote(to)}` +
     (args.staticHost && !badHost ? ` --static-host ${shellQuote(args.staticHost)}` : "") +
     (args.staticRouting ? ` --static-routing ${args.staticRouting}` : "") +
+    (args.staticSource ? ` --static-source ${shellQuote(pastePath(args.staticSource))}` : "") +
     Object.entries(args.staticEnv)
       .map(([k, v]) => ` --static-env ${shellQuote(`${k}=${v}`)}`)
       .join("") +

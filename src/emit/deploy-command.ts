@@ -32,6 +32,7 @@
  */
 import { describeWrite, noteLanded } from "../util/sent-writes.js";
 import { existsSync, realpathSync } from "node:fs";
+import { assertStaticSource, StaticSourceError } from "../deploy/static-source.js";
 import { passwordHashesWarning, passwordOrigin } from "./release-common.js";
 import { missingLockDir, type ParsedArgs } from "./cli.js";
 import type { KeepDataMergeRequest, KeepDataMergeResult } from "./keep-data-merge.js";
@@ -1898,7 +1899,7 @@ async function publishStaticToLocalEngine(
       true,
       args.staticRouting,
       "--static",
-      { serverRendered: true },
+      { serverRendered: true, source: args.staticSource },
     );
     if (summary.serverBundle === "uploaded") {
       detail("Server half uploaded: the engine renders the site's dynamic routes.");
@@ -2264,6 +2265,7 @@ const DEPENDENT_FLAGS: ReadonlyArray<{
       { flag: "--static-host", passed: (a) => a.staticHost !== undefined },
       { flag: "--static-routing", passed: (a) => a.staticRouting !== undefined },
       { flag: "--static-env", passed: (a) => Object.keys(a.staticEnv).length > 0 },
+      { flag: "--static-source", passed: (a) => a.staticSource !== undefined },
     ],
   },
 ];
@@ -2302,10 +2304,29 @@ function refuseMissingLockDir(args: ParsedArgs): void {
  * uses: an empty or entry-less build is still judged by `assertStaticDir`.
  */
 function refuseMissingStaticDir(args: ParsedArgs): void {
+  refuseBadStaticSource(args.staticSource, "deploy", "Nothing was deployed.");
   if (args.static === undefined || existsSync(args.static)) return;
   throw new LocalFileNotFoundError(`--static ${args.static}: directory not found. Nothing was deployed.`, {
     hintFor: { command: "deploy" },
   });
+}
+
+/**
+ * A `--static-source` archive that cannot be sent, refused before sign-in and
+ * any write: the upload runs after a deploy's import, so one found bad only
+ * there has already landed the backend. Missing is exit 8, as every missing
+ * local input; a wrong kind, an empty file or one over the cap is a usage error.
+ */
+export function refuseBadStaticSource(source: string | undefined, command: string, outcome: string): void {
+  if (source === undefined) return;
+  try {
+    assertStaticSource(source, "--static-source");
+  } catch (err) {
+    if (err instanceof StaticSourceError) {
+      throw new (err.missing ? LocalFileNotFoundError : UsageError)(`${err.message} ${outcome}`, { hintFor: { command } });
+    }
+    throw err;
+  }
 }
 
 export async function runDeployCommand(args: ParsedArgs): Promise<void> {
@@ -2588,7 +2609,7 @@ async function runDeploy(args: ParsedArgs): Promise<void> {
               args.skipLiveness,
               args.staticRouting,
               "--static",
-              { rerun: staticRetryCommand(staticDir, `ephemeral:${env.name}`, args, undefined) },
+              { rerun: staticRetryCommand(staticDir, `ephemeral:${env.name}`, args, undefined), source: args.staticSource },
             );
           } catch (err) {
             // Never fails the backend deploy: the frontend is a separate
@@ -4498,6 +4519,12 @@ export interface StaticPublishSummary {
    */
   serverBundle?: "uploaded" | "omitted";
   /**
+   * `--static-source`: the source archive sent beside the build, and its size.
+   * Sent is not kept: a platform that predates the field ignores it. Absent
+   * when none was given.
+   */
+  source?: { bytes: number };
+  /**
    * Present only when the upload FAILED after the backend landed — the reason,
    * as printed. `url` is then absent. A `--json` reader never sees the warning
    * on stderr, so without this a failed frontend was indistinguishable from
@@ -4554,8 +4581,9 @@ export async function deployStaticTo(
    * `serverRendered`: the target runs a build's server half (a Xano Engine).
    * `rerun`: the publish that settles an interrupted upload — a publish
    * replaces the host's build, so running it again is safe either way.
+   * `source`: `--static-source`, the app's source archive sent beside the build.
    */
-  opts: { serverRendered?: boolean; rerun?: string } = {},
+  opts: { serverRendered?: boolean; rerun?: string; source?: string | undefined } = {},
 ): Promise<StaticPublishSummary> {
   const { deployStaticHost } = await import("../deploy/static-host.js");
 
@@ -4580,8 +4608,10 @@ export async function deployStaticTo(
         routing,
         ...(dirLabel === undefined ? {} : { label: dirLabel }),
         ...(opts.serverRendered === true ? { serverRendered: true } : {}),
+        ...(opts.source === undefined ? {} : { source: opts.source }),
       }),
   );
+  if (sh.sourceBytes !== undefined) detail(`Source archive sent with the build (${(sh.sourceBytes / 1024).toFixed(1)} KB).`);
   // A server half the target does not run was left out of the upload: say so,
   // since the site's dynamic routes are then served by the fallback page alone.
   if (sh.serverBundle === "omitted") {
@@ -4669,6 +4699,7 @@ export async function deployStaticTo(
     ...(staticEnv !== undefined ? { staticEnv } : {}),
     ...(sh.canonical !== undefined ? { canonical: sh.canonical } : {}),
     ...(sh.serverBundle !== undefined ? { serverBundle: sh.serverBundle } : {}),
+    ...(sh.sourceBytes !== undefined ? { source: { bytes: sh.sourceBytes } } : {}),
   };
   if (skipLiveness || sh.url === undefined || sh.canonical === undefined) {
     return published;

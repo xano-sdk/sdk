@@ -283,6 +283,13 @@ async function runDiff(args: ParsedArgs): Promise<void> {
     const { unansweredRead } = await import("./source-resolve.js");
     throw unansweredRead(err, "read the workspace to compare", "workspace");
   }
+  // A kind the project excludes is not compared (DEV-10009): the workspace's
+  // own objects of it are neither this project's nor someone else's to report.
+  {
+    const { excludedKindsFor } = await import("./project-config.js");
+    const { withoutKinds } = await import("../deploy/excluded-kinds.js");
+    live = withoutKinds(live, await excludedKindsFor(args.file));
+  }
 
   const { SETTINGS_LABEL } = await import("../deploy/live-diff.js");
   const { codePinnedCanonicals, releaseCanonicalLock } = await import("./release-command.js");

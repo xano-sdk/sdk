@@ -1092,15 +1092,20 @@ export const KIND_DECODERS: readonly KindDecoder[] = [
             "secrets, so read them before committing this tree",
         );
       }
+      // A helm row's builtin blocks are leftovers the engine does not deploy (a
+      // microservice switched to helm in the dashboard keeps them), and
+      // `encodeMicroservice` refuses a helm def that has them. `normalize()`
+      // drops them on both sides, so leaving them out still round-trips.
+      const helm = a.stored["kind"] === "helm";
       return compact([
         ...identity(a),
         plain(a.stored, "description", ""),
         plain(a.stored, "kind", "builtin"),
         plain(a.stored, "tenant_deploy", "auto", "tenantDeploy"),
-        listBlock(a, "configs"),
-        listBlock(a, "volumes"),
-        listBlock(a, "ingresses"),
-        deployment(a),
+        helm ? null : listBlock(a, "configs"),
+        helm ? null : listBlock(a, "volumes"),
+        helm ? null : listBlock(a, "ingresses"),
+        helm ? null : deployment(a),
         populatedBlock(a, "chart", "chart"),
         populatedBlock(a, "registry_auth", "registryAuth", {
           dockerconfigjson: "dockerconfigjson",

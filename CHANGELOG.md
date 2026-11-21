@@ -8,6 +8,17 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.26 — One file for writing workflow tests
+
+_2026-11-18_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.26)
+
+An agent writing a workflow test now finds everything it needs in one doc file. `llms/tests.md` carries the `workflowTest()` shape, how to register it, the `s.expect.*` argument shape, and the calls that only run inside a workflow test. Agents used to grep three other files for these.
+
+- One file covers writing a workflowTest()
+- Registration and the s.expect.* argument shape are documented
+
+---
+
 ## 1.0.25 — The Xano Engine runs on Intel Macs
 
 _2026-11-18_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.25)

@@ -39,10 +39,11 @@ import {
 } from "../util/http.js";
 import { writeTransportFailure } from "./answer-shape.js";
 import { isServerPath, SERVER_BUNDLE, SERVER_ENV } from "./server-bundle.js";
+import { assertStaticSource, STATIC_UPLOAD_MAX_BYTES } from "./static-source.js";
 
 const STATIC_TIMEOUT_MS = 120_000;
 /** Client-side archive cap — the static upload is a second attacker-influenced payload path. */
-const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
+const MAX_ARCHIVE_BYTES = STATIC_UPLOAD_MAX_BYTES;
 
 interface ArchiveEntry {
   /** POSIX-separated path relative to the archived directory root. */
@@ -407,6 +408,14 @@ export interface StaticHostRequest {
    * run it and it may hold the app's private build-time env.
    */
   serverRendered?: boolean;
+  /**
+   * Path to an archive (`.zip`, `.tar.gz` or `.tgz`) of the app's source, sent
+   * beside the build as the multipart field `source`. The host serves `file`
+   * exactly as without it and keeps this as the build's original; a platform
+   * that predates the field ignores it. Omitted, the request carries no
+   * `source` field at all. Checked by {@link assertStaticSource}.
+   */
+  source?: string;
 }
 
 export interface StaticHostResult {
@@ -448,6 +457,8 @@ export interface StaticHostResult {
   hiddenUnserved?: string[];
   /** Symlinks left out of the upload: their target is outside the build, or missing. */
   skippedLinks?: SkippedLink[];
+  /** With {@link StaticHostRequest.source}: the size of the source archive sent beside the build. */
+  sourceBytes?: number;
   raw: string;
 }
 
@@ -552,6 +563,8 @@ function maskNonMarkup(html: string): string {
 export async function deployStaticHost(req: StaticHostRequest): Promise<StaticHostResult> {
   const serverRendered = req.serverRendered === true;
   assertStaticDir(req.dir, req.label, MAX_ARCHIVE_BYTES, { serverRendered });
+  // The CLI checked it before its first write, in the flag's name; this is the backstop.
+  const sourceKind = req.source === undefined ? undefined : assertStaticSource(req.source);
   const { files, links } = scanFiles(req.dir, { server: serverRendered });
   const hidden = serverRendered ? [] : files.map((f) => f.path).filter(isHiddenPath);
   const hasServer = existsSync(join(req.dir, SERVER_BUNDLE));
@@ -613,6 +626,18 @@ export async function deployStaticHost(req: StaticHostRequest): Promise<StaticHo
   form.append("name", "xanosdk-deploy");
   form.append("routing", routing);
   form.append("file", new Blob([archive], { type: "application/gzip" }), "build.tar.gz");
+  // Only when asked for: without it the request is the one it always was. Named
+  // by kind, as the build is, since the route reads the type off the extension.
+  let sourceBytes: number | undefined;
+  if (req.source !== undefined && sourceKind !== undefined) {
+    const data = readFileSync(req.source);
+    sourceBytes = data.length;
+    form.append(
+      "source",
+      new Blob([data], { type: sourceKind === "zip" ? "application/zip" : "application/gzip" }),
+      sourceKind === "zip" ? "source.zip" : "source.tar.gz",
+    );
+  }
 
   // A dropped connection names the host and the reason, never a bare
   // `fetch failed` — and never the route. A write, so either drop says what it
@@ -678,6 +703,7 @@ export async function deployStaticHost(req: StaticHostRequest): Promise<StaticHo
     ...(hasServer ? { serverBundle: serverRendered ? ("uploaded" as const) : ("omitted" as const) } : {}),
     ...(hidden.length > 0 ? { hiddenUnserved: hidden } : {}),
     ...(links.length > 0 ? { skippedLinks: links } : {}),
+    ...(sourceBytes === undefined ? {} : { sourceBytes }),
     raw: text,
   };
 }

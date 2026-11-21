@@ -60,6 +60,7 @@ npx @xano/sdk deploy ./xano/index.ts --open       # …and open the deployed URL
 npx @xano/sdk deploy ./xano/index.ts --ephemeral --expires-hours 8   # the ephemeral's TTL when this deploy creates it: 1–24 hours (default: 1)
 npx @xano/sdk deploy ./xano/index.ts --ephemeral --keep-data --static ./frontend/dist --static-host docs   # publish to a named static host — merge only: a replace deletes it, and a deploy creates only `default` (create `docs` in the dashboard first)
 npx @xano/sdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-routing spa   # override URL resolution, spa|multipage (inferred from the bundle; rarely needed)
+npx @xano/sdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-source ./app-source.zip   # also send the app's source (.zip/.tar.gz/.tgz you built) beside the build; the host keeps it as the build's original
 npx @xano/sdk deploy ./xano/index.ts --keep-data  # redeploy but keep table rows (merge instead of replace; seeds aren't re-written)
 npx @xano/sdk env pull --from workspace   # fill xano/.env from a running backend (default: last deployed); lists what changes and confirms over an existing file (--yes off a terminal)
 npx @xano/sdk env set STRIPE_KEY --to workspace --yes   # set ONE env var on a running backend, value piped on stdin (no deploy; never printed)
@@ -69,6 +70,7 @@ npx @xano/sdk publish ./frontend/dist             # publish a built frontend alo
 npx @xano/sdk publish ./frontend/dist --to ephemeral   # …or onto an ephemeral instead (after a local deploy, bare publish goes to the engine)
 npx @xano/sdk deploy ./xano/index.ts --static ./frontend/dist   # on the Xano Engine, the engine serves the build at http://<prefix>.localhost:<port>
 npx @xano/sdk publish ./frontend/dist --to workspace --branch v2 --yes   # …onto the workspace, refused unless branch v2 is live
+npx @xano/sdk publish ./frontend/dist --to workspace --static-source ./app-source.tar.gz --yes   # …with the app's source archive kept beside the build
 npx @xano/sdk deploy ./xano/index.ts --local   # the default, spelled out: the Xano Engine on this machine (runs the version pinned in package.json)
 npx @xano/sdk deploy ./xano/index.ts --local=~/Downloads/engine.tar.gz   # override: run this archive, URL or version (v0.1.8), never touching the pin
 XANOSDK_ENGINE_OVERRIDE=v0.1.8 npm run xano:deploy   # the same override for every deploy in the shell

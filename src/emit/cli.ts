@@ -408,6 +408,15 @@ export interface ParsedArgs {
    * a stray `.html` that should still route entirely client-side.
    */
   staticRouting: "spa" | "multipage" | undefined;
+  /**
+   * `deploy --static-source <archive>` / `publish --static-source <archive>`: an
+   * existing `.zip`, `.tar.gz` or `.tgz` of the app's source, sent beside the
+   * build as the multipart field `source`. The host serves the build as without
+   * it and keeps this as the build's original; a platform that predates the
+   * field ignores it. The SDK never builds the archive. Unset, the upload is
+   * the one it always was.
+   */
+  staticSource: string | undefined;
   /** `--origin <origin>`: Xano control-plane OAuth host. Default: $XANO_ORIGIN, then https://app.xano.com. */
   authHost: string | undefined;
   /** `--config <path>`: explicit credential file. Default: $XANO_CONFIG, then ./.xano/auth.json. */
@@ -502,6 +511,12 @@ export interface ParsedArgs {
    * the command it ran. Validated in `init-modules.ts`, not at parse time.
    */
   marketplace: string[];
+  /**
+   * `init`/`pull` `--exclude <kind>` (repeatable, comma-separated): workspace
+   * object kinds the project leaves out, recorded in package.json
+   * (`EXCLUDE_FIELD` in `project-config.ts`). Validated by the command.
+   */
+  exclude: string[];
   /**
    * `init --from <source>`: where `xano/` comes from — `workspace`,
    * `ephemeral:<name>`, or a path to a bundle JSON already on disk. Undefined
@@ -1064,6 +1079,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let release: string | undefined;
   let staticHost: string | undefined;
   let staticRouting: "spa" | "multipage" | undefined;
+  let staticSource: string | undefined;
   // Null-prototype maps: a user-chosen key lands as a key. On a plain `{}`,
   // `m["__proto__"] = v` is a prototype set, not a store — the pair vanished.
   const staticEnv = Object.create(null) as Record<string, string>;
@@ -1106,6 +1122,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let noAgentsMd = false;
   let aiSeen = false;
   const marketplace: string[] = [];
+  const exclude: string[] = [];
   let from: string | undefined;
   let framework: string | undefined;
   let theme: string | undefined;
@@ -1522,6 +1539,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
         throw new Error(`--static-routing expects "spa" or "multipage" (got "${v ?? ""}").`);
       }
       staticRouting = v;
+    } else if (arg === "--static-source") {
+      staticSource = requireValue(arg);
+    } else if (arg.startsWith("--static-source=")) {
+      staticSource = attachedValue(arg, "--static-source=");
     } else if (arg === "--static") {
       staticDir = requireValue(arg);
     } else if (arg.startsWith("--static=")) {
@@ -1649,6 +1670,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
       for (const p of raw.split(",")) {
         const pkg = p.trim();
         if (pkg !== "") marketplace.push(pkg);
+      }
+    } else if (arg === "--exclude" || arg.startsWith("--exclude=")) {
+      const raw = arg === "--exclude" ? requireValue(arg) : attachedValue(arg, "--exclude=");
+      for (const k of raw.split(",")) {
+        const kind = k.trim();
+        if (kind !== "") exclude.push(kind);
       }
     } else if (arg === "--no-agents-md") {
       noAgentsMd = true;
@@ -1897,6 +1924,13 @@ export function parseArgs(argv: string[]): ParsedArgs {
     });
   };
   if (aiSeen) refuseUnlessDeclared("ai", "--ai", "it only chooses whether `init` writes AGENTS.md.");
+  if (exclude.length > 0) {
+    refuseUnlessDeclared(
+      "exclude",
+      "--exclude",
+      "it is recorded by the commands that write the project's tree (`init`, `pull`), and every later command reads it from package.json.",
+    );
+  }
   if (aiBilling !== undefined) {
     refuseUnlessDeclared(
       "ai-billing",
@@ -2301,6 +2335,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     description,
     release,
     staticRouting,
+    staticSource,
     staticEnv,
     envVars,
     envFile,
@@ -2335,6 +2370,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     name,
     noAgentsMd,
     marketplace,
+    exclude,
     from,
     force,
     noInstall,
@@ -6320,6 +6356,29 @@ export async function compileBundle(
   const content = opts.seed ? resolvedContent : [];
   const nonPublicSeedValues = opts.seed ? await collectNonPublicSeedValues(def.tables()) : [];
   const omittedSeedTables = opts.seed ? [] : def.tables().filter((t) => t.seed !== undefined && !(Array.isArray(t.seed) && t.seed.length === 0)).map((t) => t.name);
+
+  // A project that excludes a kind (DEV-10009) reads the workspace without it,
+  // so the bundle carries none either: one it sent would land beside the
+  // workspace's own, where no pull, diff or release of this project shows it.
+  // Left out rather than refused, so a tree pulled before the exclusion (a
+  // Xano Studio checkout, or an older commit of it) compiles as long as its
+  // defs do (they are still evaluated above); said as a notice, so `--strict`
+  // does not fail on it.
+  {
+    const { excludedKindsFor } = await import("./project-config.js");
+    const payload = (bundle as { payload?: Record<string, unknown> }).payload ?? {};
+    const declared = (await excludedKindsFor(file)).filter((k) => Array.isArray(payload[k]) && (payload[k] as unknown[]).length > 0);
+    if (declared.length > 0) {
+      const { withoutKinds } = await import("../deploy/excluded-kinds.js");
+      const { calcSignatureJson } = await import("../workspace/export.js");
+      const { sig: _stale, ...unsigned } = withoutKinds(bundle, declared) as typeof bundle;
+      bundle = { ...unsigned, sig: calcSignatureJson(unsigned as unknown as Record<string, unknown>) } as typeof bundle;
+      info(
+        `Left out of the bundle: ${declared.map((k) => `the ${k}s ${file} registers`).join(", ")}. This project excludes them ` +
+          `("exclude" under "xanosdk"."@xano/sdk" in package.json, or XANOSDK_EXCLUDE), so a deploy leaves the workspace's own as they are.`,
+      );
+    }
+  }
 
   // Only after the compile has succeeded: a failing `export --strict` (or any
   // refused build) rewrote AGENTS.md on its way to the refusal.

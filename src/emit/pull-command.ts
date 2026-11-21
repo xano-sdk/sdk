@@ -46,6 +46,7 @@ import { step, success, warn, detail, info, terminalText } from "./ui.js";
 import { pastePath } from "./typed-cwd.js";
 import { keptDuplicates, replacedRegistrations, reportSuperseded, type KeptDuplicate } from "./pull-superseded.js";
 import { isMachineOutput, writeJson } from "./output.js";
+import { withoutKinds } from "../deploy/excluded-kinds.js";
 import { decodeWorkspaceArchive, encodeWorkspaceArchive } from "../validate/archive.js";
 import { decodeBundle } from "../codegen/index.js";
 import { ROUTES_MANIFEST_BASENAME } from "./routes-manifest.js";
@@ -482,6 +483,19 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
     );
   }
 
+  // The kinds this project leaves out (DEV-10009): its recorded setting plus
+  // this run's `--exclude`. Read BEFORE the source, so a bad setting or flag
+  // costs no read. The flag is recorded only once the pull has written.
+  const projectDir = (await import("./xanosdk-project.js")).projectDirFrom(cwd) ?? cwd;
+  const { parseExcludeValues, readExcludedKinds, recordExcludedKinds } = await import("./project-config.js");
+  const newlyExcluded = parseExcludeValues(args.exclude ?? []);
+  const excluded = [...new Set([...readExcludedKinds(projectDir), ...newlyExcluded])];
+  const recordExcluded = (): void => {
+    if (recordExcludedKinds(projectDir, newlyExcluded)) {
+      info(`Recorded in package.json: this project leaves out ${newlyExcluded.map((k) => `${k}s`).join(", ")} on every pull, diff and release.`);
+    }
+  };
+
   step(`Reading ${raw}`);
   // A branch of the workspace through the branch-checked export `init --from
   // workspace --branch` reads, so the refresh reads what the project was made from.
@@ -489,7 +503,7 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
     args.branch !== undefined
       ? { archive: encodeWorkspaceArchive(JSON.stringify(await fetchWorkspaceBundle(await credential(), args.branch))), provenance: "workspace", label: `workspace branch "${args.branch.trim()}"` }
       : await fetchSourceArchive(credential, raw, cwd);
-  const bundle = decodeWorkspaceArchive(fetched.archive) as { payload: Record<string, unknown> };
+  const bundle = withoutKinds(decodeWorkspaceArchive(fetched.archive) as { payload: Record<string, unknown> }, excluded);
   // A tenant's (or an ephemeral's) workspace is named by the platform — its
   // handle — and a release carries no workspace at all: neither is the name this
   // project gave itself, so the project's own `workspace("…")` is kept.
@@ -572,6 +586,7 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
   // registers the pulled copy, so the kept one is dead.
   const duplicates = keptDuplicates(dirAbs, incoming, plan.kept, backendDir);
   if (upToDate) {
+    recordExcluded();
     await refreshAgentGuidance({ ...args, file: join(cwd, backendDir, "index.ts") });
     finishUpToDate(cwd, backendDir, project, args, fetched, lock, lockPath, reconciliation, bundle.payload, files.length, plan.kept, settingsReport(settings, backendDir), seedRows, duplicates, recordPullSync);
     return;
@@ -734,6 +749,7 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
   ];
 
   step(`Writing ${backendDir}/ from ${fetched.label}`);
+  recordExcluded();
   // Remove then write, in that order and only after the confirmation above:
   // a file the previous decode wrote and this one does not would leave the
   // project exporting something the source does not have. A file no decode

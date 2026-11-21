@@ -1,4 +1,4 @@
-# xanosdk v1.0.26
+# xanosdk v1.0.27
 
 > TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.
 
@@ -1323,6 +1323,8 @@ Microservices (the `microservice()` def and the statement that calls it):
   - `configs`/`volumes` are typed and `@deprecated` but NOT deployable: the engine rejects an import carrying either, so `export()` fails the build rather than letting the deploy fatal.
   - Put a value the workload reads in a container's `env`, and storage in a container's own `volumes` (`emptyDir`/`persistent`/`config`).
   - Container names are free-form — they need not match the microservice name, which is what a stack addresses.
+  - A `helm` row's leftover `builtin` blocks are not deployed, and a pull drops them.
+  - `--exclude microservice` (`pull`, `init --from`; saved in package.json) or `XANOSDK_EXCLUDE=microservice` leaves the workspace's microservices out of the project; a merge deploy leaves them alone, `--prune`/`--replace` are refused.
 - ⚠ Secrets are copied verbatim: `chart.values` and `registryAuth.dockerconfigjson` are carried into the bundle, and into a pulled tree. `process.env.X` in the def is NOT a way out: it resolves at EXPORT and writes the literal in.
   - Reference a `workspaceConfig({ env })` var instead and only the NAME travels — the engine substitutes at DEPLOY. Two spellings: `env: [{ name: "API_KEY", fromEnv: "STRIPE_SECRET" }]` on a builtin container (`value`/`fromEnv` exclusive; both → build error), or `${env.NAME}` inside a helm `chart.values` (a VALUE at any depth, never a key). A name the workspace does not define FAILS the deploy rather than resolving blank.
   - `registryAuth.dockerconfigjson` has NO such form: either leave it unset and pull a public image, or treat the bundle and any tree pulled from it as secret material — out of git, or rotate after. Export prints a notice per microservice carrying a literal; `--strict` does not fail on it.

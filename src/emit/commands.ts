@@ -371,6 +371,11 @@ export const FLAGS = {
     summary: "Write a generated route + socket module there (plain data, no SDK import; `-` is stdout)",
   },
   "static-host": { spec: "--static-host <name>", summary: "Static-host name to deploy to (default: default)" },
+  "static-source": {
+    spec: "--static-source <archive>",
+    summary:
+      "Send this .zip, .tar.gz or .tgz of the app's source beside the build; the host keeps it as the build's original (the SDK never creates it)",
+  },
   "static-routing": {
     spec: "--static-routing spa|multipage",
     summary: "Override URL resolution (inferred from the bundle; rarely needed)",
@@ -389,6 +394,12 @@ export const FLAGS = {
   "skip-liveness": {
     spec: "--skip-liveness",
     summary: "Do not wait to confirm the deploy came up (static host, microservices)",
+  },
+  exclude: {
+    spec: "--exclude <kind>",
+    summary:
+      "Leave the workspace's objects of this kind out of the project, and record it in package.json so every later pull, diff and release leaves them out too (`microservice`)",
+    values: ["microservice"],
   },
   "skip-roundtrip": {
     spec: "--skip-roundtrip",
@@ -1031,6 +1042,7 @@ export const COMMANDS = {
       "skip-roundtrip",
       "report",
       "no-secrets",
+      "exclude",
       {
         key: "yes",
         summary:
@@ -1183,6 +1195,10 @@ export const COMMANDS = {
       "static",
       { key: "static-host", summary: "With --static: static-host name to deploy to (default: default)" },
       { key: "static-routing", summary: "With --static: override URL resolution (inferred from the bundle; rarely needed)" },
+      {
+        key: "static-source",
+        summary: "With --static: send this .zip, .tar.gz or .tgz of the app's source beside the build, kept as its original",
+      },
       {
         key: "static-env",
         summary: "With --static: public config baked in as window.<KEY> (repeatable; never secrets)",
@@ -1408,6 +1424,7 @@ export const COMMANDS = {
           "The backend directory to refresh (its decoded files are rewritten, files you added are kept), when this project does not keep it in xano/ and nothing on disk says so",
       },
       "skip-roundtrip",
+      "exclude",
       { key: "branch", summary: "Read this branch of the workspace instead of the live one (`workspace` only)" },
       ...AUTH,
     ],
@@ -1499,6 +1516,7 @@ export const COMMANDS = {
       "static-env",
       "static-host",
       "static-routing",
+      "static-source",
       "skip-liveness",
       { key: "yes", summary: "Skip the confirmation before replacing a workspace's or tenant's frontend" },
       ...AUTH,

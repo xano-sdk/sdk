@@ -66,6 +66,13 @@ export type { SyncBaseline, SyncSource };
  *    carrying a zero-argument filter digests to a new canonical form; a baseline
  *    taken under scheme 1 is set aside rather than read as every such object
  *    changed.
+ *
+ * Not bumped for `normalize()` dropping a helm microservice's builtin blocks
+ * (DEV-10009): that changes only the digest of a helm row that still carries
+ * them, an old baseline then reads it as changed on both sides, and a release
+ * consults that only for an object that differs, which such a row no longer
+ * does. A bump would set aside every baseline, and with it the guard against
+ * overwriting changes made in Xano, on each project's next release.
  */
 export const DIGEST_SCHEME = 2;
 

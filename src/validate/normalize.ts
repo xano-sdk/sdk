@@ -109,6 +109,25 @@ function isSavedTest(value: unknown): boolean {
   return typeof rec.name === "string" && Array.isArray(rec.expect);
 }
 
+/**
+ * The blocks a `kind: "helm"` microservice row carries and the engine does not
+ * deploy: a helm deploy renders only its `chart` (DEV-10009). A microservice
+ * switched from builtin to helm in the dashboard keeps them, the decoder leaves
+ * them out of the tree, and `encodeMicroservice` refuses a helm def that has
+ * them, so they are dropped on both sides here.
+ */
+const HELM_IGNORED_BLOCKS = new Set(["configs", "volumes", "ingresses", "deployment"]);
+
+/**
+ * Is this object a helm microservice row? Shape, not position: `kind: "helm"`
+ * beside a `chart` object is what only a microservice row stores.
+ */
+function isHelmMicroservice(value: unknown): boolean {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const rec = value as { kind?: unknown; chart?: unknown };
+  return rec.kind === "helm" && rec.chart !== null && typeof rec.chart === "object" && !Array.isArray(rec.chart);
+}
+
 function isEmptyArray(v: unknown): boolean {
   return Array.isArray(v) && v.length === 0;
 }
@@ -1986,6 +2005,9 @@ export function normalize<T>(value: T): T {
     // member is scaffolding the engine never reads (see
     // {@link isBlankGroupStatement}).
     const isGroupNode = (value as { type?: unknown }).type === "group";
+    // A helm microservice's builtin blocks, which the engine does not deploy
+    // ({@link HELM_IGNORED_BLOCKS}).
+    const isHelmRow = isHelmMicroservice(value);
     // A middleware attachment block, identified by its own flags rather than by
     // the generic names `pre`/`post`. A phase list is read ONLY when its
     // `_customize` flag is set — the engine's resolver returns it on that branch
@@ -2048,6 +2070,7 @@ export function normalize<T>(value: T): T {
       if (STRIP_KEYS.has(k)) continue;
       if (isTable && k === "as") continue;
       if (isGroupNode && k === "statement") continue;
+      if (isHelmRow && HELM_IGNORED_BLOCKS.has(k)) continue;
       if (
         isMiddlewareBlock &&
         (k === "pre" || k === "post") &&

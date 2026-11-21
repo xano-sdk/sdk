@@ -272,7 +272,14 @@ export async function runGenerateCommand(args: ParsedArgs): Promise<void> {
     }
   }
 
-  const loaded = await loadSource(args, raw, cwd);
+  // The kinds the project this runs in excludes, or XANOSDK_EXCLUDE
+  // (DEV-10009): Xano Studio's "Make live" generates a tree it then compiles,
+  // and must not get back the microservices it leaves out. Read before the source.
+  const { excludedKindsFor } = await import("./project-config.js");
+  const excluded = await excludedKindsFor(undefined);
+  const read = await loadSource(args, raw, cwd);
+  const { withoutKinds } = await import("../deploy/excluded-kinds.js");
+  const loaded = { ...read, bundle: withoutKinds(read.bundle, excluded) };
   const project = decodeBundle(loaded.bundle, { secretsFile: `${shown}/${WORKSPACE_SECRETS_BASENAME}` });
   refuseDuplicateSourceGuids(project);
   // Placed with an empty prefix and joined onto `root` here, so an absolute

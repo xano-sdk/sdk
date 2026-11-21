@@ -605,6 +605,8 @@ function rejectPullOnlyFlags(args: ParsedArgs): void {
     // `init --force` over an existing project overwrites.
     ...(args.yes && !args.force ? ["--yes"] : []),
     ...(args.branch !== undefined ? ["--branch"] : []),
+    // What a decode leaves out of the tree; a plain init decodes nothing.
+    ...((args.exclude ?? []).length > 0 ? ["--exclude"] : []),
     // A plain init signs in to nothing, so an OAuth host has nowhere to go.
     ...(args.authHost !== undefined ? ["--origin"] : []),
   ];

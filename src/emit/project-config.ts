@@ -61,11 +61,12 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { assertWritable, atomicWrite } from "../util/atomic-write.js";
 import { isRecord } from "../deploy/answer-shape.js";
 import type { AiBilling } from "../deploy/local-engine-ai.js";
 import { UsageError } from "./errors.js";
+import { info } from "./ui.js";
 
 /**
  * The SDK's own package name, as a key of the project's `"xanosdk"` block.
@@ -335,4 +336,115 @@ export function resolveAiBilling(
     `The "${AI_BILLING_FIELD}" setting under "xanosdk"."${SDK_PACKAGE}" in ${join(projectDir, "package.json")} is ` +
       `${JSON.stringify(value)}. It must be "user" or "instance" — or pass \`--ai-billing user|instance\` for this run.`,
   );
+}
+
+/**
+ * The field under the SDK's own entry that names the workspace object kinds
+ * this project leaves out (DEV-10009):
+ *
+ *     "xanosdk": { "@xano/sdk": { "exclude": ["microservice"] } }
+ *
+ * A project that excludes a kind never ships it. `pull`, `init --from` and
+ * `generate` leave it out of the tree, a compile leaves it out of the bundle
+ * (the lock may still name one a tree registers), and `workspace diff` and
+ * `deploy --to` read the target without it, so the workspace's own objects of that kind are neither shown as
+ * someone else's nor removed by a `--prune`, and a release leaves them as they
+ * are. Xano Studio sets it for microservices, which it does not support.
+ */
+export const EXCLUDE_FIELD = "exclude";
+
+/** The kinds a project can exclude, by payload section. Only a kind nothing else references. */
+export const EXCLUDABLE_KINDS = ["microservice"] as const;
+export type ExcludableKind = (typeof EXCLUDABLE_KINDS)[number];
+
+function isExcludable(value: unknown): value is ExcludableKind {
+  return typeof value === "string" && (EXCLUDABLE_KINDS as readonly string[]).includes(value);
+}
+
+/** A `--exclude` value checked, so a typo is refused instead of excluding nothing. */
+export function parseExcludeValues(raw: readonly string[]): ExcludableKind[] {
+  const out: ExcludableKind[] = [];
+  for (const value of raw) {
+    if (!isExcludable(value)) {
+      throw new UsageError(
+        `\`--exclude ${value}\` names no kind a project can leave out. It takes ${EXCLUDABLE_KINDS.map((k) => `\`${k}\``).join(", ")}.`,
+      );
+    }
+    if (!out.includes(value)) out.push(value);
+  }
+  return out;
+}
+
+/**
+ * The environment variable that excludes kinds for every command run with it,
+ * as a comma-separated list (`XANOSDK_EXCLUDE=microservice`). Xano Studio sets
+ * it on every process it starts, so a project it opens leaves them out without
+ * a setting in its package.json.
+ */
+export const EXCLUDE_ENV = "XANOSDK_EXCLUDE";
+
+/**
+ * The kinds {@link EXCLUDE_ENV} names. A name this SDK cannot exclude is
+ * ignored rather than refused: the variable is set by a tool (Xano Studio) for
+ * every SDK version a project may pin, and one naming a kind added later must
+ * not fail every command of an older one.
+ */
+function envExcludedKinds(): ExcludableKind[] {
+  const raw = process.env[EXCLUDE_ENV] ?? "";
+  const names = raw.split(",").map((k) => k.trim()).filter((k) => k !== "");
+  const ignored = names.filter((k) => !isExcludable(k));
+  // Said once per run, so a typo (`microservices`) is not silent.
+  if (ignored.length > 0 && !envIgnoredSaid) {
+    envIgnoredSaid = true;
+    info(`${EXCLUDE_ENV} names ${ignored.map((k) => `"${k}"`).join(", ")}, which this SDK cannot leave out; ignored. It takes ${EXCLUDABLE_KINDS.map((k) => `"${k}"`).join(", ")}.`);
+  }
+  return [...new Set(names.filter(isExcludable))];
+}
+let envIgnoredSaid = false;
+
+/** The kinds the project's package.json records. */
+function recordedExcludedKinds(projectDir: string): ExcludableKind[] {
+  const own = readToolchainBlock(projectDir)[SDK_PACKAGE];
+  if (!isRecord(own) || !(EXCLUDE_FIELD in own)) return [];
+  const value = own[EXCLUDE_FIELD];
+  if (Array.isArray(value) && value.every(isExcludable)) return [...new Set(value)];
+  throw new UsageError(
+    `The "${EXCLUDE_FIELD}" setting under "xanosdk"."${SDK_PACKAGE}" in ${join(projectDir, "package.json")} is ` +
+      `${JSON.stringify(value)}. It must be a list of ${EXCLUDABLE_KINDS.map((k) => `"${k}"`).join(", ")}.`,
+  );
+}
+
+/**
+ * The kinds the project at `projectDir` excludes: its package.json setting and
+ * {@link EXCLUDE_ENV}. A package.json value that is not an excludable kind is
+ * refused: ignoring it would pull the objects the project said to leave out.
+ */
+export function readExcludedKinds(projectDir: string): ExcludableKind[] {
+  return [...new Set([...recordedExcludedKinds(projectDir), ...envExcludedKinds()])];
+}
+
+/**
+ * Add `kinds` to the project's {@link EXCLUDE_FIELD} setting, keeping every
+ * other setting. Returns whether package.json changed; a project already
+ * excluding them is not rewritten.
+ */
+export function recordExcludedKinds(projectDir: string, kinds: readonly ExcludableKind[]): boolean {
+  if (kinds.length === 0) return false;
+  const current = recordedExcludedKinds(projectDir);
+  const next = [...new Set([...current, ...kinds])];
+  if (next.length === current.length) return false;
+  const block = readToolchainBlock(projectDir);
+  const own = isRecord(block[SDK_PACKAGE]) ? (block[SDK_PACKAGE] as Record<string, unknown>) : {};
+  return writeToolchainConfig(projectDir, { ...block, [SDK_PACKAGE]: { ...own, [EXCLUDE_FIELD]: next } });
+}
+
+/**
+ * The kinds excluded by the project a command acts on: the one holding its
+ * entry file, else the one it runs in. Outside a project (a `--bundle` run from
+ * anywhere) only {@link EXCLUDE_ENV} applies.
+ */
+export async function excludedKindsFor(entryFile: string | undefined): Promise<ExcludableKind[]> {
+  const { projectDirFrom } = await import("./xanosdk-project.js");
+  const dir = projectDirFrom(entryFile !== undefined ? dirname(resolve(entryFile)) : process.cwd());
+  return dir === undefined ? envExcludedKinds() : readExcludedKinds(dir);
 }

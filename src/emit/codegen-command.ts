@@ -51,6 +51,7 @@ import type { ParsedArgs } from "./cli.js";
 import { loadDefault, readVersion } from "./cli.js";
 import { getAccessToken, type ResolvedAuth } from "../auth/token.js";
 import { decodeWorkspaceArchive } from "../validate/archive.js";
+import { withoutKinds } from "../deploy/excluded-kinds.js";
 import { decodeBundle, type GeneratedProject } from "../codegen/index.js";
 import { decodedCounts } from "../codegen/labels.js";
 import { reportMismatches, verifyBundles } from "../codegen/verify.js";
@@ -1132,7 +1133,14 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
     overrideScripts = settled;
   }
 
-  const { bundle, origin, credentialRead, seed, syncTarget } =
+  // The kinds this project leaves out (DEV-10009): `--exclude`, plus what an
+  // existing project at the target records and `XANOSDK_EXCLUDE`. Checked
+  // BEFORE the read.
+  const { parseExcludeValues, readExcludedKinds, recordExcludedKinds } = await import("./project-config.js");
+  const newlyExcluded = parseExcludeValues(args.exclude ?? []);
+  const excluded = [...new Set([...readExcludedKinds(target), ...newlyExcluded])];
+
+  const { bundle: readBundle, origin, credentialRead, seed, syncTarget } =
     source.kind === "file"
       ? {
           bundle: readBundleFile(source.path),
@@ -1142,6 +1150,7 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
           syncTarget: undefined,
         }
       : await fetchBundle(args, source);
+  const bundle = withoutKinds(readBundle, excluded);
 
   // Validated before any work: a bad `--report` value should not cost a full
   // decode and a written tree before it is reported.
@@ -1261,6 +1270,11 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
     ...(existing ? { overwrite: "full" as const, mergePackageJson: "project" as const, overrideScripts } : {}),
   });
   reportXanoReplace(replace);
+  // The scaffold wrote package.json; every later pull, diff and release reads
+  // the exclusion from there.
+  if (recordExcludedKinds(out, newlyExcluded)) {
+    info(`Recorded in package.json: this project leaves out ${newlyExcluded.map((k) => `${k}s`).join(", ")} on every pull, diff and release.`);
+  }
   for (const line of routesDeferred) warn(line, "routes.not-written");
   // As `pull` says it (E2E pass 25): the rows a seeded release carries are not
   // in the tree, and init --from said nothing of them.

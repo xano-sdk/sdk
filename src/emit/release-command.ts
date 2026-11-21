@@ -745,9 +745,10 @@ function assertLiveWorkspaceWasRead(
 async function readLiveWorkspace(
   auth: ResolvedAuth,
   dest: MergeDest,
+  excluded: readonly string[],
   branch?: string,
 ): Promise<ExportedBundle | undefined> {
-  return (await readLive(auth, dest, branch)).live;
+  return (await readLive(auth, dest, excluded, branch)).live;
 }
 
 /** A read of the target, and — when it failed — why. */
@@ -774,7 +775,8 @@ function isTransientReadFailure(err: unknown): boolean {
 }
 
 /** {@link readLiveWorkspace}, keeping the failure so the report and the refusal can say why. */
-async function readLive(auth: ResolvedAuth, dest: MergeDest, branch?: string): Promise<LiveRead> {
+async function readLive(auth: ResolvedAuth, dest: MergeDest, excluded: readonly string[], branch?: string): Promise<LiveRead> {
+  const { withoutKinds } = await import("../deploy/excluded-kinds.js");
   const { exportWorkspaceBundle } = await import("../deploy/workspace-export.js");
   let failure: unknown;
   for (let attempt = 0; attempt <= LIVE_READ_RETRY_PAUSES_MS.length; attempt++) {
@@ -785,7 +787,8 @@ async function readLive(auth: ResolvedAuth, dest: MergeDest, branch?: string): P
         label: "reading the target workspace",
         ...(branch !== undefined ? { branch } : {}),
       });
-      return { live };
+      // As the project reads it: without the kinds it excludes.
+      return { live: withoutKinds(live, excluded) };
     } catch (err) {
       failure = err;
       const pause = LIVE_READ_RETRY_PAUSES_MS[attempt];
@@ -3862,6 +3865,23 @@ export async function runReleaseCommand(
   } = {},
 ): Promise<void> {
   const req = resolveRequest(args);
+  // The kinds this project leaves out (DEV-10009). Every read of the target
+  // below sees it without them, so the plan, the drift check and the recorded
+  // baseline never count the workspace's own objects of those kinds.
+  const { excludedKindsFor } = await import("./project-config.js");
+  const excluded = await excludedKindsFor(args.file);
+  // A replace and a prune both delete what the archive does not carry, and the
+  // archive of such a project never carries those kinds: the engine would
+  // delete (and undeploy) the workspace's own. A merge leaves them alone.
+  if (excluded.length > 0 && (req.mode === "replace" || req.prune === true)) {
+    const flag = req.mode === "replace" ? "--replace" : "--prune";
+    throw new UsageError(
+      `\`${flag}\` deletes the workspace objects this release does not carry, and this project leaves out its ` +
+        `${excluded.map((k) => `${k}s`).join(", ")} ("exclude" under "xanosdk"."@xano/sdk" in package.json, or XANOSDK_EXCLUDE), so it would ` +
+        `delete the ones the workspace holds. Drop \`${flag}\` to merge, which leaves them as they are.`,
+      { helpFor: { command: "deploy" } },
+    );
+  }
   // Every later read of the flag sees the label `resolveRequest` validated and
   // trimmed, so the refusal payloads and reports name what was actually sent.
   if (req.mode === "merge" && req.branch !== undefined) args = { ...args, branch: req.branch };
@@ -4044,7 +4064,7 @@ export async function runReleaseCommand(
   let tenantLive: ExportedBundle | undefined;
   let tenantRead: LiveRead | undefined;
   if (dest?.kind === "tenant") {
-    tenantRead = await readLive(auth, { base: destBase, workspaceId, label: destLabel });
+    tenantRead = await readLive(auth, { base: destBase, workspaceId, label: destLabel }, excluded);
     tenantLive = tenantRead.live;
     bundle = keepWorkspaceName(bundle, tenantLive);
   }
@@ -4056,7 +4076,7 @@ export async function runReleaseCommand(
   let branchLive: { read: ExportedBundle | undefined; failure?: unknown } | undefined;
   let withheldSettings: string[] = [];
   if (req.branch !== undefined && dest?.kind !== "tenant") {
-    const branchRead = await readLive(auth, resolvedDest);
+    const branchRead = await readLive(auth, resolvedDest, excluded);
     branchLive = { read: branchRead.live, failure: branchRead.failure };
     const withheld = withholdWorkspaceSettings(bundle, branchLive.read);
     bundle = withheld.bundle;
@@ -4247,9 +4267,9 @@ export async function runReleaseCommand(
       : dest?.kind === "tenant"
         ? tenantLive
         : refusalFrame.adopt !== undefined
-          ? await readLiveWorkspace(auth, resolvedDest)
+          ? await readLiveWorkspace(auth, resolvedDest, excluded)
           : toolsetHeld
-            ? await readLiveWorkspace(auth, resolvedDest).catch(() => undefined)
+            ? await readLiveWorkspace(auth, resolvedDest, excluded).catch(() => undefined)
             : undefined;
   const conflictFrame: RefusalFrame =
     refusalFrame.adopt !== undefined && heldHere.length > 0
@@ -4274,7 +4294,7 @@ export async function runReleaseCommand(
       ? (tenantRead ?? { live: undefined })
       : branchLive !== undefined && scopeBranch === undefined
         ? { live: branchLive.read, failure: branchLive.failure }
-        : await readLive(auth, resolvedDest, scopeBranch);
+        : await readLive(auth, resolvedDest, excluded, scopeBranch);
   const live = liveRead.live;
   const liveKind: SourceKind =
     dest?.kind === "tenant" ? (dest.type === "ephemeral" ? "ephemeral" : "tenant") : "workspace";
@@ -4920,7 +4940,7 @@ export async function runReleaseCommand(
     const branch = req.mode === "replace" ? DEFAULT_BRANCH_LABEL : (applyResponse?.branch ?? preview.branch);
     // A replace keeps only the default branch, so it is the live one; a merge
     // without `--branch` landed on live.
-    const stored = upToDate ? live : (await readLive(auth, resolvedDest, req.branch !== undefined ? branch : undefined)).live;
+    const stored = upToDate ? live : (await readLive(auth, resolvedDest, excluded, req.branch !== undefined ? branch : undefined)).live;
     const digests =
       stored !== undefined
         ? syncDigests({ held: [stored], heldLabels: new Set(Object.keys(objectDigests(sent, "carried"))) })
@@ -5132,7 +5152,7 @@ export async function runReleaseCommand(
         args.skipLiveness,
         args.staticRouting,
         undefined,
-        { rerun: staticRetryCommand(args.static, to, args, undefined) },
+        { rerun: staticRetryCommand(args.static, to, args, undefined), source: args.staticSource },
       );
     } catch (err) {
       // The backend has landed by now, so this is plain `deploy --static`'s

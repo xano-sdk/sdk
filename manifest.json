@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.26",
+  "version": "1.0.27",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -9769,6 +9769,10 @@
           ]
         },
         {
+          "flag": "--static-source <archive>",
+          "description": "With --static: send this .zip, .tar.gz or .tgz of the app's source beside the build, kept as its original"
+        },
+        {
           "flag": "--static-env KEY=VALUE",
           "description": "With --static: public config baked in as window.<KEY> (repeatable; never secrets)"
         },
@@ -10483,6 +10487,13 @@
           "description": "Find the documentation tokens and write none — for a machine where a secret on disk is not wanted. The tree still declares the gates, so a later deploy refuses rather than clearing one"
         },
         {
+          "flag": "--exclude <kind>",
+          "description": "Leave the workspace's objects of this kind out of the project, and record it in package.json so every later pull, diff and release leaves them out too (`microservice`)",
+          "values": [
+            "microservice"
+          ]
+        },
+        {
           "flag": "--yes, -y",
           "description": "Confirm without asking what --force overwrites, or what --from replaces in an existing xano/ — required when there is no terminal"
         },
@@ -11030,6 +11041,10 @@
           ]
         },
         {
+          "flag": "--static-source <archive>",
+          "description": "Send this .zip, .tar.gz or .tgz of the app's source beside the build; the host keeps it as the build's original (the SDK never creates it)"
+        },
+        {
           "flag": "--skip-liveness",
           "description": "Do not wait to confirm the deploy came up (static host, microservices)"
         },
@@ -11084,6 +11099,13 @@
         {
           "flag": "--skip-roundtrip",
           "description": "Do not check that the written tree re-exports as it was pulled (offline; no network, no deploy)"
+        },
+        {
+          "flag": "--exclude <kind>",
+          "description": "Leave the workspace's objects of this kind out of the project, and record it in package.json so every later pull, diff and release leaves them out too (`microservice`)",
+          "values": [
+            "microservice"
+          ]
         },
         {
           "flag": "--branch <label>",
