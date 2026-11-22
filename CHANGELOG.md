@@ -8,6 +8,17 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.27 — Keep the source with a static publish
+
+_2026-11-21_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.27)
+
+A frontend publish can now keep the app's source next to its built files, so anyone who opens the workspace later gets code they can edit. Microservices pulled from a helm chart also come down clean, and a project can leave them out.
+
+- A static publish can send the app's source with its build
+- A helm microservice pulls clean, and a project can leave microservices out
+
+---
+
 ## 1.0.26 — One file for writing workflow tests
 
 _2026-11-18_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.26)

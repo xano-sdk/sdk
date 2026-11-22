@@ -255,6 +255,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `static.link-skipped` | A symlink in the build points outside it, or to nothing, so it was not uploaded. |
 | `static.republish` | The import failed — republishing the frontend so the static host keeps serving. |
 | `static.routing-inferred-multipage` | Routing was inferred as multipage only because the build ships … beside index.html — the shape of a single-page app with its own … page. |
+| `static.site-line-ignored` | package.json's `staticHost` line is not a site name (lowercase letters and digits), so it was ignored and the frontend publishes to `default`. |
 | `static.teardown` | This replace takes the frontend… at … down — a replace clears …'s static hosting, and this one publishes none. |
 | `static.teardown-unknown` | Could not read …'s static hosting, so this cannot say whether a frontend serves there — this replace takes down any that does. |
 | `static.unconfirmed-live` | Could not confirm the frontend is live within the wait window — the build uploaded and should come online shortly. |

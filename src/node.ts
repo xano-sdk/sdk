@@ -24,3 +24,24 @@ export { readLockFile, writeLockFile } from "./lock/io.js";
 
 // Programmatic CLI surface
 export { run, parseArgs, loadDefault, exportBundleJson } from "./emit/cli.js";
+
+// The project's frontend apps and the site each publishes to (DEV-10042): the
+// one reading Xano Studio and the CLI (`xanosdk frontend list --json`) share.
+export {
+  frontendApps,
+  isSiteName,
+  readStaticHostLine,
+  writeStaticHostLine,
+  DEFAULT_SITE,
+  FRONTEND_DIR,
+  STATIC_HOST_FIELD,
+} from "./emit/frontend-apps.js";
+export type {
+  FrontendApp,
+  FrontendAppBuild,
+  FrontendApps,
+  WriteStaticHostLineResult,
+} from "./emit/frontend-apps.js";
+
+// Where a static build came from, as its description says it (DEV-10042).
+export { describeProvenance, PUBLISHED_FROM_ENV } from "./deploy/build-provenance.js";

@@ -197,10 +197,15 @@ export function warnStaticTeardown(
  */
 export function staticRemovedField(
   teardown: StaticTeardown | undefined,
-  republished: string | undefined,
+  /** The URL the run's publish serves again — or, for a frontend of one app per site, each site's. */
+  republished: string | undefined | { url: string | undefined; sites?: readonly { url: string | undefined }[] },
 ): { staticRemoved: StaticTeardown } | Record<string, never> {
   if (teardown === undefined) return {};
-  const urls = teardown.urls.filter((u) => u !== republished);
+  const again =
+    republished === undefined || typeof republished === "string"
+      ? [republished]
+      : [republished.url, ...(republished.sites ?? []).map((s) => s.url)];
+  const urls = teardown.urls.filter((u) => !again.includes(u));
   // An unread target is reported even with no URL left to name: nothing says
   // the replace took nothing down.
   return urls.length === 0 && teardown.verified ? {} : { staticRemoved: { ...teardown, urls } };
@@ -301,7 +306,7 @@ export async function assertStaticHostExists(
 export function staticRetryHint(
   dir: string,
   to: string,
-  args: Pick<ParsedArgs, "staticHost" | "staticRouting" | "staticEnv"> & Partial<Pick<ParsedArgs, "staticSource">> & Partial<ContextArgs>,
+  args: Pick<ParsedArgs, "staticHost" | "staticRouting" | "staticEnv"> & Partial<Pick<ParsedArgs, "staticSource" | "site">> & Partial<ContextArgs>,
   err: unknown,
 ): string {
   // By name: this module must not pull the upload transport in to ask.
@@ -319,7 +324,7 @@ export function staticRetryHint(
 export function staticRetryCommand(
   dir: string,
   to: string,
-  args: Pick<ParsedArgs, "staticHost" | "staticRouting" | "staticEnv"> & Partial<Pick<ParsedArgs, "staticSource">> & Partial<ContextArgs>,
+  args: Pick<ParsedArgs, "staticHost" | "staticRouting" | "staticEnv"> & Partial<Pick<ParsedArgs, "staticSource" | "site">> & Partial<ContextArgs>,
   err: unknown,
 ): string {
   const badHost = err instanceof Error && err.name === "StaticHostNotFoundError";
@@ -330,6 +335,8 @@ export function staticRetryCommand(
     // found `dir` from there, and a pasted `publish` resolves it from here.
     `xanosdk publish ${shellQuote(pastePath(dir))} --to ${shellQuote(to)}` +
     (args.staticHost && !badHost ? ` --static-host ${shellQuote(args.staticHost)}` : "") +
+    // A nested frontend's `--site`: the retry publishes the same one app.
+    (args.site ? ` --site ${shellQuote(args.site)}` : "") +
     (args.staticRouting ? ` --static-routing ${args.staticRouting}` : "") +
     (args.staticSource ? ` --static-source ${shellQuote(pastePath(args.staticSource))}` : "") +
     Object.entries(args.staticEnv)

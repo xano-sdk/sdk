@@ -261,6 +261,58 @@ npx @xano/sdk promote v2 --set-live                     # the backend, landed an
 npx @xano/sdk publish ./frontend/dist --to workspace --release v2 --branch <label> --yes
 ```
 
+**Which site a frontend publishes to** — a workspace can have several sites (static hosts),
+each with its own address. The project names its site in `package.json`, beside the engine pin,
+so every checkout (a teammate's, Xano Studio, CI) publishes to the same one:
+
+```json
+"xanosdk": { "@xano/sdk": { "engine": "v0.2.17", "staticHost": "shop" } }
+```
+
+That line is the default `--static-host` for `deploy --static` and `publish`. A typed
+`--static-host` still wins, with a note when it differs from the line. Without a line the site is
+`default`, exactly as before. A site the line names is **created on first publish** when the
+target does not have it yet (a fresh ephemeral, or a replace, has only `default`); a typed
+`--static-host` naming a missing site is still refused. A value that is not a site name
+(lowercase letters and digits) is ignored with a warning (`static.site-line-ignored`).
+`npx @xano/sdk site use shop` writes the line (`--create` creates the site when the workspace has none
+by that name; without it a missing name is refused, exit `8`), and `npx @xano/sdk site list` shows
+the workspace's sites: each one's addresses, `Dev and Prod` once Prod has an address or a build,
+the build each serves (with its description) and which one this project names. Both read your
+workspace unless `--on` names another backend.
+
+**One app per site** — `frontend/` is one app (the **flat** layout: it holds an `index.html`, a
+`package.json`, a `src/`, or the `site.mjs` + `site/` built-files layout), and that stays
+first-class. When a project needs several sites, `frontend/` can instead hold one folder per site
+(the **nested** layout): `frontend/shop/` and `frontend/admin/`, each with its own `package.json`
+whose `build` script writes `dist/` (or `build/`, `out/`), or an `index.html` served as it is. A
+folder holding no app (`frontend/shared/`) is shared code and is never published. Folder names are
+site names, so the line plays no part.
+
+```bash
+npx @xano/sdk publish                                # nested: build every app in its folder, publish each to its site
+npx @xano/sdk publish --site shop                    # …only frontend/shop/
+npx @xano/sdk deploy ./xano/index.ts --static frontend   # backend, then every app (each built before the import)
+npx @xano/sdk frontend list --json                   # { layout: "flat"|"nested"|"none", apps: [{ dir, site, build? }] }
+npx @xano/sdk frontend split                         # flat → frontend/<site>/, verified by a build, undone if it fails
+```
+
+Each app is built before anything is signed into or sent, so a failing build costs nothing. A
+site that does not exist yet is created on first publish. The `--json` document carries `sites`
+(one entry per app: `site`, `dir`, `url`, `canonical`, `verified`), and its top-level `url` is the
+first app's. `frontendApps(projectDir)` from `@xano/sdk/node` returns the same answer as
+`frontend list --json`. `frontend split` moves everything in `frontend/` into `frontend/<site>/`
+(the line's site, else `default`; `--site` picks), points `package.json` scripts that name
+`frontend/` at the new folder, drops the line, then builds the moved app; if anything fails it
+puts every file back and exits non-zero naming what broke. A frontend built by the project's root
+`package.json` (the scaffold's) needs a `package.json` of its own before it can be split.
+
+**Where a build came from** — every static build the SDK uploads carries a description:
+`Published from the CLI · commit a119141`, with ` (uncommitted changes)` when the working tree
+differs from that commit, and no commit outside a git repository. `XANO_PUBLISHED_FROM` names
+who published (`XANO_PUBLISHED_FROM="Xano Studio"`). A build uploaded in the dashboard has none,
+which is how a tool tells your code's build from one uploaded by hand.
+
 The destination's own URL is injected as `window.XANO_HOST` at publish time (under any
 `--static-env`), so a byte-identical build published to an ephemeral and to your workspace
 serves two different HTML documents. That is the build-once, configure-per-destination

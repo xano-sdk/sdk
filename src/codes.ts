@@ -253,6 +253,7 @@ export type WarningCode =
   | "static.link-skipped"
   | "static.republish"
   | "static.routing-inferred-multipage"
+  | "static.site-line-ignored"
   | "static.teardown"
   | "static.teardown-unknown"
   | "static.unconfirmed-live"

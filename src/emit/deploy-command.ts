@@ -35,6 +35,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { assertStaticSource, StaticSourceError } from "../deploy/static-source.js";
 import { passwordHashesWarning, passwordOrigin } from "./release-common.js";
 import { missingLockDir, type ParsedArgs } from "./cli.js";
+import { prepareStaticPlan, staticDirsOf, staticUpload, type StaticAppBuild } from "./static-sites.js";
 import type { KeepDataMergeRequest, KeepDataMergeResult } from "./keep-data-merge.js";
 import { codePinnedTables, type CodePinnedTable, type LockFile } from "../lock/lock.js";
 import { storedColumnsOf, withStoredColumns } from "../lock/landed.js";
@@ -1111,6 +1112,7 @@ async function runDeployToDestination(args: ParsedArgs, to: string): Promise<voi
   assertValueFiles(args, { command: "deploy" });
   refuseMissingLockDir(args);
   refuseMissingStaticDir(args);
+  args = await prepareDeployStatic(args);
 
   const resolved = await resolveSource(dest, async () => {
     const auth = await getAccessToken(args);
@@ -1578,7 +1580,7 @@ async function deployToLocalEngine(
   // cost the engine its rows first. The server half counts as an entry page here,
   // since the engine renders it.
   if (args.static !== undefined) {
-    await assertNoSeedLeaks(args.static, nonPublicSeedValues, { serverRendered: true });
+    for (const dir of staticDirsOf(args)) await assertNoSeedLeaks(dir, nonPublicSeedValues, { serverRendered: true });
   }
 
   step(`Deploying ${shownSource} → Xano Engine`);
@@ -1887,6 +1889,7 @@ async function publishStaticToLocalEngine(
   // The engine is re-deployed with the same command to retry: its import is
   // local and quick, and it is the command the reader already typed.
   const retry = rerunOf(args).command;
+  const upload = staticUpload(args);
   try {
     const summary = await deployStaticTo(
       dir,
@@ -1894,12 +1897,12 @@ async function publishStaticToLocalEngine(
       { baseUrl: engine.url, workspaceId: engine.workspaceId, label: `Xano Engine ${engine.name}` },
       buildStaticEnv(engine.url, args.staticEnv),
       Object.keys(args.staticEnv).length > 0,
-      args.staticHost,
+      upload.host,
       // Nothing to wait for: the engine serves the build once the upload returns.
       true,
       args.staticRouting,
       "--static",
-      { serverRendered: true, source: args.staticSource },
+      { serverRendered: true, source: args.staticSource, ...upload.opts },
     );
     if (summary.serverBundle === "uploaded") {
       detail("Server half uploaded: the engine renders the site's dynamic routes.");
@@ -2266,6 +2269,7 @@ const DEPENDENT_FLAGS: ReadonlyArray<{
       { flag: "--static-routing", passed: (a) => a.staticRouting !== undefined },
       { flag: "--static-env", passed: (a) => Object.keys(a.staticEnv).length > 0 },
       { flag: "--static-source", passed: (a) => a.staticSource !== undefined },
+      { flag: "--site", passed: (a) => a.site !== undefined },
     ],
   },
 ];
@@ -2309,6 +2313,16 @@ function refuseMissingStaticDir(args: ParsedArgs): void {
   throw new LocalFileNotFoundError(`--static ${args.static}: directory not found. Nothing was deployed.`, {
     hintFor: { command: "deploy" },
   });
+}
+
+/**
+ * Where `--static` publishes, decided before sign-in (see `static-sites.ts`):
+ * the site the project names, or — for `--static frontend` on a nested
+ * project — every app, each built now so a failed build costs no import.
+ */
+async function prepareDeployStatic(args: ParsedArgs): Promise<ParsedArgs> {
+  if (args.static === undefined) return args;
+  return prepareStaticPlan(args, "deploy", args.static);
 }
 
 /**
@@ -2458,6 +2472,7 @@ async function runDeploy(args: ParsedArgs): Promise<void> {
   }
   // Whatever the source: a fetched backend publishes a `--static` build too.
   refuseMissingStaticDir(args);
+  args = await prepareDeployStatic(args);
 
   if (destination.kind === "local") {
     // An engine on this machine needs no Xano account, but a deploy whose INPUT
@@ -2532,7 +2547,7 @@ async function runDeploy(args: ParsedArgs): Promise<void> {
   // never the target — so the guard still stands between the scan and the first
   // byte of the environment.
   if (args.static !== undefined) {
-    await assertNoSeedLeaks(args.static, nonPublicSeedValues);
+    for (const dir of staticDirsOf(args)) await assertNoSeedLeaks(dir, nonPublicSeedValues);
   }
 
   if (content.length > 0 && !fetching) {
@@ -2599,17 +2614,22 @@ async function runDeploy(args: ParsedArgs): Promise<void> {
             // The ephemeral itself (its base URL, workspace id 1), so backend
             // AND frontend live in the same disposable environment.
             const target: StaticTarget = { baseUrl: env.baseUrl, workspaceId: 1, label: env.label };
+            const upload = staticUpload(args);
             staticSummary = await deployStaticTo(
               staticDir,
               auth,
               target,
               staticEnv,
               explicit,
-              args.staticHost,
+              upload.host,
               args.skipLiveness,
               args.staticRouting,
               "--static",
-              { rerun: staticRetryCommand(staticDir, `ephemeral:${env.name}`, args, undefined), source: args.staticSource },
+              {
+                rerun: staticRetryCommand(staticDir, `ephemeral:${env.name}`, args, undefined),
+                source: args.staticSource,
+                ...upload.opts,
+              },
             );
           } catch (err) {
             // Never fails the backend deploy: the frontend is a separate
@@ -4470,7 +4490,7 @@ async function deployEphemeralGuarded(
     ...mergeLossFields(merged),
     // Beside `--static` too: the new frontend may be at a new URL, and the one a
     // bookmark or a shared link holds is what this names.
-    ...staticRemovedField(staticTeardown, published?.url),
+    ...staticRemovedField(staticTeardown, published),
     ...(notApplied.length > 0 ? { notApplied } : {}),
     ...(microservices ? { microservices } : {}),
     ...(microservicesError !== undefined ? { microservicesError } : {}),
@@ -4525,6 +4545,20 @@ export interface StaticPublishSummary {
    */
   source?: { bytes: number };
   /**
+   * The site this build was published to, when the project named it (its
+   * `staticHost` line) or a nested app's folder did. Absent when the site is
+   * the typed `--static-host` or `default`.
+   */
+  site?: string;
+  /** The site did not exist on the target, and this publish created it. */
+  createdSite?: true;
+  /**
+   * A nested frontend (`frontend/<site>/`): one entry per app, each published
+   * to its own site, in folder order. The top-level fields then describe the
+   * FIRST app, so a reader of one site (`--site <name>`) reads them as before.
+   */
+  sites?: StaticSitePublish[];
+  /**
    * Present only when the upload FAILED after the backend landed — the reason,
    * as printed. `url` is then absent. A `--json` reader never sees the warning
    * on stderr, so without this a failed frontend was indistinguishable from
@@ -4542,6 +4576,19 @@ export interface StaticPublishSummary {
    * lost; exit 9 — the retry settles it). The operation documents' vocabulary.
    */
   completed?: "no" | "unknown";
+}
+
+/** One app of a nested frontend, as its publish went: the site, the app's folder, and what it published. */
+export interface StaticSitePublish {
+  site: string;
+  /** The app's folder, relative to the project root (`frontend/shop`). */
+  dir: string;
+  url: string | undefined;
+  canonical?: string;
+  verified?: boolean;
+  routing?: "spa" | "multipage";
+  staticEnv?: StaticEnvReport;
+  createdSite?: true;
 }
 
 /** Where a static frontend is uploaded: an env base URL + workspace id, with a display label. */
@@ -4583,8 +4630,20 @@ export async function deployStaticTo(
    * replaces the host's build, so running it again is safe either way.
    * `source`: `--static-source`, the app's source archive sent beside the build.
    */
-  opts: { serverRendered?: boolean; rerun?: string; source?: string | undefined } = {},
+  opts: {
+    serverRendered?: boolean;
+    rerun?: string;
+    source?: string | undefined;
+    /** The project named `host` (its line), so it is created on the target when missing. */
+    createHost?: true;
+    /** A nested frontend's apps: each is published to its own site, and `dir`/`host` are unused. */
+    apps?: readonly StaticAppBuild[];
+  } = {},
 ): Promise<StaticPublishSummary> {
+  if (opts.apps !== undefined && opts.apps.length > 0) {
+    const { apps, createHost: _named, ...rest } = opts;
+    return deployStaticSites(apps, auth, target, env, explicit, skipLiveness, routing, rest);
+  }
   const { deployStaticHost } = await import("../deploy/static-host.js");
 
   const where = target.label && target.label !== "" ? target.label : `workspace #${target.workspaceId}`;
@@ -4609,8 +4668,10 @@ export async function deployStaticTo(
         ...(dirLabel === undefined ? {} : { label: dirLabel }),
         ...(opts.serverRendered === true ? { serverRendered: true } : {}),
         ...(opts.source === undefined ? {} : { source: opts.source }),
+        ...(opts.createHost === true ? { createHost: true } : {}),
       }),
   );
+  if (sh.createdHost === true) detail(`The site "${host ?? "default"}" did not exist on ${where}, so it was created.`);
   if (sh.sourceBytes !== undefined) detail(`Source archive sent with the build (${(sh.sourceBytes / 1024).toFixed(1)} KB).`);
   // A server half the target does not run was left out of the upload: say so,
   // since the site's dynamic routes are then served by the fallback page alone.
@@ -4700,6 +4761,8 @@ export async function deployStaticTo(
     ...(sh.canonical !== undefined ? { canonical: sh.canonical } : {}),
     ...(sh.serverBundle !== undefined ? { serverBundle: sh.serverBundle } : {}),
     ...(sh.sourceBytes !== undefined ? { source: { bytes: sh.sourceBytes } } : {}),
+    ...(opts.createHost === true && host !== undefined ? { site: host } : {}),
+    ...(sh.createdHost === true ? { createdSite: true as const } : {}),
   };
   if (skipLiveness || sh.url === undefined || sh.canonical === undefined) {
     return published;
@@ -4722,6 +4785,71 @@ export async function deployStaticTo(
     );
   }
   return { ...published, verified: live };
+}
+
+/**
+ * A nested frontend's publish: every app to its own site, in folder order,
+ * each created on the target when it does not exist yet. Stops at the first
+ * app whose upload fails, with a message naming the sites already published
+ * and the ones not attempted; the caller reports it as any failed upload (a
+ * publish replaces each site's build, so running it again settles it).
+ */
+async function deployStaticSites(
+  apps: readonly StaticAppBuild[],
+  auth: Pick<ResolvedAuth, "access_token">,
+  target: StaticTarget,
+  env: Record<string, string>,
+  explicit: boolean,
+  skipLiveness: boolean | undefined,
+  routing: "spa" | "multipage" | undefined,
+  opts: { serverRendered?: boolean; rerun?: string; source?: string | undefined },
+): Promise<StaticPublishSummary> {
+  const sites: StaticSitePublish[] = [];
+  let first: StaticPublishSummary | undefined;
+  for (const [i, app] of apps.entries()) {
+    let one: StaticPublishSummary;
+    try {
+      one = await deployStaticTo(
+        app.output,
+        auth,
+        { ...target, announced: false },
+        env,
+        explicit,
+        app.site,
+        skipLiveness,
+        routing,
+        undefined,
+        { ...opts, createHost: true },
+      );
+    } catch (err) {
+      if (!(err instanceof Error)) throw err;
+      const done = sites.map((s) => `"${s.site}"${s.url === undefined ? "" : ` (${s.url})`}`);
+      const rest = apps.slice(i + 1).map((a) => `"${a.site}"`);
+      err.message =
+        `The site "${app.site}" (${app.dir}) failed: ${err.message}` +
+        (done.length === 0 ? "" : `\nAlready published: ${done.join(", ")}.`) +
+        (rest.length === 0 ? "" : `\nNot attempted: ${rest.join(", ")}.`);
+      throw err;
+    }
+    first ??= one;
+    sites.push({
+      site: app.site,
+      dir: app.dir,
+      url: one.url,
+      ...(one.canonical !== undefined ? { canonical: one.canonical } : {}),
+      ...(one.verified !== undefined ? { verified: one.verified } : {}),
+      ...(one.routing !== undefined ? { routing: one.routing } : {}),
+      ...(one.staticEnv !== undefined ? { staticEnv: one.staticEnv } : {}),
+      ...(one.createdSite === true ? { createdSite: true as const } : {}),
+    });
+  }
+  const { site: _site, createdSite: _created, ...lead } = first ?? { url: undefined };
+  return {
+    ...lead,
+    // Verified only when every site was seen serving its build.
+    ...(sites.every((s) => s.verified === true) ? {} : sites.some((s) => s.verified !== undefined) ? { verified: false } : {}),
+    sites,
+  };
 }
 
 /**

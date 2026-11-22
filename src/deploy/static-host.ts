@@ -40,6 +40,7 @@ import {
 import { writeTransportFailure } from "./answer-shape.js";
 import { isServerPath, SERVER_BUNDLE, SERVER_ENV } from "./server-bundle.js";
 import { assertStaticSource, STATIC_UPLOAD_MAX_BYTES } from "./static-source.js";
+import { staticBuildDescription } from "./build-provenance.js";
 
 const STATIC_TIMEOUT_MS = 120_000;
 /** Client-side archive cap — the static upload is a second attacker-influenced payload path. */
@@ -373,6 +374,22 @@ export interface StaticHostRequest {
    *  auto-creates it only when it is `default`. Defaults to `default`. */
   host?: string;
   /**
+   * Create {@link host} when the target does not have it yet, then publish to
+   * it. Set when the PROJECT names the site (its `staticHost` line, or a
+   * nested app's folder), never for a typed `--static-host`: a name the
+   * project committed is one it means to have, and a fresh ephemeral (or a
+   * replace, which clears every site) has only `default`. Costs nothing when
+   * the site exists: the create is sent only after the build route answers
+   * that it does not.
+   */
+  createHost?: boolean;
+  /**
+   * The build's `description`. Defaults to where it was published from
+   * (`Published from the CLI · commit a119141`, see `build-provenance.ts`),
+   * read from the current directory's checkout.
+   */
+  description?: string;
+  /**
    * Public config baked into EVERY HTML document in the archive as `window.<KEY>`
    * globals, evaluated before the app bundle runs. The deploy layer seeds
    * `XANO_HOST` with the backend URL of the environment that was just deployed
@@ -459,6 +476,8 @@ export interface StaticHostResult {
   skippedLinks?: SkippedLink[];
   /** With {@link StaticHostRequest.source}: the size of the source archive sent beside the build. */
   sourceBytes?: number;
+  /** With {@link StaticHostRequest.createHost}: the site did not exist, and this publish created it. */
+  createdHost?: true;
   raw: string;
 }
 
@@ -622,43 +641,62 @@ export async function deployStaticHost(req: StaticHostRequest): Promise<StaticHo
   // POST lands on the parent instance's workspace 1 (404 "Invalid workspace").
   // Mirrors `import.js`, which targets the same tenant base URL.
   const url = `${req.baseUrl.replace(/\/$/, "")}/api:meta/workspace/${req.workspaceId}/static_host/${encodeURIComponent(host)}/build`;
-  const form = new FormData();
-  form.append("name", "xanosdk-deploy");
-  form.append("routing", routing);
-  form.append("file", new Blob([archive], { type: "application/gzip" }), "build.tar.gz");
-  // Only when asked for: without it the request is the one it always was. Named
-  // by kind, as the build is, since the route reads the type off the extension.
-  let sourceBytes: number | undefined;
-  if (req.source !== undefined && sourceKind !== undefined) {
-    const data = readFileSync(req.source);
-    sourceBytes = data.length;
-    form.append(
-      "source",
-      new Blob([data], { type: sourceKind === "zip" ? "application/zip" : "application/gzip" }),
-      sourceKind === "zip" ? "source.zip" : "source.tar.gz",
-    );
-  }
+  // Where the build came from, so the platform tells a build published from
+  // code from one uploaded by hand. The build's `name` stays what it was.
+  const description = req.description ?? staticBuildDescription(process.cwd());
+  const sourceData = req.source !== undefined && sourceKind !== undefined ? readFileSync(req.source) : undefined;
+  const sourceBytes = sourceData?.length;
+  // A fresh form per attempt: a site the project names is created and the
+  // build sent again, and a body is read once.
+  const buildForm = (): FormData => {
+    const form = new FormData();
+    form.append("name", "xanosdk-deploy");
+    form.append("description", description);
+    form.append("routing", routing);
+    form.append("file", new Blob([archive], { type: "application/gzip" }), "build.tar.gz");
+    // Only when asked for: without it the request is the one it always was. Named
+    // by kind, as the build is, since the route reads the type off the extension.
+    if (sourceData !== undefined) {
+      form.append(
+        "source",
+        new Blob([sourceData], { type: sourceKind === "zip" ? "application/zip" : "application/gzip" }),
+        sourceKind === "zip" ? "source.zip" : "source.tar.gz",
+      );
+    }
+    return form;
+  };
 
   // A dropped connection names the host and the reason, never a bare
   // `fetch failed` — and never the route. A write, so either drop says what it
   // means for the build: a connection refused sent nothing; one lost after it
   // was sent (at connect or mid-answer) may or may not have published.
-  const res = await fetchOrExplain(
-    url,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${req.accessToken}` },
-      body: form,
-      signal: AbortSignal.timeout(STATIC_TIMEOUT_MS),
-    },
-    "Static-host build",
-    STATIC_TIMEOUT_MS,
-  ).catch((err: unknown) => {
-    throw writeTransportFailure(err);
-  });
-  const text = await res.text().catch((err: unknown) => {
-    throw writeTransportFailure(err);
-  });
+  const send = async (): Promise<{ res: Response; text: string }> => {
+    const res = await fetchOrExplain(
+      url,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${req.accessToken}` },
+        body: buildForm(),
+        signal: AbortSignal.timeout(STATIC_TIMEOUT_MS),
+      },
+      "Static-host build",
+      STATIC_TIMEOUT_MS,
+    ).catch((err: unknown) => {
+      throw writeTransportFailure(err);
+    });
+    const text = await res.text().catch((err: unknown) => {
+      throw writeTransportFailure(err);
+    });
+    return { res, text };
+  };
+  let { res, text } = await send();
+  let created = false;
+  if (!res.ok && req.createHost === true && serverMessage(text) === "Invalid host") {
+    // The site the project names is not there yet: create it, then publish.
+    await createStaticHost(req, host);
+    created = true;
+    ({ res, text } = await send());
+  }
   if (!res.ok) {
     // The build route answers a host NAME it does not hold with a bare 500
     // "Invalid host" — it auto-creates only `default`. That is a name that is
@@ -704,6 +742,7 @@ export async function deployStaticHost(req: StaticHostRequest): Promise<StaticHo
     ...(hidden.length > 0 ? { hiddenUnserved: hidden } : {}),
     ...(links.length > 0 ? { skippedLinks: links } : {}),
     ...(sourceBytes === undefined ? {} : { sourceBytes }),
+    ...(created ? { createdHost: true as const } : {}),
     raw: text,
   };
 }
@@ -814,4 +853,121 @@ export async function listServingStaticHosts(req: StaticHostReadTarget): Promise
     }
   }
   return serving;
+}
+
+/**
+ * Create a static host (a site) named `name` on the target:
+ * `POST /api:meta/workspace/{id}/static_host` with `{ name, description }`, the
+ * route the dashboard's "add static host" uses. A name the target already
+ * holds (a concurrent publish got there first) is not a failure: the site
+ * exists, which is all the caller needs.
+ */
+export async function createStaticHost(req: StaticHostReadTarget, name: string, description = ""): Promise<void> {
+  const url = `${req.baseUrl.replace(/\/$/, "")}/api:meta/workspace/${req.workspaceId}/static_host`;
+  const res = await fetchOrExplain(
+    url,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${req.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description }),
+      signal: AbortSignal.timeout(STATIC_READ_TIMEOUT_MS),
+    },
+    `Creating the site "${name}"`,
+    STATIC_READ_TIMEOUT_MS,
+  ).catch((err: unknown) => {
+    throw writeTransportFailure(err);
+  });
+  const text = await res.text().catch((err: unknown) => {
+    throw writeTransportFailure(err);
+  });
+  if (res.ok) return;
+  if (/already being used/i.test(serverMessage(text) ?? "")) return;
+  throw Object.assign(new Error(httpFailure(`Creating the site "${name}"`, res, text)), { status: res.status });
+}
+
+/** One environment of a site, as the Metadata API reports it. */
+export interface StaticHostEnvRow {
+  /** The address Xano gives it (`https://…`), once a build was deployed to it. */
+  defaultUrl: string | undefined;
+  /** The custom domain it answers at, when one is set. */
+  customUrl: string | undefined;
+  /** The canonical of the build it serves. */
+  canonical: string | undefined;
+  mode: string | undefined;
+}
+
+/** A site (static host) of a workspace, as the Metadata API reports it. */
+export interface StaticHostRow {
+  name: string;
+  description: string | undefined;
+  dev: StaticHostEnvRow;
+  prod: StaticHostEnvRow;
+  /** The repository the site builds from, when the API reports one. */
+  repo: string | undefined;
+}
+
+function textOf(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+function envRow(value: unknown): StaticHostEnvRow {
+  const env = (value !== null && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return {
+    defaultUrl: textOf(env.default_url),
+    customUrl: textOf(env.custom_url),
+    canonical: textOf(env.canonical),
+    mode: textOf(env.mode),
+  };
+}
+
+/** Every site of a workspace, with each environment's addresses and served build. Throws when the read fails. */
+export async function listStaticHosts(req: StaticHostReadTarget): Promise<StaticHostRow[]> {
+  return (await readStaticHostRows(req))
+    .filter((r) => typeof r.name === "string" && r.name !== "")
+    .map((r) => {
+      const git = (r.git !== null && typeof r.git === "object" ? r.git : {}) as Record<string, unknown>;
+      return {
+        name: r.name as string,
+        description: textOf(r.description),
+        dev: envRow(r.dev),
+        prod: envRow(r.prod),
+        repo: textOf(git.repo),
+      };
+    });
+}
+
+/** One build of a site, as the Metadata API lists it. */
+export interface StaticHostBuildRow {
+  id: number | undefined;
+  name: string | undefined;
+  description: string | undefined;
+  canonical: string | undefined;
+  createdAt: number | string | undefined;
+}
+
+/**
+ * A site's most recent builds (one page, newest first):
+ * `GET /api:meta/workspace/{id}/static_host/{name}/build`. Throws when the read fails.
+ */
+export async function listStaticHostBuilds(req: StaticHostReadTarget, name: string): Promise<StaticHostBuildRow[]> {
+  const url = `${req.baseUrl.replace(/\/$/, "")}/api:meta/workspace/${req.workspaceId}/static_host/${encodeURIComponent(name)}/build?page=1`;
+  const res = await fetchOrExplain(
+    url,
+    { headers: { Authorization: `Bearer ${req.accessToken}` }, signal: AbortSignal.timeout(STATIC_READ_TIMEOUT_MS) },
+    "Reading a site's builds",
+    STATIC_READ_TIMEOUT_MS,
+  );
+  const text = await res.text();
+  if (!res.ok) throw new Error(httpFailure("Reading a site's builds", res, text));
+  const parsed = (parseJsonAnswer(text, "Reading a site's builds", url) ?? {}) as { items?: unknown };
+  if (!Array.isArray(parsed.items)) throw new Error("Reading a site's builds: the answer carried no list.");
+  return parsed.items
+    .filter((i): i is Record<string, unknown> => i !== null && typeof i === "object")
+    .map((i) => ({
+      id: typeof i.id === "number" ? i.id : undefined,
+      name: textOf(i.name),
+      description: textOf(i.description),
+      canonical: textOf(i.canonical),
+      createdAt: typeof i.created_at === "number" || typeof i.created_at === "string" ? i.created_at : undefined,
+    }));
 }

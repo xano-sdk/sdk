@@ -71,6 +71,12 @@ npx @xano/sdk publish ./frontend/dist --to ephemeral   # …or onto an ephemeral
 npx @xano/sdk deploy ./xano/index.ts --static ./frontend/dist   # on the Xano Engine, the engine serves the build at http://<prefix>.localhost:<port>
 npx @xano/sdk publish ./frontend/dist --to workspace --branch v2 --yes   # …onto the workspace, refused unless branch v2 is live
 npx @xano/sdk publish ./frontend/dist --to workspace --static-source ./app-source.tar.gz --yes   # …with the app's source archive kept beside the build
+npx @xano/sdk site list                    # the workspace's sites: addresses, Dev and Prod, the build each serves, which one this project names (--on <backend>)
+npx @xano/sdk site use shop --create       # name the site this project publishes to (package.json "staticHost"); --create makes it when missing
+npx @xano/sdk publish                      # frontend/<site>/ per site: build every app and publish each to its site (--site shop for one)
+npx @xano/sdk frontend list --json         # { layout: flat|nested|none, apps: [{ dir, site }] } — the same answer as frontendApps() in @xano/sdk/node
+npx @xano/sdk frontend split               # move a one-app frontend/ into frontend/<site>/; undone if the moved app does not build
+XANO_PUBLISHED_FROM="Xano Studio" npx @xano/sdk publish ./frontend/dist   # a build's description: "Published from Xano Studio · commit a119141"
 npx @xano/sdk deploy ./xano/index.ts --local   # the default, spelled out: the Xano Engine on this machine (runs the version pinned in package.json)
 npx @xano/sdk deploy ./xano/index.ts --local=~/Downloads/engine.tar.gz   # override: run this archive, URL or version (v0.1.8), never touching the pin
 XANOSDK_ENGINE_OVERRIDE=v0.1.8 npm run xano:deploy   # the same override for every deploy in the shell

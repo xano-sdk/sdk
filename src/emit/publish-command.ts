@@ -73,6 +73,8 @@ import {
   warnSecretLookingStaticEnv,
   withheldNote,
   type StaticEnvReport,
+  type StaticPublishSummary,
+  type StaticSitePublish,
 } from "./deploy-command.js";
 import { EXIT_OUTCOME_UNKNOWN } from "./operation-registry.js";
 import { SENT_AFTERMATH } from "../util/http.js";
@@ -158,6 +160,19 @@ export interface PublishSummary {
    */
   source?: { bytes: number };
   /**
+   * The site the build went to when the project named it — its `staticHost`
+   * line, or the nested app's folder the build sits in. Absent for a typed
+   * `--static-host` and for `default` when nothing names a site.
+   */
+  site?: string;
+  /** The site did not exist on the target, and this publish created it. */
+  createdSite?: true;
+  /**
+   * A nested frontend (`frontend/<site>/`): each app's publish, in folder
+   * order. The top-level `url`, `canonical` and `routing` are the first app's.
+   */
+  sites?: StaticSitePublish[];
+  /**
    * Every warning the run printed, which did not stop it — a `--static-env` key
    * that looks like a secret (`static-env.secret-like`), an `index.html` that
    * loads TypeScript/JSX source (`publish.unbuilt-source`). Merged in by the
@@ -230,6 +245,17 @@ function unbuiltSourceWarning(dir: string): string | undefined {
 
 export async function runPublishCommand(args: ParsedArgs): Promise<void> {
   const dir = args.positionals[0];
+  // A nested frontend (`frontend/<site>/`) publishes every app — or `--site`'s —
+  // when the run names the frontend as a whole: no directory, or `frontend`.
+  {
+    const { frontendApps } = await import("./frontend-apps.js");
+    const { isFrontendRoot } = await import("./static-sites.js");
+    const whole = dir === undefined || dir === "" || isFrontendRoot(process.cwd(), dir);
+    if (whole && frontendApps(process.cwd()).layout === "nested") {
+      await publishSites(args, dir === undefined || dir === "" ? "frontend" : dir);
+      return;
+    }
+  }
   if (dir === undefined || dir === "") {
     throw new UsageError(
       "`xanosdk publish` needs the directory of a built frontend, e.g. `xanosdk publish ./frontend/dist`. " +
@@ -273,6 +299,12 @@ export async function runPublishCommand(args: ParsedArgs): Promise<void> {
   warnSecretLookingStaticEnv(args.staticEnv);
   // A source archive that cannot be sent, refused as the directory is: before auth.
   refuseBadStaticSource(args.staticSource, "publish", "Nothing was uploaded.");
+  // The site the project names (its `staticHost` line, or the nested app's
+  // folder the build sits in): today's run exactly when it names none.
+  {
+    const { prepareStaticPlan } = await import("./static-sites.js");
+    args = await prepareStaticPlan(args, "publish", dir);
+  }
   // `--to`, or bare: the backend this project last deployed to, through the one
   // tracked-backend resolver — a Xano Engine included, so a bare publish
   // after a local deploy lands on that engine.
@@ -289,6 +321,23 @@ export async function runPublishCommand(args: ParsedArgs): Promise<void> {
     warn(unbuilt, "publish.unbuilt-source");
   }
   await publishChecked(args, dir, dest, credential);
+}
+
+/**
+ * `publish` on a nested frontend: build every app (or `--site`'s) in its
+ * folder, then publish each to the site it is named for — one confirmation,
+ * one document. Refusals run in the single build's order: the directory and
+ * flags first, the builds before sign-in, the upload cap before the prompt.
+ */
+async function publishSites(args: ParsedArgs, label: string): Promise<void> {
+  warnSecretLookingStaticEnv(args.staticEnv);
+  refuseBadStaticSource(args.staticSource, "publish", "Nothing was uploaded.");
+  const { prepareStaticPlan } = await import("./static-sites.js");
+  args = await prepareStaticPlan(args, "publish", undefined);
+  const slot = requireBackendSlot("publish", undefined, "to");
+  const credential = memoCredential(() => getAccessToken(args));
+  const dest = await selectBackend(slot, args.to, { credential });
+  await publishChecked(args, label, dest, credential);
 }
 
 /**
@@ -325,13 +374,23 @@ async function publishChecked(
   // never be published, so a confirmation for it would be asked for nothing.
   {
     const { assertStaticDir, StaticDirError } = await import("../deploy/static-host.js");
+    const { staticDirsOf } = await import("./static-sites.js");
     try {
-      assertStaticDir(dir);
+      // A nested frontend's every app build; else the one directory.
+      const dirs = staticDirsOf({ static: dir, staticApps: args.staticApps });
+      for (const one of dirs) assertStaticDir(one);
     } catch (err) {
       if (err instanceof StaticDirError) throw new UsageError(`${err.message} Nothing was uploaded.`, HINT);
       throw err;
     }
   }
+  const { staticUpload, publishedSite } = await import("./static-sites.js");
+  const upload = staticUpload(args);
+  const sites = args.staticApps?.map((a) => a.site);
+  // `(host: x)` for a site other than the default one, typed or named by the
+  // project; a nested frontend's sites listed.
+  const hostNote =
+    sites !== undefined ? ` (sites: ${sites.join(", ")})` : upload.host !== undefined ? ` (host: ${upload.host})` : "";
   if (dest.kind === "local") {
     await publishToLocalEngine(args, dir, dest, credential);
     return;
@@ -418,7 +477,7 @@ async function publishChecked(
   // Headline first, then where it lands — the order `deploy --to`, `tenant
   // deploy` and `promote` print in. The disclosure alone used to open the
   // output, reading as the tail of whatever the terminal showed before.
-  step(`Publishing ${dir} → ${named}${args.staticHost !== undefined ? ` (host: ${args.staticHost})` : ""}`);
+  step(`Publishing ${dir} → ${named}${hostNote}`);
   // The host line only: the headline already named the target, display name
   // and all, and saying it again under itself is noise.
   discloseWriteTarget({ ...destination, label: undefined });
@@ -447,15 +506,19 @@ async function publishChecked(
     // served by …" about a host that serves none asked about one that does not
     // exist. An unread answer keeps the replace wording — the careful one.
     const { listServingStaticHosts } = await import("../deploy/static-host.js");
-    const host = args.staticHost ?? "default";
+    const hosts = sites ?? [publishedSite(args)];
     const servesNone = await listServingStaticHosts({ baseUrl: base, workspaceId, accessToken: auth.access_token }).then(
-      (serving) => !serving.some((s) => s.host === host),
+      (serving) => !serving.some((s) => hosts.includes(s.host)),
       () => false,
     );
     const ok = await confirm(
-      servesNone
-        ? `Publish a frontend to ${named} (it has none yet) from ${dir}?`
-        : `Replace the frontend served by ${named} with ${dir}?`,
+      sites !== undefined
+        ? servesNone
+          ? `Publish ${dir}'s ${sites.length === 1 ? "site" : "sites"} ${sites.join(", ")} to ${named} (${sites.length === 1 ? "it serves" : "they serve"} no frontend yet)?`
+          : `Replace the frontends served by the ${sites.length === 1 ? "site" : "sites"} ${sites.join(", ")} on ${named} with ${dir}'s apps?`
+        : servesNone
+          ? `Publish a frontend to ${named} (it has none yet) from ${dir}?`
+          : `Replace the frontend served by ${named} with ${dir}?`,
       { flag: "--yes", refusal: { details: { uploaded: false }, ...yesRerun(args, "publish") } },
     );
     if (!ok) {
@@ -488,11 +551,11 @@ async function publishChecked(
     { baseUrl: base, workspaceId, label: destination.label, announced: true },
     env,
     Object.keys(args.staticEnv).length > 0,
-    args.staticHost,
+    upload.host,
     args.skipLiveness,
     args.staticRouting,
     undefined,
-    { rerun: publishRerun(args, dir).command, source: args.staticSource },
+    { rerun: publishRerun(args, dir).command, source: args.staticSource, ...upload.opts },
   ).catch((err: unknown) => {
     throw uploadOutcomeUnknown(err, args, dir);
   });
@@ -524,6 +587,7 @@ async function publishChecked(
       ...(published.routing !== undefined ? { routing: published.routing } : {}),
       ...(published.staticEnv !== undefined ? { staticEnv: published.staticEnv } : {}),
       ...(published.source !== undefined ? { source: published.source } : {}),
+      ...siteFields(published),
     };
     writeJson(summary);
     return;
@@ -568,7 +632,13 @@ async function publishToLocalEngine(
   const { base, workspaceId } = resolved.target;
   const named = describeBackend(resolved);
   const where = { kind: "local", url: base, workspaceId } as const;
-  step(`Publishing ${dir} → ${named}${args.staticHost !== undefined ? ` (host: ${args.staticHost})` : ""}`);
+  const { staticUpload } = await import("./static-sites.js");
+  const upload = staticUpload(args);
+  const sites = args.staticApps?.map((a) => a.site);
+  step(
+    `Publishing ${dir} → ${named}` +
+      (sites !== undefined ? ` (sites: ${sites.join(", ")})` : upload.host !== undefined ? ` (host: ${upload.host})` : ""),
+  );
   discloseWriteTarget(where);
 
   const published = await deployStaticTo(
@@ -577,12 +647,12 @@ async function publishToLocalEngine(
     { baseUrl: base, workspaceId, label: named, announced: true },
     buildStaticEnv(base, args.staticEnv),
     Object.keys(args.staticEnv).length > 0,
-    args.staticHost,
+    upload.host,
     // Nothing to wait for: the engine serves the build once the upload returns.
     true,
     args.staticRouting,
     undefined,
-    { serverRendered: true, rerun: publishRerun(args, dir).command, source: args.staticSource },
+    { serverRendered: true, rerun: publishRerun(args, dir).command, source: args.staticSource, ...upload.opts },
   ).catch((err: unknown) => {
     if ((err as { status?: unknown }).status === 501) {
       throw new Error(
@@ -617,9 +687,19 @@ async function publishToLocalEngine(
       ...(published.routing !== undefined ? { routing: published.routing } : {}),
       ...(published.staticEnv !== undefined ? { staticEnv: published.staticEnv } : {}),
       ...(published.source !== undefined ? { source: published.source } : {}),
+      ...siteFields(published),
     };
     writeJson(summary);
     return;
   }
   detail("Not scanned for non-public seed values — publish holds no seed rows. `deploy --static` runs that scan.");
+}
+
+/** The `site`/`createdSite`/`sites` a publish document carries, when the project named its site(s). */
+function siteFields(published: StaticPublishSummary): Pick<PublishSummary, "site" | "createdSite" | "sites"> {
+  return {
+    ...(published.site !== undefined ? { site: published.site } : {}),
+    ...(published.createdSite === true ? { createdSite: true as const } : {}),
+    ...(published.sites !== undefined ? { sites: published.sites } : {}),
+  };
 }

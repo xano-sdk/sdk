@@ -371,6 +371,11 @@ export const FLAGS = {
     summary: "Write a generated route + socket module there (plain data, no SDK import; `-` is stdout)",
   },
   "static-host": { spec: "--static-host <name>", summary: "Static-host name to deploy to (default: default)" },
+  site: {
+    spec: "--site <name>",
+    summary: "On a frontend with one app per site (frontend/<site>/), publish only this site's app (default: every app)",
+  },
+  create: { spec: "--create", summary: "Create the site on the target when it has none by that name" },
   "static-source": {
     spec: "--static-source <archive>",
     summary:
@@ -721,6 +726,13 @@ const TEST_ON: FlagRef = {
   key: "on",
   summary: "Run on this backend instead of the one this project last deployed to",
   selector: { accepted: BACKEND, role: "on", default: "tracked" },
+};
+
+/** `site list`/`site use`: whose sites. Sites are the workspace's, so that is the default. */
+const SITE_ON: FlagRef = {
+  key: "on",
+  summary: "Read this backend's sites instead of your workspace's",
+  selector: { accepted: BACKEND, role: "on", default: "none" },
 };
 
 /** `test list` runs nothing: its `--on` says where it reads the suite from. */
@@ -1193,7 +1205,14 @@ export const COMMANDS = {
       "yes",
       "bundle",
       "static",
-      { key: "static-host", summary: "With --static: static-host name to deploy to (default: default)" },
+      {
+        key: "static-host",
+        summary: "With --static: static-host name to deploy to (default: the site package.json names, else default)",
+      },
+      {
+        key: "site",
+        summary: "With --static frontend on a frontend with one app per site (frontend/<site>/): publish only this site's app",
+      },
       { key: "static-routing", summary: "With --static: override URL resolution (inferred from the bundle; rarely needed)" },
       {
         key: "static-source",
@@ -1492,9 +1511,13 @@ export const COMMANDS = {
   },
   publish: {
     group: "Deploy",
-    display: "publish <dir>",
-    summary: "Publish an already-built frontend to a static host — no compile, no backend import",
-    args: [{ name: "dir", required: true, path: true }],
+    display: "publish [dir]",
+    summary:
+      "Publish an already-built frontend to a static host — no compile, no backend import. On a frontend with one app per site (frontend/<site>/), bare `publish` builds and publishes every app to its site",
+    // Optional only for a frontend with one app per site, which publishes as a
+    // whole; anywhere else a bare `publish` is refused, as before, naming the
+    // directory it needs.
+    args: [{ name: "dir", required: false, path: true }],
     // The destination's own base URL is injected as `window.XANO_HOST`, so the
     // SAME build published to two destinations serves two different documents.
     flags: [
@@ -1514,7 +1537,8 @@ export const COMMANDS = {
           "Refuse unless this branch is live on your workspace — the check that the frontend lands in front of the backend it was built for (--to workspace only)",
       },
       "static-env",
-      "static-host",
+      { key: "static-host", summary: "Static-host name to publish to (default: the site package.json names, else default)" },
+      "site",
       "static-routing",
       "static-source",
       "skip-liveness",
@@ -1522,6 +1546,45 @@ export const COMMANDS = {
       ...AUTH,
     ],
     example: "xanosdk publish ./frontend/dist --to workspace --release v2 --branch v2-20260922T120000Z",
+  },
+  site: {
+    group: "Deploy",
+    display: "site <list|use>",
+    summary:
+      "The sites (static hosts) your frontend publishes to, and the one this project names in package.json (`xanosdk.@xano/sdk.staticHost`)",
+    subcommands: {
+      list: {
+        summary:
+          "List the workspace's sites: each one's addresses, Dev and Prod when it has both, the build each serves, and which one this project names",
+        flags: [SITE_ON, ...AUTH],
+        example: "xanosdk site list",
+      },
+      use: {
+        summary:
+          "Name the site this project publishes to: writes `staticHost` in package.json, the default for `publish` and `deploy --static`. Refuses a site the workspace does not have unless --create",
+        args: [{ name: "name", required: true }],
+        flags: [{ key: "create", summary: "Create the site when the workspace has none by that name" }, SITE_ON, ...AUTH],
+        example: "xanosdk site use shop --create",
+      },
+    },
+  },
+  frontend: {
+    group: "Author",
+    display: "frontend <list|split>",
+    summary: "The apps under frontend/ and the site each publishes to: one app (frontend/) or one per site (frontend/<site>/)",
+    subcommands: {
+      list: {
+        summary:
+          "List the frontend's apps and the site each publishes to — `flat` (frontend/ is one app), `nested` (one per site folder) or `none`",
+        example: "xanosdk frontend list --json",
+      },
+      split: {
+        summary:
+          "Move a one-app frontend into frontend/<site>/ so more sites can sit beside it: updates package.json scripts that name frontend/, drops the staticHost line, then builds the moved app — and puts everything back if that build fails",
+        flags: [{ key: "site", summary: "The site the moved app publishes to (default: the one package.json names, else default)" }],
+        example: "xanosdk frontend split",
+      },
+    },
   },
   tenant: {
     group: "Environments",

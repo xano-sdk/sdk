@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.27",
+  "version": "1.0.28",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -9758,7 +9758,11 @@
         },
         {
           "flag": "--static-host <name>",
-          "description": "With --static: static-host name to deploy to (default: default)"
+          "description": "With --static: static-host name to deploy to (default: the site package.json names, else default)"
+        },
+        {
+          "flag": "--site <name>",
+          "description": "With --static frontend on a frontend with one app per site (frontend/<site>/): publish only this site's app"
         },
         {
           "flag": "--static-routing spa|multipage",
@@ -10212,6 +10216,20 @@
         }
       ],
       "description": "Compile and write the deployable JSON bundle"
+    },
+    {
+      "command": "frontend list",
+      "description": "List the frontend's apps and the site each publishes to — `flat` (frontend/ is one app), `nested` (one per site folder) or `none`"
+    },
+    {
+      "command": "frontend split",
+      "flags": [
+        {
+          "flag": "--site <name>",
+          "description": "The site the moved app publishes to (default: the one package.json names, else default)"
+        }
+      ],
+      "description": "Move a one-app frontend into frontend/<site>/ so more sites can sit beside it: updates package.json scripts that name frontend/, drops the staticHost line, then builds the moved app — and puts everything back if that build fails"
     },
     {
       "command": "generate",
@@ -11005,7 +11023,7 @@
     },
     {
       "command": "publish",
-      "args": "<dir>",
+      "args": "[dir]",
       "flags": [
         {
           "flag": "--to <destination>",
@@ -11030,7 +11048,11 @@
         },
         {
           "flag": "--static-host <name>",
-          "description": "Static-host name to deploy to (default: default)"
+          "description": "Static-host name to publish to (default: the site package.json names, else default)"
+        },
+        {
+          "flag": "--site <name>",
+          "description": "On a frontend with one app per site (frontend/<site>/), publish only this site's app (default: every app)"
         },
         {
           "flag": "--static-routing spa|multipage",
@@ -11078,7 +11100,7 @@
           ]
         }
       ],
-      "description": "Publish an already-built frontend to a static host — no compile, no backend import"
+      "description": "Publish an already-built frontend to a static host — no compile, no backend import. On a frontend with one app per site (frontend/<site>/), bare `publish` builds and publishes every app to its site"
     },
     {
       "command": "pull",
@@ -11376,6 +11398,91 @@
         }
       ],
       "description": "Mint a token for every documentation gate that has none (never replaces one)"
+    },
+    {
+      "command": "site list",
+      "flags": [
+        {
+          "flag": "--on <backend>",
+          "description": "Read this backend's sites instead of your workspace's: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
+          "examples": [
+            "workspace",
+            "ephemeral",
+            "local"
+          ]
+        },
+        {
+          "flag": "--origin <origin>",
+          "description": "Xano OAuth host for `login` and a XANO_REFRESH_TOKEN exchange (default: $XANO_ORIGIN)"
+        },
+        {
+          "flag": "--config <path>",
+          "description": "Explicit credential file (default: $XANO_CONFIG)"
+        },
+        {
+          "flag": "--local-auth",
+          "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
+        }
+      ],
+      "selectors": [
+        {
+          "slot": "--on",
+          "role": "on",
+          "default": "none",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
+          "values": [
+            "workspace",
+            "ephemeral",
+            "local"
+          ]
+        }
+      ],
+      "description": "List the workspace's sites: each one's addresses, Dev and Prod when it has both, the build each serves, and which one this project names"
+    },
+    {
+      "command": "site use",
+      "args": "<name>",
+      "flags": [
+        {
+          "flag": "--create",
+          "description": "Create the site when the workspace has none by that name"
+        },
+        {
+          "flag": "--on <backend>",
+          "description": "Read this backend's sites instead of your workspace's: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
+          "examples": [
+            "workspace",
+            "ephemeral",
+            "local"
+          ]
+        },
+        {
+          "flag": "--origin <origin>",
+          "description": "Xano OAuth host for `login` and a XANO_REFRESH_TOKEN exchange (default: $XANO_ORIGIN)"
+        },
+        {
+          "flag": "--config <path>",
+          "description": "Explicit credential file (default: $XANO_CONFIG)"
+        },
+        {
+          "flag": "--local-auth",
+          "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
+        }
+      ],
+      "selectors": [
+        {
+          "slot": "--on",
+          "role": "on",
+          "default": "none",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
+          "values": [
+            "workspace",
+            "ephemeral",
+            "local"
+          ]
+        }
+      ],
+      "description": "Name the site this project publishes to: writes `staticHost` in package.json, the default for `publish` and `deploy --static`. Refuses a site the workspace does not have unless --create"
     },
     {
       "command": "status",

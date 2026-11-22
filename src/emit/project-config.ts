@@ -253,9 +253,21 @@ export function composeToolchainConfig(
   raw: string,
   block: Readonly<Record<string, unknown>>,
 ): string {
+  return composeManifest(raw, (manifest) => {
+    if (Object.keys(block).length === 0) delete manifest["xanosdk"];
+    else manifest["xanosdk"] = block;
+  });
+}
+
+/**
+ * Compose the next `package.json` text after `mutate` edits the parsed
+ * manifest in place, keeping what {@link composeToolchainConfig} keeps: key
+ * order, the indent the file uses, its trailing newline and its line endings.
+ * Pure; the caller writes it.
+ */
+export function composeManifest(raw: string, mutate: (manifest: Record<string, unknown>) => void): string {
   const manifest = JSON.parse(raw) as Record<string, unknown>;
-  if (Object.keys(block).length === 0) delete manifest["xanosdk"];
-  else manifest["xanosdk"] = block;
+  mutate(manifest);
   const trailing = /(?:\r?\n)*$/.exec(raw)?.[0] ?? "";
   const next =
     JSON.stringify(manifest, null, detectIndent(raw)) +

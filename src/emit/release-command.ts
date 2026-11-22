@@ -3969,7 +3969,8 @@ export async function runReleaseCommand(
   // into a public static bundle.
   if (args.static !== undefined) {
     const { assertNoSeedLeaks } = await import("./deploy-command.js");
-    await assertNoSeedLeaks(args.static, nonPublicSeedValues);
+    const { staticDirsOf } = await import("./static-sites.js");
+    for (const dir of staticDirsOf(args)) await assertNoSeedLeaks(dir, nonPublicSeedValues);
   }
 
   // The derived-artifact hooks: after the compile, before the destination is
@@ -5139,6 +5140,8 @@ export async function runReleaseCommand(
     const { noteLanded } = await import("../util/sent-writes.js");
     const backendLabel = destNoun;
     noteLanded({ said: upToDate ? `The backend on ${backendLabel} was already up to date.` : `Deployed to ${backendLabel}.` });
+    const { staticUpload } = await import("./static-sites.js");
+    const upload = staticUpload(args);
     try {
       summary.static = await deployStaticTo(
         args.static,
@@ -5148,11 +5151,11 @@ export async function runReleaseCommand(
         { baseUrl: destBase, workspaceId, label: destTenantLabel },
         env,
         explicit,
-        args.staticHost,
+        upload.host,
         args.skipLiveness,
         args.staticRouting,
         undefined,
-        { rerun: staticRetryCommand(args.static, to, args, undefined), source: args.staticSource },
+        { rerun: staticRetryCommand(args.static, to, args, undefined), source: args.staticSource, ...upload.opts },
       );
     } catch (err) {
       // The backend has landed by now, so this is plain `deploy --static`'s
@@ -5182,7 +5185,7 @@ export async function runReleaseCommand(
     }
   }
   // Only when the replace was sent: a converged run imported nothing.
-  if (!upToDate) Object.assign(summary, staticRemovedField(staticRead?.teardown, summary.static?.url));
+  if (!upToDate) Object.assign(summary, staticRemovedField(staticRead?.teardown, summary.static));
 
   if (isMachineOutput(args)) writeJson(summary);
 }

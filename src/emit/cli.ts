@@ -39,6 +39,7 @@
  */
 import { writeData } from "../util/secrets.js";
 import type { AiBilling } from "../deploy/local-engine-ai.js";
+import type { StaticAppBuild } from "./static-sites.js";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { andList } from "../util/and-list.js";
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
@@ -417,6 +418,27 @@ export interface ParsedArgs {
    * the one it always was.
    */
   staticSource: string | undefined;
+  /**
+   * `publish --site <name>` / `deploy --static … --site <name>`: on a project
+   * whose `frontend/` holds one app per site (`frontend/<site>/`), publish only
+   * this site's app. Unset, every app is published. `frontend split --site`
+   * names the site the moved app takes.
+   */
+  site?: string | undefined;
+  /** `site use <name> --create`: create the site on the target when it does not have one by that name. */
+  create?: boolean;
+  /**
+   * Not parsed: filled in by `prepareStaticPlan` (`static-sites.ts`) before a
+   * static publish. The site the project's `staticHost` line names, used when
+   * no `--static-host` is typed. Unset when there is no line, or the publish is
+   * a nested project's (each app names its own site).
+   */
+  staticLineHost?: string | undefined;
+  /**
+   * Not parsed: filled in by `prepareStaticPlan` for a nested project — every
+   * app to publish, built, each with the site it publishes to.
+   */
+  staticApps?: readonly StaticAppBuild[] | undefined;
   /** `--origin <origin>`: Xano control-plane OAuth host. Default: $XANO_ORIGIN, then https://app.xano.com. */
   authHost: string | undefined;
   /** `--config <path>`: explicit credential file. Default: $XANO_CONFIG, then ./.xano/auth.json. */
@@ -840,6 +862,8 @@ const NOUN_COMMANDS = new Set([
   "release",
   "tenant",
   "agent-skill",
+  "site",
+  "frontend",
 ]);
 
 /**
@@ -1080,6 +1104,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let staticHost: string | undefined;
   let staticRouting: "spa" | "multipage" | undefined;
   let staticSource: string | undefined;
+  let site: string | undefined;
+  let create = false;
   // Null-prototype maps: a user-chosen key lands as a key. On a plain `{}`,
   // `m["__proto__"] = v` is a prototype set, not a store — the pair vanished.
   const staticEnv = Object.create(null) as Record<string, string>;
@@ -1543,6 +1569,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
       staticSource = requireValue(arg);
     } else if (arg.startsWith("--static-source=")) {
       staticSource = attachedValue(arg, "--static-source=");
+    } else if (arg === "--site") {
+      site = requireValue(arg);
+    } else if (arg.startsWith("--site=")) {
+      site = attachedValue(arg, "--site=");
+    } else if (arg === "--create") {
+      create = true;
     } else if (arg === "--static") {
       staticDir = requireValue(arg);
     } else if (arg.startsWith("--static=")) {
@@ -2336,6 +2368,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     release,
     staticRouting,
     staticSource,
+    ...(site === undefined ? {} : { site }),
+    ...(create ? { create } : {}),
     staticEnv,
     envVars,
     envFile,
@@ -4596,6 +4630,15 @@ async function dispatch(rawArgv: string[]): Promise<void> {
   if (command === "publish") {
     const { runPublishCommand } = await import("./publish-command.js");
     return atProjectRoot(args, runPublishCommand, "path");
+  }
+  if (command === "site") {
+    // Node-only (fetch + OAuth + package.json); lazily imported like its siblings.
+    const { runSiteCommand } = await import("./site-command.js");
+    return atProjectRoot(args, runSiteCommand);
+  }
+  if (command === "frontend") {
+    const { runFrontendCommand } = await import("./frontend-command.js");
+    return atProjectRoot(args, runFrontendCommand);
   }
   if (command === "tenant") {
     const { runTenantCommand } = await import("./tenant-command.js");
