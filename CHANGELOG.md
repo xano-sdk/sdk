@@ -8,6 +8,18 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.28 — A project names its site
+
+_2026-11-22_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.28)
+
+A project can now say which site its frontend publishes to, and a project can hold one app per site. Every build also records where it came from, so tools can tell your code from an upload in the dashboard.
+
+- A project names its site in package.json
+- One app per site with frontend/<site>/
+- Every build says where it came from
+
+---
+
 ## 1.0.27 — Keep the source with a static publish
 
 _2026-11-21_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.27)

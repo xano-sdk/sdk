@@ -9,8 +9,12 @@
  *
  * `<from>` is {@link PUBLISHED_FROM_ENV} when it is set (Xano Studio sets
  * "Xano Studio" on every process it starts), else "the CLI". The commit is
- * the checkout's `HEAD`, short; a tree with uncommitted changes says so,
- * because the build then holds code no commit does.
+ * the checkout's `HEAD`, short; a tree whose TRACKED files differ from it
+ * says so, because the build then holds code no commit does. Untracked and
+ * ignored files never count (DEV-10045): a publisher's scratch copy carries
+ * its own links and installed packages beside the commit (Xano Studio's has
+ * `node_modules` and `.xano-studio/` links), and those are not code the
+ * commit lacks.
  *
  * Node-only (it runs `git`). Never throws: a checkout git cannot read is
  * described as outside one.
@@ -27,7 +31,7 @@ export const DEFAULT_PUBLISHED_FROM = "the CLI";
 export interface GitState {
   /** `HEAD`, abbreviated to seven characters. */
   sha7: string;
-  /** Whether the working tree has uncommitted changes (tracked or untracked). */
+  /** Whether a tracked file differs from `HEAD` (staged or not); untracked files never count. */
   dirty: boolean;
 }
 
@@ -38,7 +42,8 @@ export function readGitState(cwd: string): GitState | undefined {
   try {
     const sha = git("rev-parse", "--verify", "HEAD");
     if (!/^[0-9a-f]{7,}$/.test(sha)) return undefined;
-    const status = git("status", "--porcelain");
+    // Tracked modifications only: an untracked or ignored file is not code the commit lacks.
+    const status = git("status", "--porcelain", "--untracked-files=no");
     return { sha7: sha.slice(0, 7), dirty: status !== "" };
   } catch {
     return undefined;
