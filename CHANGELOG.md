@@ -8,6 +8,23 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.30 — Sites travel with the project
+
+_2026-11-24_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.30)
+
+Sites now travel with the project. A pull brings each site's live code into `frontend/`, a publish keeps each app's source with its build, and `site serve` points Dev or Prod at a build that already exists. A local Xano Engine no longer has a builder sign-in, so `impersonate` refuses one.
+
+- `site pull` brings each site's live code into `frontend/`
+- `init --from workspace` brings the sites by default
+- `pull` says when a site's live build isn't in your frontend
+- `site serve` points Dev or Prod at an existing build
+- `publish` keeps each app's source with its build
+- `routeUrl()` builds backend URLs that work on the live site
+- A pull verifies on workspaces with inheriting history modes
+- ⚠️ `impersonate` refuses a Xano Engine
+
+---
+
 ## 1.0.29 — Honest build provenance
 
 _2026-11-22_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.29)

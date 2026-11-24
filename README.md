@@ -187,6 +187,7 @@ npx @xano/sdk local list          # the engines running on this machine
 npx @xano/sdk local mcp           # how a coding agent connects to the engine's MCP server
 npx @xano/sdk local stop <name>   # stop one
 npx @xano/sdk local update        # move the pin to the latest engine
+npx @xano/sdk local cache fetch   # download an engine now, to deploy offline later
 npx @xano/sdk local cache clear   # reclaim the disk space
 ```
 

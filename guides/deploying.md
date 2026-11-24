@@ -802,6 +802,7 @@ no builder: work in `xano/`, call its Meta API with `npx @xano/sdk local token`,
 | `npx @xano/sdk local update` | Moves the pin to the latest engine (`--version <v>`: that one, downgrades included), downloads it, and restarts the project's running engine on it. Commit `package.json`. |
 | `npx @xano/sdk local cache list` | Each cached engine version, its size on disk, and the engines running on it. |
 | `npx @xano/sdk local cache clear` | Removes every cached engine (`--version <v>`: just that one). An engine running on a removed version is stopped first; the next deploy fetches it again. |
+| `npx @xano/sdk local cache fetch` | Downloads and verifies the latest engine for this machine (`--version <v>`: that one) into the cache, so a later `deploy --local` on it runs with no network. Runs outside a project and never touches the pin; an engine already cached downloads nothing. `--json`: `{ version, downloaded, path }`. |
 
 #### Connecting a coding agent
 

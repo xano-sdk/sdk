@@ -1877,12 +1877,17 @@ export const COMMANDS = {
         summary:
           "`list`: each cached engine version, its size on disk, and the engines running on it. " +
           "`clear`: remove every cached engine and the runtime they unpacked, or one with `--version <v>` — any engine running " +
-          "on a removed version is stopped first; the next deploy fetches and restarts it",
-        args: [{ name: "action", required: true, values: ["list", "clear"] }],
+          "on a removed version is stopped first; the next deploy fetches and restarts it. " +
+          "`fetch`: download and verify the latest engine for this machine (or `--version <v>`) into the cache, " +
+          "so a later `deploy --local` on it needs no network — no project needed, and the pin is never read or written; " +
+          "already cached downloads nothing. `--json`: { version, downloaded, path }",
+        args: [{ name: "action", required: true, values: ["list", "clear", "fetch"] }],
         flags: [
           {
             key: "engine-version",
-            summary: "`clear` only: remove just this cached version — v0.1.5, `latest` (the release `update` would pin), `override`, or an override's `src-…` id from `cache list`",
+            summary:
+              "`clear`: remove just this cached version — v0.1.5, `latest` (the release `update` would pin), `override`, or an override's `src-…` id from `cache list`. " +
+              "`fetch`: download this version instead of `latest`, the default",
           },
           {
             key: "legacy-runtime",

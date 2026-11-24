@@ -92,6 +92,7 @@ npx @xano/sdk local stop <name>            # stop one (--all: every one the SDK 
 npx @xano/sdk local update                 # move this project's pinned engine to the latest (--version <v>: that one) and restart it — commit package.json
 npx @xano/sdk local cache list             # each cached engine version, its size, and the engines running on it
 npx @xano/sdk local cache clear            # remove every cached engine and its unpacked runtime (--version <v>: just that one); running ones are stopped first
+npx @xano/sdk local cache fetch            # download the latest engine (--version <v>: that one) into the cache, for an offline deploy later; no project or pin needed
 npx @xano/sdk ephemeral list                      # list your ephemeral environments (--all-workspaces spans every workspace; --json: { ephemerals: [...] })
 npx @xano/sdk ephemeral get <name>                # base URL, state, and expiry for one (<name> = the tenant name, e.g. ewap-8wz9-9e13, NOT the display name — `ephemeral list` shows it in bold)
 npx @xano/sdk ephemeral delete <name> --yes       # destroy one

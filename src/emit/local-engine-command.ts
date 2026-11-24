@@ -41,7 +41,8 @@
  * deploy only ever offers to move, and never prompts: running it is the
  * confirmation. `cache clear` stops every engine running on a binary it is
  * about to delete, BEFORE deleting, and through a binary it is keeping when
- * there is one.
+ * there is one. `cache fetch` warms the cache with no project and no pin, so a
+ * later deploy on that version needs no network.
  *
  * Node-only (it runs the engine's own verbs and reads the cache), lazily
  * imported from `cli.ts` like its siblings.
@@ -64,8 +65,10 @@ import {
   type EngineCacheEntry,
 } from "../deploy/local-engine-cache.js";
 import {
+  engineOverrideFromEnv,
   engineRunHome,
   legacyRuntimeDirs,
+  LOCAL_ENGINE_OVERRIDE_ENV,
   localEngineBinDir,
   resolveEnginePlatform,
   SUPPORTED_PLATFORMS,
@@ -761,10 +764,20 @@ async function requestedEngineVersion(
 
 // ── cache ───────────────────────────────────────────────────────────────────
 
-const CACHE_ACTIONS = ["list", "clear"] as const;
+const CACHE_ACTIONS = ["list", "clear", "fetch"] as const;
 
 async function runCache(args: ParsedArgs, opts: LocalEngineCommandOptions): Promise<void> {
   const action = args.positionals[0];
+  if (action === "fetch") {
+    if (args.legacyRuntime) {
+      throw new UsageError(
+        "`xanosdk local cache fetch` takes no `--legacy-runtime` — it downloads an engine. " +
+          "`cache clear --legacy-runtime` is the one that takes it.",
+        { helpFor: { command: "local", subcommand: "cache" } },
+      );
+    }
+    return runCacheFetch(args, opts);
+  }
   if (action === "list") {
     if (args.engineVersion !== undefined) {
       throw new UsageError(
@@ -788,12 +801,81 @@ async function runCache(args: ParsedArgs, opts: LocalEngineCommandOptions): Prom
       // Listed bare, as `unknownSubcommand` leaves the list to its help block: a
       // backticked `clear` here read as the correction already said, and the
       // "Did you mean: clear" line every other unknown verb prints was dropped.
-      `it takes ${CACHE_ACTIONS.join(" or ")}.`,
+      `it takes ${CACHE_ACTIONS.slice(0, -1).join(", ")} or ${CACHE_ACTIONS.at(-1)}.`,
     {
       helpFor: { command: "local", subcommand: "cache" },
       suggestion: action === undefined ? undefined : suggest(action, CACHE_ACTIONS),
     },
   );
+}
+
+/**
+ * `cache fetch`: put one release (`--version <v>`, default the latest for this
+ * platform) in the engine cache, so a later `deploy --local` on that version
+ * runs with no network. It is the deploy's own acquisition ({@link acquireEngine}):
+ * the same lookup, download, sha256 check and staging, so a fetched engine is
+ * byte for byte the one a deploy would have cached.
+ *
+ * It belongs to the machine, not a project: it runs from any directory and
+ * never reads or writes a pin. An explicit version already cached is answered
+ * from disk with no request at all; `latest` has to ask which release is newest.
+ *
+ * XANOSDK_ENGINE_OVERRIDE set means every deploy runs THAT engine, never a
+ * cached release, so there is nothing a fetch could warm: it says so and
+ * fetches nothing.
+ */
+async function runCacheFetch(args: ParsedArgs, opts: LocalEngineCommandOptions): Promise<void> {
+  const env = opts.env ?? process.env;
+  if (engineOverrideFromEnv(env) !== undefined) {
+    info(
+      `${LOCAL_ENGINE_OVERRIDE_ENV} is set, so every \`deploy --local\` runs that engine instead of a cached release — ` +
+        "nothing was fetched. Unset it to fetch one.",
+    );
+    if (isMachineOutput(args)) writeJson({ version: null, downloaded: false, path: null, skipped: "override" });
+    return;
+  }
+  // A custom release manager's engines are never cached by version (another
+  // manager's v0.1.5 is other bytes), so a fetch would warm nothing a deploy
+  // reads. Refused like `local update`, before any request.
+  if (usesCustomReleaseManager(env)) {
+    throw new Error(
+      `${ENGINE_RELEASES_URL_ENV} names a custom release manager, whose engines are never cached by version — ` +
+        `a deploy downloads them fresh each run, so there is nothing to fetch ahead.\nUnset it to fetch a release.`,
+    );
+  }
+  const platform = opts.platform ?? process.platform;
+  const arch = opts.arch ?? process.arch;
+  if (resolveEnginePlatform(platform, arch) === undefined) {
+    throw new Error(
+      `There is no Xano Engine build for ${platform} ${arch} — it runs on ${SUPPORTED_PLATFORMS.join(", ")} ` +
+        "and nothing else, so there is no engine to fetch.",
+    );
+  }
+  const requested = args.engineVersion?.trim() ?? "latest";
+  // A malformed version is a usage mistake, refused before any request. `latest`
+  // is resolved inside the acquisition, so it is looked up once.
+  const version = requested === "latest" ? undefined : await requestedEngineVersion(requested, opts, env, "fetch");
+  let downloaded = false;
+  const acquired = await acquireEngine({
+    spec: { kind: "release", ...(version === undefined ? {} : { version }) },
+    env,
+    rerun: `xanosdk local cache fetch${version === undefined ? "" : ` --version ${version}`}`,
+    ...(opts.fetch === undefined ? {} : { fetch: opts.fetch }),
+    platform,
+    arch,
+    onDownloaded: () => {
+      downloaded = true;
+      info(ENGINE_LICENSE_NOTICE);
+    },
+  });
+  const fetched = acquired.version ?? version ?? "latest";
+  const path = acquired.entry.dir;
+  success(
+    downloaded
+      ? `Downloaded Xano Engine ${fetched} to ${path}.`
+      : `Xano Engine ${fetched} is already cached at ${path} — nothing was downloaded.`,
+  );
+  if (isMachineOutput(args)) writeJson({ version: fetched, downloaded, path });
 }
 
 /** Every cached entry: releases newest first, then overrides most recent first. */
