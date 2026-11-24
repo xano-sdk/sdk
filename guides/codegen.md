@@ -41,6 +41,33 @@ The target directory decides what is written around `xano/`, as it does for a pl
 cd my-existing-app && npx @xano/sdk init --from workspace   # add the pulled backend to this app
 ```
 
+### The sites too
+
+`init --from workspace` brings each of the workspace's sites' live code into `frontend/` after the
+backend, as `npx @xano/sdk site pull` does on its own (see "Pulling a site's live code" in
+[deploying](deploying.md)): one site is `frontend/` with the site named in `package.json`, several
+are `frontend/<site>/`. It lists what it will write and confirms, keeps an app folder that is
+already there, and never touches `xano/`. `--no-sites` skips it (`--with-sites` is still accepted).
+Off a terminal without `--yes` the backend is pulled and the sites are skipped with a note to run
+`site pull`. Other sources have no sites.
+
+`pull` refreshes the backend only, unless `--with-sites`. After a pull from the workspace it names
+each site the project keeps whose live build its frontend does not hold, and changes nothing:
+
+```text
+i shop is live on build 136 (published from commit 011765b), which isn't in this frontend. Run `xanosdk site pull shop --force` to bring it down, replacing frontend/shop/.
+```
+
+A build is accounted for when its description names a commit in the project's git history (with no
+uncommitted changes), or when it is the build the last site pull here recorded in
+`.xano/sites.json`. When the sites cannot be read, the hint is skipped.
+
+```bash
+npx @xano/sdk init my-app --from workspace --yes   # the backend, then every site's app
+npx @xano/sdk init my-app --from workspace --no-sites   # the backend only
+npx @xano/sdk pull --with-sites                    # refresh the backend, then pull sites not in frontend/ yet
+```
+
 ### Just the tree: `generate`
 
 `npx @xano/sdk generate <source>` writes the same decoded tree `init --from` puts in `xano/`, and nothing

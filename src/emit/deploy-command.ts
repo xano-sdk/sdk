@@ -36,6 +36,7 @@ import { assertStaticSource, StaticSourceError } from "../deploy/static-source.j
 import { passwordHashesWarning, passwordOrigin } from "./release-common.js";
 import { missingLockDir, type ParsedArgs } from "./cli.js";
 import { prepareStaticPlan, staticDirsOf, staticUpload, type StaticAppBuild } from "./static-sites.js";
+import type { AppSourcePack } from "../deploy/app-source.js";
 import type { KeepDataMergeRequest, KeepDataMergeResult } from "./keep-data-merge.js";
 import { codePinnedTables, type CodePinnedTable, type LockFile } from "../lock/lock.js";
 import { storedColumnsOf, withStoredColumns } from "../lock/landed.js";
@@ -1792,10 +1793,6 @@ async function deployToLocalEngine(
     success(`Redeployed to ${engine.name}${kept}${urlsNote(merged)}${elapsedSuffix(startedAt)}`);
     link(engine.url);
   }
-  // The sign-in URL carries a per-process sign-in key, NOT the bearer, so it is
-  // the one thing that answers "how do I open the builder" without printing the
-  // bearer. It stays out of the machine document and out of every log line.
-  detail(`Open the builder: ${engine.signInUrl}`);
   // Pointed at rather than printed: this output lands in terminals and CI logs,
   // and the bearer is only for the caller who asks for it.
   detail(`Meta API bearer (the local XANO_META_TOKEN): \`xanosdk local token\``);
@@ -2269,6 +2266,7 @@ const DEPENDENT_FLAGS: ReadonlyArray<{
       { flag: "--static-routing", passed: (a) => a.staticRouting !== undefined },
       { flag: "--static-env", passed: (a) => Object.keys(a.staticEnv).length > 0 },
       { flag: "--static-source", passed: (a) => a.staticSource !== undefined },
+      { flag: "--no-static-source", passed: (a) => a.noStaticSource === true },
       { flag: "--site", passed: (a) => a.site !== undefined },
     ],
   },
@@ -4539,11 +4537,11 @@ export interface StaticPublishSummary {
    */
   serverBundle?: "uploaded" | "omitted";
   /**
-   * `--static-source`: the source archive sent beside the build, and its size.
-   * Sent is not kept: a platform that predates the field ignores it. Absent
-   * when none was given.
+   * The source archive sent beside the build (`--static-source`, or the app's
+   * folder packed by default), and its size. Sent is not kept: a platform that
+   * predates the field ignores it. Absent when none was sent.
    */
-  source?: { bytes: number };
+  source?: StaticSourceReport;
   /**
    * The site this build was published to, when the project named it (its
    * `staticHost` line) or a nested app's folder did. Absent when the site is
@@ -4578,6 +4576,18 @@ export interface StaticPublishSummary {
   completed?: "no" | "unknown";
 }
 
+/**
+ * A source archive sent beside a build: its size, and for the app's folder
+ * packed by default (DEV-10124) the folder, how many files it holds, and each
+ * file left out for a name that usually holds a secret.
+ */
+export interface StaticSourceReport {
+  bytes: number;
+  dir?: string;
+  files?: number;
+  leftOut?: string[];
+}
+
 /** One app of a nested frontend, as its publish went: the site, the app's folder, and what it published. */
 export interface StaticSitePublish {
   site: string;
@@ -4588,6 +4598,8 @@ export interface StaticSitePublish {
   verified?: boolean;
   routing?: "spa" | "multipage";
   staticEnv?: StaticEnvReport;
+  /** The source archive sent beside this site's build. */
+  source?: StaticSourceReport;
   createdSite?: true;
 }
 
@@ -4638,13 +4650,22 @@ export async function deployStaticTo(
     createHost?: true;
     /** A nested frontend's apps: each is published to its own site, and `dir`/`host` are unused. */
     apps?: readonly StaticAppBuild[];
+    /**
+     * The app's own folder, packed by `prepareStaticPlan` (DEV-10124): sent as
+     * the build's source when no `source` archive was handed over.
+     */
+    appSource?: AppSourcePack;
   } = {},
 ): Promise<StaticPublishSummary> {
   if (opts.apps !== undefined && opts.apps.length > 0) {
-    const { apps, createHost: _named, ...rest } = opts;
+    const { apps, createHost: _named, appSource: _one, ...rest } = opts;
     return deployStaticSites(apps, auth, target, env, explicit, skipLiveness, routing, rest);
   }
   const { deployStaticHost } = await import("../deploy/static-host.js");
+
+  // The app's own folder, packed before sign-in, when no archive was handed over.
+  const packed = opts.source === undefined ? opts.appSource : undefined;
+  const sourceZip = packed?.data;
 
   const where = target.label && target.label !== "" ? target.label : `workspace #${target.workspaceId}`;
   if (target.announced !== true) step(`Deploying static frontend ${dir} → ${where}${host ? ` (host: ${host})` : ""}`);
@@ -4668,11 +4689,18 @@ export async function deployStaticTo(
         ...(dirLabel === undefined ? {} : { label: dirLabel }),
         ...(opts.serverRendered === true ? { serverRendered: true } : {}),
         ...(opts.source === undefined ? {} : { source: opts.source }),
+        ...(sourceZip === undefined ? {} : { sourceZip }),
         ...(opts.createHost === true ? { createHost: true } : {}),
       }),
   );
   if (sh.createdHost === true) detail(`The site "${host ?? "default"}" did not exist on ${where}, so it was created.`);
-  if (sh.sourceBytes !== undefined) detail(`Source archive sent with the build (${(sh.sourceBytes / 1024).toFixed(1)} KB).`);
+  if (sh.sourceBytes !== undefined) {
+    detail(
+      packed !== undefined
+        ? `Source of ${packed.dir} sent with the build (${packed.files} ${packed.files === 1 ? "file" : "files"}, ${(sh.sourceBytes / 1024).toFixed(1)} KB).`
+        : `Source archive sent with the build (${(sh.sourceBytes / 1024).toFixed(1)} KB).`,
+    );
+  }
   // A server half the target does not run was left out of the upload: say so,
   // since the site's dynamic routes are then served by the fallback page alone.
   if (sh.serverBundle === "omitted") {
@@ -4760,7 +4788,14 @@ export async function deployStaticTo(
     ...(staticEnv !== undefined ? { staticEnv } : {}),
     ...(sh.canonical !== undefined ? { canonical: sh.canonical } : {}),
     ...(sh.serverBundle !== undefined ? { serverBundle: sh.serverBundle } : {}),
-    ...(sh.sourceBytes !== undefined ? { source: { bytes: sh.sourceBytes } } : {}),
+    ...(sh.sourceBytes !== undefined
+      ? {
+          source: {
+            bytes: sh.sourceBytes,
+            ...(packed !== undefined ? { dir: packed.dir, files: packed.files, leftOut: packed.leftOut } : {}),
+          },
+        }
+      : {}),
     ...(opts.createHost === true && host !== undefined ? { site: host } : {}),
     ...(sh.createdHost === true ? { createdSite: true as const } : {}),
   };
@@ -4819,7 +4854,7 @@ async function deployStaticSites(
         skipLiveness,
         routing,
         undefined,
-        { ...opts, createHost: true },
+        { ...opts, createHost: true, ...(app.source !== undefined ? { appSource: app.source } : {}) },
       );
     } catch (err) {
       if (!(err instanceof Error)) throw err;
@@ -4840,6 +4875,7 @@ async function deployStaticSites(
       ...(one.verified !== undefined ? { verified: one.verified } : {}),
       ...(one.routing !== undefined ? { routing: one.routing } : {}),
       ...(one.staticEnv !== undefined ? { staticEnv: one.staticEnv } : {}),
+      ...(one.source !== undefined ? { source: one.source } : {}),
       ...(one.createdSite === true ? { createdSite: true as const } : {}),
     });
   }

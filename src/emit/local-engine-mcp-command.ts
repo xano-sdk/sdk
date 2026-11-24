@@ -34,8 +34,8 @@ export async function runMcp(args: ParsedArgs, opts: LocalEngineCommandOptions):
     info(`Xano Engine ${engine.name} serves no MCP server for coding agents; \`xanosdk local update\` moves the project to one that does.`);
   }
   if (isMachineOutput(args)) {
-    // Field by field, for the reason `token` is: the listing carries the bearer
-    // and the sign-in url, and neither belongs here.
+    // Field by field, for the reason `token` is: the listing carries the bearer,
+    // which does not belong here.
     writeJson({
       name: engine.name,
       url: engine.url,

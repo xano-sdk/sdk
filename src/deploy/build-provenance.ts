@@ -64,3 +64,32 @@ export function describeProvenance(from: string, git: GitState | undefined): str
 export function staticBuildDescription(cwd: string, env: NodeJS.ProcessEnv = process.env): string {
   return describeProvenance(env[PUBLISHED_FROM_ENV] ?? DEFAULT_PUBLISHED_FROM, readGitState(cwd));
 }
+
+/** The commit a build's description names (see {@link describeProvenance}), and whether it says the tree differed. */
+export interface BuildCommit {
+  sha: string;
+  /** The description says `(uncommitted changes)`: the build holds code the commit does not. */
+  dirty: boolean;
+}
+
+/** The commit a build's description names, when it names one. Pure. */
+export function buildCommit(description: string | null | undefined): BuildCommit | undefined {
+  if (typeof description !== "string") return undefined;
+  const m = /\bcommit ([0-9a-f]{7,40})\b( \(uncommitted changes\))?/.exec(description);
+  return m === null ? undefined : { sha: m[1]!, dirty: m[2] !== undefined };
+}
+
+/**
+ * Whether `sha` is in the history of `cwd`'s checkout: `HEAD` or one of its
+ * ancestors. False outside a repository, without git, or for a commit the
+ * repository does not have. Never throws.
+ */
+export function commitInHistory(cwd: string, sha: string): boolean {
+  if (!/^[0-9a-f]{7,40}$/.test(sha)) return false;
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", sha, "HEAD"], { cwd, stdio: "ignore", timeout: 10_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}

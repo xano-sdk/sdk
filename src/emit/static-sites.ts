@@ -36,6 +36,7 @@ import {
   type FrontendApps,
 } from "./frontend-apps.js";
 import { detail, info, step, warn } from "./ui.js";
+import type { AppSourcePack } from "../deploy/app-source.js";
 
 /** One app of a nested project, built and ready to publish to its site. */
 export interface StaticAppBuild {
@@ -45,6 +46,12 @@ export interface StaticAppBuild {
   dir: string;
   /** The directory whose files the site serves: the build output, or the folder itself for an app with no build. */
   output: string;
+  /**
+   * Set by `prepareStaticPlan` unless `--static-source` or `--no-static-source`
+   * was typed, or the folder could not be packed: the app's folder, archived,
+   * sent beside the build and kept as the build's source (DEV-10124).
+   */
+  source?: AppSourcePack;
 }
 
 /** The folders a build is looked for in, in order, inside an app's folder. */
@@ -197,14 +204,55 @@ function appHolding(cwd: string, dir: string, layout: FrontendApps): FrontendApp
   });
 }
 
+/** How a list of paths reads in one line: the first few, then how many more. */
+function someOf(paths: readonly string[], shown = 8): string {
+  return paths.length <= shown ? paths.join(", ") : `${paths.slice(0, shown).join(", ")}, and ${paths.length - shown} more`;
+}
+
+/**
+ * Pack an app folder's source for its build (`app-source.ts`) and say what is
+ * sent before anything is: the file count, and each file left out for a name
+ * that usually holds a secret. A folder that cannot be packed is said as
+ * `static.source-skipped` and its build goes alone: `undefined`.
+ */
+async function packSource(cwd: string, appDir: string, output: string): Promise<AppSourcePack | undefined> {
+  const { packAppSource } = await import("../deploy/app-source.js");
+  const packed = packAppSource(cwd, appDir, { exclude: [output] });
+  const leftOut = packed.leftOut ?? [];
+  if ("skipped" in packed) {
+    warn(
+      `The source of ${appDir} is not sent with its build: ${packed.skipped}. The build is published without it, ` +
+        `so a \`site pull\` brings its built files rather than its code.`,
+      "static.source-skipped",
+      ["Pass `--static-source <archive>` to send an archive of your own, or `--no-static-source` to send none."],
+    );
+    return undefined;
+  }
+  detail(`Sends the source of ${appDir} with its build: ${packed.files} ${packed.files === 1 ? "file" : "files"} git would commit.`);
+  if (leftOut.length > 0) {
+    detail(`Left out of ${appDir}'s source, as names that usually hold secrets: ${someOf(leftOut)}.`);
+  }
+  return { dir: appDir, data: packed.data, files: packed.files, leftOut };
+}
+
+/** A one-app frontend (`frontend/` itself) when `dir` is it or lies inside it. */
+function flatAppHolding(cwd: string, dir: string, layout: FrontendApps): string | undefined {
+  if (layout.layout !== "flat") return undefined;
+  const root = resolve(cwd, FRONTEND_DIR);
+  const target = resolve(cwd, dir);
+  return target === root || target.startsWith(root + sep) ? FRONTEND_DIR : undefined;
+}
+
 /** What a command calls the flag that took the directory, for messages. */
 type StaticCommand = "deploy" | "publish";
 
 /**
  * Decide where this run's static publish goes, and build a nested project's
  * apps. Returns `args` with {@link ParsedArgs.staticLineHost} or
- * {@link ParsedArgs.staticApps} filled in; returns it unchanged when the
- * project names nothing and no `--site` was typed — today's run exactly.
+ * {@link ParsedArgs.staticApps} filled in, and the app folder whose source
+ * goes with the build ({@link ParsedArgs.staticAppSource}, or each app's
+ * `source`), packed now unless `--static-source` or `--no-static-source` was typed;
+ * returns it unchanged when none of that applies.
  *
  * `dir` is the build the run was given (`--static`, `publish <dir>`), or
  * `undefined` for a bare `publish`, which publishes a nested project's apps.
@@ -221,6 +269,14 @@ export async function prepareStaticPlan(
   if (args.site !== undefined && !isSiteName(args.site)) {
     throw new UsageError(`\`--site ${args.site}\` is not a site name: lowercase letters and digits only, like "shop".`, hint);
   }
+  if (args.staticSource !== undefined && args.noStaticSource === true) {
+    throw new UsageError(
+      `\`--static-source\` sends this archive as the app's source and \`--no-static-source\` sends none: drop one of them.`,
+      hint,
+    );
+  }
+  // Each app's own folder goes with its build unless the run sends its own archive or none.
+  const defaultSource = args.staticSource === undefined && args.noStaticSource !== true;
   const layout = frontendApps(cwd);
   const wholeFrontend = dir === undefined || isFrontendRoot(cwd, dir);
 
@@ -248,7 +304,8 @@ export async function prepareStaticPlan(
     if (args.staticSource !== undefined && apps.length > 1) {
       throw new UsageError(
         `\`--static-source\` sends one app's source archive, and this publishes ${apps.length} sites ` +
-          `(${apps.map((a) => a.site).join(", ")}). Add \`--site <name>\` to publish the one it belongs to.`,
+          `(${apps.map((a) => a.site).join(", ")}). Drop it: each app's own folder is sent with its build by default. ` +
+          `Or add \`--site <name>\` to publish the one it belongs to.`,
         hint,
       );
     }
@@ -264,7 +321,13 @@ export async function prepareStaticPlan(
         throw err;
       }
     }
-    return { ...args, staticApps: built };
+    if (!defaultSource) return { ...args, staticApps: built };
+    const withSources: StaticAppBuild[] = [];
+    for (const b of built) {
+      const source = await packSource(cwd, b.dir, b.output);
+      withSources.push(source === undefined ? b : { ...b, source });
+    }
+    return { ...args, staticApps: withSources };
   }
 
   if (args.site !== undefined) {
@@ -280,8 +343,12 @@ export async function prepareStaticPlan(
 
   // One build. A site the project names: the folder it sits in, else the line.
   const folder = dir === undefined ? undefined : appHolding(cwd, dir, layout);
+  // The app folder the build came from, whose source goes with it by default.
+  const appDir = !defaultSource || dir === undefined ? undefined : (folder?.dir ?? flatAppHolding(cwd, dir, layout));
+  const source = appDir === undefined || dir === undefined ? undefined : await packSource(cwd, appDir, dir);
+  const withSource = (out: ParsedArgs): ParsedArgs => (source === undefined ? out : { ...out, staticAppSource: source });
   const named = folder?.site ?? readStaticHostLine(cwd, { warn: (m) => warn(m, "static.site-line-ignored") });
-  if (named === undefined) return args;
+  if (named === undefined) return withSource(args);
   if (args.staticHost !== undefined) {
     if (args.staticHost !== named) {
       info(
@@ -290,9 +357,9 @@ export async function prepareStaticPlan(
           : `Publishing to ${args.staticHost}; ${folder.dir} is the folder for ${named}.`,
       );
     }
-    return args;
+    return withSource(args);
   }
-  return { ...args, staticLineHost: named };
+  return withSource({ ...args, staticLineHost: named });
 }
 
 /**
@@ -301,9 +368,9 @@ export async function prepareStaticPlan(
  * `deployStaticTo` call passes. With nothing named, `{ host: args.staticHost }`:
  * today's call exactly.
  */
-export function staticUpload(args: Pick<ParsedArgs, "staticHost" | "staticLineHost" | "staticApps">): {
+export function staticUpload(args: Pick<ParsedArgs, "staticHost" | "staticLineHost" | "staticApps"> & Partial<Pick<ParsedArgs, "staticAppSource">>): {
   host: string | undefined;
-  opts: { createHost?: true; apps?: readonly StaticAppBuild[] };
+  opts: { createHost?: true; apps?: readonly StaticAppBuild[]; appSource?: AppSourcePack };
 } {
   const host = args.staticHost ?? args.staticLineHost;
   return {
@@ -311,6 +378,7 @@ export function staticUpload(args: Pick<ParsedArgs, "staticHost" | "staticLineHo
     opts: {
       ...(args.staticHost === undefined && args.staticLineHost !== undefined ? { createHost: true as const } : {}),
       ...(args.staticApps !== undefined && args.staticApps.length > 0 ? { apps: args.staticApps } : {}),
+      ...(args.staticAppSource !== undefined ? { appSource: args.staticAppSource } : {}),
     },
   };
 }
@@ -324,4 +392,23 @@ export function staticDirsOf(args: Pick<ParsedArgs, "static" | "staticApps">): s
 /** The site a single-build publish lands on, for a prompt or a message: the typed host, the project's, else `default`. */
 export function publishedSite(args: Pick<ParsedArgs, "staticHost" | "staticLineHost">): string {
   return args.staticHost ?? args.staticLineHost ?? DEFAULT_SITE;
+}
+
+/**
+ * What source this run sends beside its build(s), in one line for the publish
+ * summary above its confirmation: each app folder and its file count, and how
+ * many files were left out as secrets. `undefined` when it sends none of its own packing.
+ */
+export function sourceSummary(args: Pick<ParsedArgs, "staticApps"> & Partial<Pick<ParsedArgs, "staticAppSource">>): string | undefined {
+  const packs = [
+    ...(args.staticApps ?? []).flatMap((a) => (a.source === undefined ? [] : [a.source])),
+    ...(args.staticAppSource === undefined ? [] : [args.staticAppSource]),
+  ];
+  if (packs.length === 0) return undefined;
+  const each = packs.map((p) => `${p.dir} (${p.files} ${p.files === 1 ? "file" : "files"})`).join(", ");
+  const out = packs.reduce((n, p) => n + p.leftOut.length, 0);
+  return (
+    `Source kept with the ${packs.length === 1 ? "build" : "builds"}: ${each}` +
+    (out === 0 ? "." : `; ${out} ${out === 1 ? "file" : "files"} named like secrets left out.`)
+  );
 }

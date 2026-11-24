@@ -18,9 +18,9 @@
  * **The enumeration carries a bearer per engine.** It is how the reuse path
  * gets a token without anything on disk holding one, and it means the raw
  * listing must never be printed. Every row this module builds is assembled
- * field by field from the fields that are safe to show, so the token and the
- * sign-in url cannot reach stdout, a log, or the machine output by being
- * forgotten.
+ * field by field from the fields that are safe to show, so the token cannot
+ * reach stdout, a log, or the machine output by being forgotten. (An older
+ * engine also lists a sign-in url; the parser never reads it.)
  *
  * **`token` is the one verb that prints the bearer, because it was asked to.**
  * The engine's meta API accepts only its own bearer, so a suite or script that
@@ -29,8 +29,8 @@
  * stays forbidden is printing it as a side effect of another verb. `mcp` reads
  * it too, and only ever SENDS it (`local-engine-mcp-command.ts`).
  *
- * Opening one in the builder is not a verb here: `xanosdk impersonate
- * local[:name]` does it, the same verb and output as every other kind.
+ * There is no builder to open: a Xano Engine serves none, so `impersonate`
+ * refuses one.
  *
  * **Which cached binary runs a verb (KTD7).** The project's pinned version when
  * it is cached, else the newest cached release, else the newest override. Any
@@ -514,8 +514,8 @@ function clearedSuffix(outcome: StopOutcome): string {
 async function runToken(args: ParsedArgs, opts: LocalEngineCommandOptions): Promise<void> {
   const engine = await targetEngine(args, opts, "read a token from");
   if (args.json) {
-    // Field by field, for the reason `list` is: the sign-in url opens an owner
-    // session and has no business in a document meant for a meta API client.
+    // Field by field, for the reason `list` is: nothing else from the listing
+    // belongs in a document meant for a meta API client.
     writeJson({ name: engine.name, url: engine.url, workspaceId: engine.workspaceId, token: engine.token });
     return;
   }

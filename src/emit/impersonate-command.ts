@@ -11,9 +11,8 @@
  * - An ephemeral and a tenant — one primitive on the server — mint a one-time
  *   token through the tenant impersonation call, and the url is built from it
  *   under the instance origin, where the builder exchanges it for a session.
- * - A Xano Engine mints through its own loopback login-link endpoint with the
- *   bearer from its enumeration, and the url is the one the ENGINE returns: it
- *   knows where its own builder lives. No Xano credential is read.
+ * - A Xano Engine is refused by the slot: it serves no builder, so there is
+ *   nothing to sign in to. Its Meta API takes the bearer `local token` prints.
  * - The workspace is refused by the slot: it is the account's own workspace,
  *   opened from the Xano dashboard as whoever is signed in there, so there is
  *   no session to mint and nothing this verb adds.
@@ -29,7 +28,7 @@
  * opens anything; a terminal opens the browser once and prints the url on
  * stderr, so a headless or `XANO_NO_BROWSER` run still surfaces it.
  *
- * Node-only (fetch + OAuth); lazily imported by the dispatcher like its siblings.
+ * Node-only (OAuth); lazily imported by the dispatcher like its siblings.
  */
 import { withArticle } from "../util/article.js";
 import type { ParsedArgs } from "./cli.js";
@@ -37,10 +36,8 @@ import { getAccessToken } from "../auth/token.js";
 import { openBrowser } from "../auth/loopback.js";
 import { impersonateEphemeral } from "../deploy/ephemeral.js";
 import { impersonateTenant } from "../deploy/tenant.js";
-import { mintEngineLoginLink } from "../deploy/local-engine-process.js";
-import type { EngineFetch } from "../deploy/local-engine-release.js";
 import { requireBackendSlot } from "./backend-slot.js";
-import { memoCredential, refuseProfileForLocal, selectBackend } from "./tracked-backend.js";
+import { memoCredential, selectBackend } from "./tracked-backend.js";
 import { actualKind, describeBackend, resolveSource, type ResolveDeps, type ResolvedSource } from "./source-resolve.js";
 import { isMachineOutput, writeJson } from "./output.js";
 import { detail, step, success } from "./ui.js";
@@ -49,8 +46,6 @@ import { detail, step, success } from "./ui.js";
 export interface ImpersonateCommandOptions {
   /** The resolver's seams (hosted lookups, the engine enumeration, where records live). */
   deps?: ResolveDeps;
-  /** The request seam a Xano Engine's login link is minted through. */
-  fetch?: EngineFetch;
 }
 
 export async function runImpersonateCommand(args: ParsedArgs, opts: ImpersonateCommandOptions = {}): Promise<void> {
@@ -62,10 +57,9 @@ export async function runImpersonateCommand(args: ParsedArgs, opts: ImpersonateC
     // The slot does not accept a file, so `parseSlot` has already refused one.
     throw new Error("Internal: `impersonate` resolved a bundle file.");
   }
-  refuseProfileForLocal(args.profile, [source.kind], slot);
   // The dashboard opens through the parent, workspace or not.
   const resolved = await resolveSource(source, credential, { ...deps, workspaceless: "any" });
-  const url = await dashboardUrl(resolved, args.guest, opts);
+  const url = await dashboardUrl(resolved, args.guest);
 
   // Bare on a mere pipe — `$(xanosdk impersonate -u)` is the form it exists for —
   // but `--json` asked for by name gets the document, as `local token` does.
@@ -81,7 +75,7 @@ export async function runImpersonateCommand(args: ParsedArgs, opts: ImpersonateC
     // where the kind has none, so the keys never depend on the kind.
     writeJson({
       kind: actualKind(resolved),
-      name: resolved.backend.kind === "local" ? resolved.backend.engine.name : (resolved.target.env ?? null),
+      name: resolved.target.env ?? null,
       display: resolved.target.display ?? null,
       url,
       guest: args.guest === true,
@@ -101,15 +95,11 @@ export async function runImpersonateCommand(args: ParsedArgs, opts: ImpersonateC
 async function dashboardUrl(
   resolved: ResolvedSource,
   guest: boolean,
-  opts: ImpersonateCommandOptions,
 ): Promise<string> {
   const backend = resolved.backend;
   if (backend.kind === "local") {
-    const { url } = await mintEngineLoginLink(backend.engine, {
-      guest,
-      ...(opts.fetch === undefined ? {} : { fetch: opts.fetch }),
-    });
-    return url;
+    // The slot refuses a Xano Engine before anything resolves.
+    throw new Error("Internal: `impersonate` resolved a Xano Engine.");
   }
   const auth = backend.auth;
   switch (resolved.kind) {

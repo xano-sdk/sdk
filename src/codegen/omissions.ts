@@ -187,6 +187,11 @@ export const WORKSPACE_OMITTED_KEYS: Readonly<Record<string, OmissionPolicy>> = 
   jumpstart: { label: "starter state", reason: "server-managed", detail: "onboarding state" },
   sql_schema_name: { label: "database schema name", reason: "server-managed", detail: "physical schema name, instance-assigned" },
   connect: { label: "connection state", reason: "server-managed", detail: "third-party connection state" },
+  studio_git: {
+    label: "Studio GitHub link",
+    reason: "server-managed",
+    detail: "Xano Studio's link from this workspace to its GitHub repository, set in Studio",
+  },
 
   // --- carried elsewhere in the bundle ---
   env: {
@@ -235,6 +240,10 @@ export const WORKSPACE_DEFAULTED_KEYS: Readonly<Record<string, (value: unknown) 
     isRecord(v) && Object.keys(v).length === 2 && v.color === "#008000" && v.show_banner === false,
   middleware: (v) => isRecord(v) && Object.values(v).every((list) => Array.isArray(list) && list.length === 0),
   history: isDefaultWorkspaceHistory,
+  // Xano Studio's GitHub link (DEV-10051): the engine stores an empty one on
+  // every workspace Studio has opened. One that names a repository is left out
+  // too, but said (WORKSPACE_OMITTED_KEYS).
+  studio_git: (v) => isRecord(v) && Object.keys(v).length === 1 && Array.isArray(v.destinations) && v.destinations.length === 0,
 };
 
 /**
@@ -350,6 +359,9 @@ const HISTORY_DEFAULT_OFF = new Set(["function", "middleware", "trigger", "messa
 function isDefaultWorkspaceHistory(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return Object.entries(value).every(([key, member]) => {
+    // A newer engine stores each type's capture mode too; `inherit` is its default,
+    // the instance's own mode (DEV-10051). Any other mode is a departure.
+    if (key.endsWith("_capture")) return member === "inherit";
     const enabled = key.endsWith("_enabled");
     if (!enabled && !key.endsWith("_limit")) return false;
     const type = key.slice(0, key.lastIndexOf("_"));

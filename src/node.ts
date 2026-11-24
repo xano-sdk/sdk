@@ -45,3 +45,22 @@ export type {
 
 // Where a static build came from, as its description says it (DEV-10042).
 export { describeProvenance, PUBLISHED_FROM_ENV } from "./deploy/build-provenance.js";
+
+// A workspace's sites (DEV-10113): read them (`site list --json`), pull each
+// site's live code into a project (`site pull`), and serve an existing build on
+// Dev or Prod (`site serve`), in-process — what Xano Studio calls instead of the CLI.
+export { listSites, pullSites, serveBuild, servedBuild, SiteBuildError, SiteNotFoundError } from "./emit/sites-api.js";
+export type {
+  ListSitesOptions,
+  PullSitesOptions,
+  ServeBuildOptions,
+  ServeBuildResult,
+  SiteEnvReport,
+  SiteListReport,
+  SitePullEntry,
+  SitePullReport,
+  SitePullStatus,
+  SiteReport,
+  SiteTarget,
+} from "./emit/sites-api.js";
+export type { SiteAppSource } from "./deploy/site-source.js";

@@ -3,9 +3,10 @@
  * (`--static-source`): the checks that run before anything is written.
  *
  * Its own module, free of `node:zlib`, so the deploy commands can refuse a bad
- * path before sign-in without pulling the upload transport in. The SDK never
- * builds this archive; the caller hands one over and the build route keeps it
- * as the build's original.
+ * path before sign-in without pulling the upload transport in. The caller
+ * hands this archive over and the build route keeps it as the build's
+ * original; without one, the publish archives the app's folder itself
+ * (`app-source.ts`, DEV-10124).
  */
 import { statSync } from "node:fs";
 import { basename } from "node:path";

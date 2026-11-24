@@ -197,12 +197,17 @@ app builds to 1.3 kB, a ~200x saving, with no SDK code in the output. Route keys
 rather than a 404:
 
 ```ts
-import { routePath, ROUTES } from "../xano/routes.gen";
+import { routePath, routeUrl, ROUTES } from "../xano/routes.gen";
 
-fetch(BASE + routePath("GET blog/{slug}", { slug }), {
+fetch(routeUrl(routePath("GET blog/{slug}", { slug })), {
   method: ROUTES["GET blog/{slug}"].verb,
 });
 ```
+
+**Fetch the absolute URL, never a bare path.** A dev server proxies a bare `/api:` path to the
+backend, but the published site answers it with its own `index.html`. `routeUrl(path, baseUrl?)`
+puts the backend in front: `baseUrl`, else `window.XANO_HOST` (every publish injects it), else
+nothing, for a dev server that proxies. A `/tenant/<name>` base keeps its prefix.
 
 A route key is `"<VERB> <name>"`, which is the endpoint identity the engine itself uses —
 so verb-differentiated siblings are ordinary, and a REST-shaped group emits without

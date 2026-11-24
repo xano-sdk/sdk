@@ -47,22 +47,14 @@ export interface LocalEngine {
   token: string;
   /** The engine's process id. Recorded by nobody and signalled by nobody. */
   pid: number;
-  /**
-   * A url that opens an owner session in the builder. Carries a per-process
-   * sign-in key, NOT the bearer — so it may be shown to a person, and is still
-   * kept out of logs and machine output because it opens a session.
-   */
-  signInUrl: string;
-  /** The route that mints a one-time login link for a client holding the bearer. */
-  loginLinkEndpoint: string;
   /** The log file the ENGINE writes (distinct from the one this SDK writes). */
   logPath: string;
   /**
    * Where the engine serves its MCP server for coding agents — a url, not a
    * credential; the bearer it wants is {@link token}. Absent when the engine
    * does not serve one (an older release, or MCP turned off), which is told
-   * apart by presence alone, never by version. Not loopback-checked here: like
-   * {@link loginLinkEndpoint}, it is checked right before the bearer follows it.
+   * apart by presence alone, never by version. Not loopback-checked here: it is
+   * checked right before the bearer follows it.
    */
   mcpUrl?: string;
   /**
@@ -128,8 +120,6 @@ interface RawEngine {
   pid: number;
   workspace_id: number;
   access_token: string;
-  sign_in_url: string;
-  login_link_endpoint: string;
   log: string;
   mcp_url: string;
   expires_at: string;
@@ -213,8 +203,6 @@ function readEngine(value: unknown, source: string): LocalEngine {
     workspaceId: requireNumber(raw, "workspace_id", source),
     token: requireString(raw, "access_token", source),
     pid: requireNumber(raw, "pid", source),
-    signInUrl: requireString(raw, "sign_in_url", source),
-    loginLinkEndpoint: requireString(raw, "login_link_endpoint", source),
     logPath: requireString(raw, "log", source),
     ...(mcpUrl === undefined ? {} : { mcpUrl }),
     ...(expiresAt === undefined ? {} : { expiresAt }),
@@ -231,8 +219,8 @@ const LISTING_SOURCE = "The engine's list of running engines";
  * The loopback assertion runs here rather than at the caller because this is
  * the function every start arm goes through, and a check the caller has to
  * remember is a check that gets skipped on the arm nobody was thinking about.
- * It covers `url` only: `mcpUrl`, like the sign-in route, is asserted where the
- * bearer is about to follow it.
+ * It covers `url` only: `mcpUrl` is asserted where the bearer is about to
+ * follow it.
  */
 export function parseEngineHandshake(stdout: string): LocalEngine {
   let value: unknown;

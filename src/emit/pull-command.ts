@@ -45,6 +45,7 @@ import { confirm } from "./prompt.js";
 import { step, success, warn, detail, info, terminalText } from "./ui.js";
 import { pastePath } from "./typed-cwd.js";
 import { keptDuplicates, replacedRegistrations, reportSuperseded, type KeptDuplicate } from "./pull-superseded.js";
+import type { SourceKind } from "./source-selector.js";
 import { isMachineOutput, writeJson } from "./output.js";
 import { withoutKinds } from "../deploy/excluded-kinds.js";
 import { decodeWorkspaceArchive, encodeWorkspaceArchive } from "../validate/archive.js";
@@ -410,7 +411,12 @@ function generateHint(cwd: string, file: string, out: string): string {
   );
 }
 
-export async function runPullCommand(args: ParsedArgs): Promise<void> {
+/** What a pull that wrote (or found nothing to write) read from: `undefined` when it was cancelled. */
+export interface PullOutcome {
+  kind: SourceKind;
+}
+
+export async function runPullCommand(args: ParsedArgs): Promise<PullOutcome | undefined> {
   const cwd = process.cwd();
   // Resolved ONCE, and passed to everything below — nothing downstream
   // re-derives it. A pull DELETES, so the cost of two resolvers disagreeing is
@@ -589,7 +595,7 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
     recordExcluded();
     await refreshAgentGuidance({ ...args, file: join(cwd, backendDir, "index.ts") });
     finishUpToDate(cwd, backendDir, project, args, fetched, lock, lockPath, reconciliation, bundle.payload, files.length, plan.kept, settingsReport(settings, backendDir), seedRows, duplicates, recordPullSync);
-    return;
+    return { kind: source.kind };
   }
 
   const cleanliness = backendDirCleanliness(cwd, backendDir);
@@ -716,7 +722,7 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
     });
     if (!ok) {
       info("Pull cancelled. Nothing was written.");
-      return;
+      return undefined;
     }
   }
 
@@ -873,7 +879,7 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
     // On stderr, so a piped run says it too: the document carries the rest.
     success(`Pulled ${fetched.label}`);
     detail(`${files.length} files written, ${deletions.length} removed`);
-    return;
+    return { kind: source.kind };
   }
   if (verified === false) throw pullVerifyFailed(cwd, backendDir);
   success(`Pulled ${fetched.label}`);
@@ -885,6 +891,7 @@ export async function runPullCommand(args: ParsedArgs): Promise<void> {
         `${lockReport.renamed.length} renamed, ${lockReport.dropped.length} dropped`,
     );
   }
+  return { kind: source.kind };
 }
 
 /**

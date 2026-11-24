@@ -1,6 +1,9 @@
 /**
  * `xanosdk site list` and `xanosdk site use <name>` (DEV-10042) — the sites
- * (static hosts) a frontend publishes to, and the one this project names.
+ * (static hosts) a frontend publishes to, and the one this project names —
+ * plus `site pull [site…]`, which brings each site's live code into
+ * `frontend/`, and `site serve <site> <build> --env dev|prod`, which puts an
+ * existing build on an environment (DEV-10113; the work is in `sites-api.ts`).
  *
  * A site is a workspace's: it has an address per environment (Dev always,
  * Prod once someone adds it in Xano), and each environment serves one build.
@@ -14,6 +17,7 @@
  *
  * Node-only (fetch + OAuth + fs); lazily imported by the dispatcher.
  */
+import { relative, sep } from "node:path";
 import type { ParsedArgs } from "./cli.js";
 import { getAccessToken } from "../auth/token.js";
 import { requireBackendSlot } from "./backend-slot.js";
@@ -23,67 +27,28 @@ import { describeBackend } from "./source-resolve.js";
 import { unknownSubcommand, UsageError } from "./errors.js";
 import { isMachineOutput, writeJson } from "./output.js";
 import { detail, info, step, success, warn } from "./ui.js";
-import {
-  DEFAULT_SITE,
-  FRONTEND_DIR,
-  frontendApps,
-  isSiteName,
-  readStaticHostLine,
-  writeStaticHostLine,
-} from "./frontend-apps.js";
-import type { StaticHostBuildRow, StaticHostEnvRow, StaticHostReadTarget, StaticHostRow } from "../deploy/static-host.js";
+import { FRONTEND_DIR, frontendApps, isSiteName, writeStaticHostLine } from "./frontend-apps.js";
+import type { StaticHostReadTarget } from "../deploy/static-host.js";
+import { projectSites, readSites } from "./sites-api.js";
+import type { SiteDrift, SiteEnvReport, SiteListReport, SitePullEntry, SitePullReport } from "./sites-api.js";
 
 /** Seams the tests replace; production callers pass nothing. */
 export interface SiteCommandOptions {
   deps?: ResolveDeps;
 }
 
-/** One environment of a site, as `site list --json` reports it. */
-export interface SiteEnvReport {
-  /** The address a visitor opens: the custom domain when one is set, else Xano's. Null before anything was published. */
-  url: string | null;
-  defaultUrl: string | null;
-  customUrl: string | null;
-  /** The canonical of the build it serves, null when it serves none. */
-  canonical: string | null;
-  /** That build, when it is among the site's recent builds. */
-  build: { id: number | null; name: string | null; description: string | null; createdAt: number | string | null } | null;
-}
-
-/** One site, as `site list --json` reports it. */
-export interface SiteReport {
-  name: string;
-  description: string | null;
-  /** `one-address` (Dev only), or `dev-and-prod` once Prod has an address or a build. */
-  shape: "one-address" | "dev-and-prod";
-  dev: SiteEnvReport;
-  /** Null for a site with one address. */
-  prod: SiteEnvReport | null;
-  /** The repository the site builds from, when the platform reports one. */
-  repo: string | null;
-  /** Whether this project publishes to it (its line, or one of its site folders). */
-  project: boolean;
-}
-
-/** `site list --json`. */
-export interface SiteListReport {
-  /** Whose sites: the backend's kind and the name the run printed. */
-  backend: { kind: string; label: string };
-  /** What the project names: its layout, and the sites it publishes to. */
-  project: { layout: "flat" | "nested" | "none"; sites: string[] };
-  sites: SiteReport[];
-  /** Sites the project names that the backend does not have yet (created on first publish). */
-  missing: string[];
-}
+export type { SiteEnvReport, SiteListReport, SiteReport } from "./sites-api.js";
 
 export async function runSiteCommand(args: ParsedArgs, opts: SiteCommandOptions = {}): Promise<void> {
   if (args.subcommand === "list") return runSiteList(args, opts);
   if (args.subcommand === "use") return runSiteUse(args, opts);
+  if (args.subcommand === "pull") return runSitePull(args, opts);
+  if (args.subcommand === "serve") return runSiteServe(args, opts);
   throw unknownSubcommand("site", args.subcommand);
 }
 
 /** The backend whose sites are read: `--on`, else the workspace. */
-async function siteBackend(args: ParsedArgs, verb: "list" | "use", opts: SiteCommandOptions): Promise<ResolvedSource> {
+async function siteBackend(args: ParsedArgs, verb: "list" | "use" | "pull" | "serve", opts: SiteCommandOptions): Promise<ResolvedSource> {
   const slot = requireBackendSlot("site", verb, "on");
   return resolveBackend(slot, args.on ?? "workspace", {
     credential: () => getAccessToken(args),
@@ -94,56 +59,6 @@ async function siteBackend(args: ParsedArgs, verb: "list" | "use", opts: SiteCom
 
 function readTarget(resolved: ResolvedSource): StaticHostReadTarget {
   return { baseUrl: resolved.target.base, workspaceId: resolved.target.workspaceId, accessToken: resolved.bearer.access_token };
-}
-
-/** The sites the project publishes to: its folders when nested, else its line (or `default`). */
-function projectSites(cwd: string): { layout: "flat" | "nested" | "none"; sites: string[] } {
-  const layout = frontendApps(cwd);
-  if (layout.layout === "nested") return { layout: "nested", sites: layout.apps.map((a) => a.site) };
-  const line = readStaticHostLine(cwd, { warn: (m) => warn(m, "static.site-line-ignored") });
-  return { layout: layout.layout, sites: [line ?? DEFAULT_SITE] };
-}
-
-/** Prod counts once it has an address or serves a build: a site with only Dev has one address. */
-function hasProd(env: StaticHostEnvRow): boolean {
-  return env.defaultUrl !== undefined || env.customUrl !== undefined || env.canonical !== undefined;
-}
-
-function envReport(env: StaticHostEnvRow, builds: StaticHostBuildRow[] | undefined): SiteEnvReport {
-  const build = env.canonical === undefined ? undefined : builds?.find((b) => b.canonical === env.canonical);
-  return {
-    url: env.customUrl ?? env.defaultUrl ?? null,
-    defaultUrl: env.defaultUrl ?? null,
-    customUrl: env.customUrl ?? null,
-    canonical: env.canonical ?? null,
-    build:
-      build === undefined
-        ? null
-        : { id: build.id ?? null, name: build.name ?? null, description: build.description ?? null, createdAt: build.createdAt ?? null },
-  };
-}
-
-/** Every site of the backend, as reported, with the build each environment serves. */
-export async function readSites(target: StaticHostReadTarget, named: readonly string[]): Promise<SiteReport[]> {
-  const { listStaticHosts, listStaticHostBuilds } = await import("../deploy/static-host.js");
-  const rows: StaticHostRow[] = await listStaticHosts(target);
-  return Promise.all(
-    rows.map(async (row) => {
-      const serving = row.dev.canonical !== undefined || row.prod.canonical !== undefined;
-      // A build's description says where it came from; one read per site that serves one.
-      const builds = serving ? await listStaticHostBuilds(target, row.name).catch(() => undefined) : undefined;
-      const prod = hasProd(row.prod);
-      return {
-        name: row.name,
-        description: row.description ?? null,
-        shape: prod ? ("dev-and-prod" as const) : ("one-address" as const),
-        dev: envReport(row.dev, builds),
-        prod: prod ? envReport(row.prod, builds) : null,
-        repo: row.repo ?? null,
-        project: named.includes(row.name),
-      };
-    }),
-  );
 }
 
 /** One environment's line: its address and the build it serves. */
@@ -160,7 +75,7 @@ function envLine(label: string, env: SiteEnvReport): string {
 
 async function runSiteList(args: ParsedArgs, opts: SiteCommandOptions): Promise<void> {
   const cwd = process.cwd();
-  const project = projectSites(cwd);
+  const project = projectSites(cwd, (m) => warn(m, "static.site-line-ignored"));
   const resolved = await siteBackend(args, "list", opts);
   const named = describeBackend(resolved);
   const sites = await readSites(readTarget(resolved), project.sites);
@@ -239,4 +154,274 @@ async function runSiteUse(args: ParsedArgs, opts: SiteCommandOptions): Promise<v
   if (wrote.changed) success(`This project now publishes to "${name}" (${wrote.path})`);
   else info(`This project already publishes to "${name}".`);
   detail("`xanosdk publish` and `deploy --static` publish there unless `--static-host` names another.");
+}
+
+/* ------------------------------------------------------------------ *
+ * site pull (and --with-sites)
+ * ------------------------------------------------------------------ */
+
+/** Where the build a pull read came from, in words: `Dev, build 136 — Published from …`. */
+function buildWords(entry: SitePullEntry): string {
+  if (entry.build === null) return "no build";
+  const env = entry.env === "dev" ? "Dev, " : entry.env === "prod" ? "Prod, " : "newest, served nowhere: ";
+  const said = entry.build.description ?? entry.build.name;
+  return `${env}build ${entry.build.id}${said === null ? "" : ` — ${said}`}`;
+}
+
+/** What the app is made of, in words. */
+function sourceWords(entry: SitePullEntry): string {
+  switch (entry.source) {
+    case "project-app":
+      return `the app from the kept project's ${entry.from}/`;
+    case "app":
+      return "the kept app, as it is";
+    case "files":
+      return "the kept files, as built files (site.mjs + site/)";
+    case "built":
+      return "the files it serves, as built files (site.mjs + site/)";
+    default:
+      return "nothing";
+  }
+}
+
+/** The plan, one site a line, on stderr. */
+function printPlan(report: SitePullReport, named: string): void {
+  step(`Sites on ${named}`);
+  if (report.sites.length === 0) detail("None: the workspace has no sites.");
+  for (const entry of report.sites) {
+    const where = entry.dir === null ? "" : ` → ${entry.dir}/`;
+    info(`${entry.site} (${buildWords(entry)})${where}`);
+    if (entry.status === "write") detail(`${sourceWords(entry)}, ${entry.files} file${entry.files === 1 ? "" : "s"}`);
+    if (entry.note !== null) detail(entry.note);
+  }
+}
+
+/** The warnings a pull's report carries, one per site that is not written as read. */
+function warnEntries(report: SitePullReport): void {
+  for (const entry of report.sites) {
+    if (entry.status === "exists") {
+      warn(`${entry.site}: ${entry.dir}/ is already there and was kept. \`xanosdk site pull ${entry.site} --force\` replaces it.`, "site.kept");
+    }
+    else if (entry.status === "blocked") warn(`${entry.site}: not pulled — ${entry.note ?? "it has nowhere to go"}.`, "site.blocked");
+    else if (entry.status === "no-source" || entry.status === "no-build") {
+      warn(`${entry.site}: nothing to pull — ${entry.note ?? "no source"}.`, "site.no-source");
+    } else if (entry.status === "write" && entry.source === "built") {
+      warn(`${entry.site}: ${entry.note ?? "no source was kept"}.`, "site.built-fallback");
+    }
+  }
+}
+
+/**
+ * Pull the sites' live code into `projectDir`, listing the plan and confirming
+ * first: `site pull`, and the step `pull --with-sites` / `init --with-sites`
+ * run after the backend. `command` is what a needs-confirmation rerun names.
+ * Under `--json` only `site pull` writes the report; the others keep their
+ * own one document and say this step on stderr.
+ */
+export async function pullSitesStep(
+  args: ParsedArgs,
+  target: StaticHostReadTarget,
+  projectDir: string,
+  named: string,
+  opts: { command: string; names?: readonly string[]; document: boolean },
+): Promise<SitePullReport> {
+  const { pullSites } = await import("./sites-api.js");
+  const { confirm } = await import("./prompt.js");
+  const { yesRerun } = await import("./retry-command.js");
+  let shown = false;
+  const report = await pullSites({
+    target,
+    projectDir,
+    ...(opts.names === undefined || opts.names.length === 0 ? {} : { sites: opts.names }),
+    // Only `site pull` replaces: `init --force` means a non-empty target directory.
+    force: opts.command === "site pull" && args.force === true,
+    confirm: async (plan) => {
+      printPlan(plan, named);
+      shown = true;
+      if (args.yes === true) return true;
+      const writing = plan.sites.filter((s) => s.status === "write");
+      const replacing = writing.filter((s) => s.replaces).map((s) => `${s.dir}/`);
+      return confirm(
+        `Write ${writing.length === 1 ? `the site "${writing[0]!.site}"` : `${writing.length} sites`} into ` +
+          `${writing.map((s) => `${s.dir}/`).join(", ")}` +
+          `${replacing.length === 0 ? "" : `, replacing what ${replacing.join(", ")} ${replacing.length === 1 ? "holds" : "hold"} now`}?`,
+        { flag: "--yes", refusal: { details: { written: false }, ...yesRerun(args, opts.command) } },
+      );
+    },
+  });
+  if (!shown) printPlan(report, named);
+  warnEntries(report);
+  if (report.declined) info("Nothing was written.");
+  else if (report.applied) {
+    for (const entry of report.sites) {
+      if (entry.status === "write") success(`Pulled ${entry.site} into ${entry.dir}/`);
+    }
+    if (report.siteLine !== null) detail(`package.json now names the site "${report.siteLine}" (\`xanosdk.@xano/sdk.staticHost\`).`);
+    if (report.scriptsAdded) detail("package.json gained `dev` and `build` scripts that serve and copy frontend/site/ (node frontend/site.mjs).");
+    detail("`xanosdk frontend list` shows the apps and the site each publishes to.");
+  } else if (!report.sites.some((s) => s.status === "write")) info("Nothing to write.");
+  if (opts.document && isMachineOutput(args)) writeJson({ ...report, verb: "site pull" });
+  return report;
+}
+
+async function runSitePull(args: ParsedArgs, opts: SiteCommandOptions): Promise<void> {
+  const names = args.positionals;
+  const bad = names.filter((n) => !isSiteName(n));
+  if (bad.length > 0) {
+    throw new UsageError(
+      `${bad.map((n) => `"${n}"`).join(", ")} ${bad.length === 1 ? "is not a site name" : "are not site names"}: lowercase letters and digits only, like "default" or "shop".`,
+      { hintFor: { command: "site", subcommand: "pull" } },
+    );
+  }
+  const resolved = await siteBackend(args, "pull", opts);
+  await pullSitesStep(args, readTarget(resolved), process.cwd(), describeBackend(resolved), {
+    command: "site pull",
+    names,
+    document: true,
+  });
+}
+
+/**
+ * The step `pull --with-sites` and `init --from workspace` (by default, see
+ * {@link runInitSites}) run after the backend: the workspace's sites into
+ * `projectDir`.
+ */
+export async function runWithSites(args: ParsedArgs, projectDir: string, command: "pull" | "init", opts: SiteCommandOptions = {}): Promise<void> {
+  const resolved = await resolveBackend(requireBackendSlot("site", "pull", "on"), "workspace", {
+    credential: () => getAccessToken(args),
+    profile: args.profile,
+    ...(opts.deps === undefined ? {} : { deps: opts.deps }),
+  });
+  await pullSitesStep(args, readTarget(resolved), projectDir, describeBackend(resolved), { command, document: false });
+}
+
+/**
+ * The sites step `init --from workspace` runs by default after the backend
+ * (`--no-sites` skips it). Sites are a bonus to the backend just written, so
+ * nothing here fails the init: off a terminal without `--yes` the question
+ * cannot be asked, so the sites are skipped with a note, and a workspace whose
+ * sites cannot be read is reported the same way.
+ */
+export async function runInitSites(args: ParsedArgs, projectDir: string, opts: SiteCommandOptions = {}): Promise<void> {
+  const rel = relative(process.cwd(), projectDir).split(sep).join("/");
+  const later = `run \`xanosdk site pull\`${rel === "" ? "" : ` in ${rel}/`} (or re-run with --yes)`;
+  if (args.yes !== true && process.stdin.isTTY !== true) {
+    info(`Sites not pulled: ${later}.`);
+    return;
+  }
+  try {
+    await runWithSites(args, projectDir, "init", opts);
+  } catch (err) {
+    // Ctrl-C at the question (exit 130) is the user's to end the run with.
+    if ((err as { exitCode?: unknown } | null)?.exitCode === 130) throw err;
+    info(`Sites not pulled (${err instanceof Error ? err.message : String(err)}): ${later}.`);
+  }
+}
+
+/** The workspace's site names, or `undefined` when they cannot be read (the caller carries on without them). */
+export async function workspaceSiteNames(args: ParsedArgs, opts: SiteCommandOptions = {}): Promise<string[] | undefined> {
+  try {
+    const resolved = await resolveBackend(requireBackendSlot("site", "pull", "on"), "workspace", {
+      credential: () => getAccessToken(args),
+      profile: args.profile,
+      ...(opts.deps === undefined ? {} : { deps: opts.deps }),
+    });
+    const { listStaticHostNames } = await import("../deploy/static-host.js");
+    return await listStaticHostNames(readTarget(resolved));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * After a backend `pull` from the workspace: say which sites the project names
+ * are live on a build its frontend does not hold, and how to bring each down.
+ * Changes nothing, and is skipped quietly when the sites cannot be read — a
+ * hint is never worth failing a pull over.
+ */
+export async function hintSiteDrift(args: ParsedArgs, projectDir: string, opts: SiteCommandOptions = {}): Promise<void> {
+  let drift: SiteDrift[];
+  try {
+    const resolved = await resolveBackend(requireBackendSlot("site", "pull", "on"), "workspace", {
+      credential: () => getAccessToken(args),
+      profile: args.profile,
+      ...(opts.deps === undefined ? {} : { deps: opts.deps }),
+    });
+    const { siteDrift } = await import("./sites-api.js");
+    drift = await siteDrift(readTarget(resolved), projectDir);
+  } catch {
+    return;
+  }
+  for (const d of drift) info(driftWords(d));
+}
+
+/** `shop is live on build 136 (published from commit 011765b), which isn't in this frontend. Run …`. */
+export function driftWords(d: SiteDrift): string {
+  const where = d.env === "prod" ? "live on Prod on" : "live on";
+  const from = d.commit === null ? "" : ` (published from commit ${d.commit.sha}${d.commit.dirty ? " with uncommitted changes" : ""})`;
+  const run = `xanosdk site pull ${d.site}${d.dir === null ? "" : " --force"}`;
+  const replaces = d.dir === null ? "" : `, replacing ${d.dir}/`;
+  return `${d.site} is ${where} build ${d.build.id}${from}, which isn't in this frontend. Run \`${run}\` to bring it down${replaces}.`;
+}
+
+/**
+ * `pull --with-sites` asks before it writes. Off a terminal without `--yes`
+ * that question cannot be asked, so the run is refused before the backend is
+ * pulled rather than after. (`init` skips the sites with a note instead.)
+ */
+export async function refuseWithSitesOffTerminal(args: ParsedArgs, command: "pull" | "init"): Promise<void> {
+  if (args.withSites !== true || args.yes === true) return;
+  if (process.stdin.isTTY !== true) {
+    const { needsConfirmation } = await import("./prompt.js");
+    const { yesRerun } = await import("./retry-command.js");
+    throw needsConfirmation("Write each site's live code into frontend/?", { details: { written: false }, ...yesRerun(args, command) });
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * site serve
+ * ------------------------------------------------------------------ */
+
+async function runSiteServe(args: ParsedArgs, opts: SiteCommandOptions): Promise<void> {
+  const hint = { hintFor: { command: "site", subcommand: "serve" } };
+  const [site, rawBuild] = args.positionals;
+  if (site === undefined || rawBuild === undefined) {
+    throw new UsageError("`xanosdk site serve` needs the site and the build, e.g. `xanosdk site serve shop 136 --env prod`.", {
+      helpFor: { command: "site", subcommand: "serve" },
+    });
+  }
+  if (!isSiteName(site)) throw new UsageError(`"${site}" is not a site name: lowercase letters and digits only, like "default" or "shop".`, hint);
+  if (!/^[1-9]\d*$/.test(rawBuild)) {
+    throw new UsageError(`"${rawBuild}" is not a build id: the build's number, as \`xanosdk site list\` names it.`, hint);
+  }
+  const env = args.siteEnv;
+  if (env === undefined) {
+    throw new UsageError("`xanosdk site serve` needs `--env dev` or `--env prod`: the environment that serves the build.", hint);
+  }
+  const buildId = Number(rawBuild);
+  const resolved = await siteBackend(args, "serve", opts);
+  const target = readTarget(resolved);
+  const named = describeBackend(resolved);
+  const { serveBuild } = await import("./sites-api.js");
+  if (env === "prod" && args.yes !== true) {
+    const { confirm } = await import("./prompt.js");
+    const { yesRerun } = await import("./retry-command.js");
+    const ok = await confirm(`Serve build ${buildId} of the site "${site}" on Prod, on ${named}? Visitors get it at once.`, {
+      flag: "--yes",
+      refusal: { details: { served: false }, ...yesRerun(args, "site serve") },
+    });
+    if (!ok) {
+      info("Nothing was changed.");
+      if (isMachineOutput(args)) writeJson({ site, env, buildId, served: false, declined: true });
+      return;
+    }
+  }
+  const result = await serveBuild({ target, site, buildId, env });
+  if (isMachineOutput(args)) {
+    writeJson({ ...result, served: true });
+    return;
+  }
+  const label = env === "prod" ? "Prod" : "Dev";
+  success(`${label} of "${site}" now serves build ${buildId}${result.previous === null ? "" : ` (it served ${result.previous.id === null ? result.previous.canonical : `build ${result.previous.id}`})`}`);
+  if (result.url !== null) detail(result.url);
 }

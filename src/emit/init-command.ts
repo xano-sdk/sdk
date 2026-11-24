@@ -609,6 +609,9 @@ function rejectPullOnlyFlags(args: ParsedArgs): void {
     ...((args.exclude ?? []).length > 0 ? ["--exclude"] : []),
     // A plain init signs in to nothing, so an OAuth host has nowhere to go.
     ...(args.authHost !== undefined ? ["--origin"] : []),
+    // The sites follow a pulled workspace.
+    ...(args.withSites === true ? ["--with-sites"] : []),
+    ...(args.noSites === true ? ["--no-sites"] : []),
   ];
   if (passed.length === 0) return;
   if (passed.length === 1 && passed[0] === "--yes") {
@@ -879,7 +882,44 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
     // and refuses an unknown one there, and a Xano Engine refuses the flag.
     if (source.kind === "file") await refuseUnknownProfileFlag(args, resolve(args.positionals[0] ?? "."));
     const { runInitFromCommand } = await import("./codegen-command.js");
-    return runInitFromCommand(args, source);
+    // The workspace's sites follow its backend by default (DEV-10113);
+    // `--no-sites` leaves them out, and `--with-sites` is the old spelling of
+    // the default. Only a workspace has sites: every other source is as before.
+    if (args.withSites === true && args.noSites === true) {
+      throw new UsageError("`--with-sites` and `--no-sites` contradict each other: drop one.", { helpFor: { command: "init" } });
+    }
+    if (args.withSites === true && source.kind !== "workspace") {
+      throw new UsageError(
+        `\`--with-sites\` pulls the workspace's sites, so it goes with \`--from workspace\`, not \`--from ${args.from}\`.`,
+        { helpFor: { command: "init" } },
+      );
+    }
+    if (source.kind !== "workspace" || args.noSites === true) return runInitFromCommand(args, source);
+    const projectDir = resolve(args.positionals[0] ?? ".");
+    const { runInitSites, workspaceSiteNames } = await import("./site-command.js");
+    // A new project's starter app would take frontend/ as one app for the site
+    // "default", and every site of the workspace would then be refused room
+    // there. So when the sites will be pulled (a terminal, or `--yes`) and the
+    // workspace has some, frontend/ holds them instead of a starter, unless
+    // `--framework` or a frontend-only option asks for one.
+    let initArgs = args;
+    const sitesWillBePulled = args.yes === true || process.stdin.isTTY === true;
+    if (sitesWillBePulled && args.framework === undefined && frontendOnlyFlags(args).length === 0 && !isNonEmptyDir(projectDir)) {
+      const names = await workspaceSiteNames(args);
+      if (names !== undefined && names.length > 0) {
+        info(
+          `The workspace has ${names.length === 1 ? `a site (${names[0]})` : `${names.length} sites (${names.join(", ")})`}, ` +
+            `so frontend/ will hold ${names.length === 1 ? "its" : "their"} live code rather than a starter app ` +
+            `(\`--no-sites\` writes the starter instead).`,
+        );
+        initArgs = { ...args, framework: "none" };
+      }
+    }
+    await runInitFromCommand(initArgs, source);
+    // A run that wrote no backend (declined) has no project to put sites in.
+    if (!existsSync(join(projectDir, "package.json"))) return;
+    await runInitSites(args, projectDir);
+    return;
   }
   rejectPullOnlyFlags(args);
   const targetArg = args.positionals[0] ?? ".";

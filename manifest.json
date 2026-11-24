@@ -1,6 +1,6 @@
 {
   "name": "xanosdk",
-  "version": "1.0.29",
+  "version": "1.0.30",
   "description": "TypeScript SDK that compiles a typed Xano workspace into the importable packageExport JSON bundle.",
   "coverage": {
     "objectKinds": {
@@ -9774,7 +9774,11 @@
         },
         {
           "flag": "--static-source <archive>",
-          "description": "With --static: send this .zip, .tar.gz or .tgz of the app's source beside the build, kept as its original"
+          "description": "With --static: send this .zip, .tar.gz or .tgz of the app's source beside the build, kept as its original (default: the app's folder, archived)"
+        },
+        {
+          "flag": "--no-static-source",
+          "description": "With --static: send the build alone, without the app's source"
         },
         {
           "flag": "--static-env KEY=VALUE",
@@ -10318,12 +10322,12 @@
           "slot": "<backend>",
           "role": "subject",
           "default": "tracked",
-          "grammar": "ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
+          "grammar": "ephemeral, ephemeral:<name>, or tenant:<name>",
           "values": [
-            "ephemeral",
-            "local"
+            "ephemeral"
           ],
           "refused": {
+            "local": "a Xano Engine serves no builder to sign in to — work in the project's files, call its Meta API with `xanosdk local token`, or connect an agent with `xanosdk local mcp`",
             "workspace": "your workspace opens from the Xano dashboard as whoever is signed in, so there is no session to mint",
             "release": "a release is not a running backend — land it with `xanosdk deploy release:<name>` and open that"
           }
@@ -10512,8 +10516,16 @@
           ]
         },
         {
+          "flag": "--no-sites",
+          "description": "With --from workspace: write the backend only, and leave the workspace's sites out of frontend/"
+        },
+        {
+          "flag": "--with-sites",
+          "description": "Kept for compatibility: --from workspace already pulls each site's live code into frontend/ after the backend (--no-sites skips it)"
+        },
+        {
           "flag": "--yes, -y",
-          "description": "Confirm without asking what --force overwrites, or what --from replaces in an existing xano/ — required when there is no terminal"
+          "description": "Confirm without asking what --force overwrites, what --from replaces in an existing xano/, or the sites --from workspace writes — required when there is no terminal (without it there, the sites are skipped)"
         },
         {
           "flag": "--branch <label>",
@@ -11064,7 +11076,11 @@
         },
         {
           "flag": "--static-source <archive>",
-          "description": "Send this .zip, .tar.gz or .tgz of the app's source beside the build; the host keeps it as the build's original (the SDK never creates it)"
+          "description": "Send this .zip, .tar.gz or .tgz of the app's source beside the build instead of the app folder the publish archives by default; the host keeps it as the build's original"
+        },
+        {
+          "flag": "--no-static-source",
+          "description": "Send the build alone, without the app's source (by default each app's folder is archived and kept with its build)"
         },
         {
           "flag": "--skip-liveness",
@@ -11132,6 +11148,10 @@
         {
           "flag": "--branch <label>",
           "description": "Read this branch of the workspace instead of the live one (`workspace` only)"
+        },
+        {
+          "flag": "--with-sites",
+          "description": "After the backend, pull each of the workspace's sites' live code into frontend/ (as `xanosdk site pull` does); an app folder already there is kept (`xanosdk site pull <site> --force` replaces it)"
         },
         {
           "flag": "--origin <origin>",
@@ -11438,6 +11458,108 @@
         }
       ],
       "description": "List the workspace's sites: each one's addresses, Dev and Prod when it has both, the build each serves, and which one this project names"
+    },
+    {
+      "command": "site pull",
+      "args": "[site]",
+      "flags": [
+        {
+          "flag": "--force",
+          "description": "Replace a site's app folder that is already there"
+        },
+        {
+          "flag": "--yes, -y",
+          "description": "Write without asking (required when there is no terminal)"
+        },
+        {
+          "flag": "--on <backend>",
+          "description": "Read this backend's sites instead of your workspace's: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
+          "examples": [
+            "workspace",
+            "ephemeral",
+            "local"
+          ]
+        },
+        {
+          "flag": "--origin <origin>",
+          "description": "Xano OAuth host for `login` and a XANO_REFRESH_TOKEN exchange (default: $XANO_ORIGIN)"
+        },
+        {
+          "flag": "--config <path>",
+          "description": "Explicit credential file (default: $XANO_CONFIG)"
+        },
+        {
+          "flag": "--local-auth",
+          "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
+        }
+      ],
+      "selectors": [
+        {
+          "slot": "--on",
+          "role": "on",
+          "default": "none",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
+          "values": [
+            "workspace",
+            "ephemeral",
+            "local"
+          ]
+        }
+      ],
+      "description": "Pull each site's live code into frontend/: the build it serves (Dev, else Prod), from the source kept with it — a Studio project's app folder, an app, or plain files as built files (site.mjs + site/) — else the files it serves. One site is frontend/ and names the site in package.json; several are frontend/<site>/. Lists and confirms first; never replaces an app folder without --force, never touches xano/"
+    },
+    {
+      "command": "site serve",
+      "args": "<site> <build>",
+      "flags": [
+        {
+          "flag": "--env <dev|prod>",
+          "description": "The environment that serves the build: dev or prod (required)",
+          "values": [
+            "dev",
+            "prod"
+          ]
+        },
+        {
+          "flag": "--yes, -y",
+          "description": "Change Prod without asking (required when there is no terminal)"
+        },
+        {
+          "flag": "--on <backend>",
+          "description": "Read this backend's sites instead of your workspace's: workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
+          "examples": [
+            "workspace",
+            "ephemeral",
+            "local"
+          ]
+        },
+        {
+          "flag": "--origin <origin>",
+          "description": "Xano OAuth host for `login` and a XANO_REFRESH_TOKEN exchange (default: $XANO_ORIGIN)"
+        },
+        {
+          "flag": "--config <path>",
+          "description": "Explicit credential file (default: $XANO_CONFIG)"
+        },
+        {
+          "flag": "--local-auth",
+          "description": "Use the project-local ./.xano/auth.json instead of the shared cache"
+        }
+      ],
+      "selectors": [
+        {
+          "slot": "--on",
+          "role": "on",
+          "default": "none",
+          "grammar": "workspace, ephemeral, ephemeral:<name>, local, local:<name>, or tenant:<name>",
+          "values": [
+            "workspace",
+            "ephemeral",
+            "local"
+          ]
+        }
+      ],
+      "description": "Serve an existing build of a site on Dev or Prod — no upload: what Studio's Promote and Rollback do. Asks before changing Prod"
     },
     {
       "command": "site use",

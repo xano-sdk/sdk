@@ -847,12 +847,13 @@ export function processExitCode(err: unknown): number {
 /**
  * The verbs that once lived under a backend noun and are top-level now, each
  * taking the backend as its positional, mapped to the nouns whose rename lands
- * on a spelling the verb accepts. `workspace impersonate` is left out: pointing
- * it at `impersonate workspace` would name a spelling the verb refuses.
+ * on a spelling the verb accepts. `workspace impersonate` and `local impersonate`
+ * are left out: pointing them at `impersonate workspace` / `impersonate local`
+ * would name a spelling the verb refuses.
  */
 const MOVED_TO_TOP_LEVEL: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["tables", new Set(["workspace", "ephemeral", "tenant", "local"])],
-  ["impersonate", new Set(["ephemeral", "tenant", "local"])],
+  ["impersonate", new Set(["ephemeral", "tenant"])],
 ]);
 
 /**

@@ -2251,7 +2251,7 @@ function renderSections(m: Manifest): RenderedSections {
     "  The first def costs **~267 kB minified (~65 kB gzipped)**; the floor is the RUNTIME, not the def:",
     "  each further def adds ~2 kB, so splitting or trimming defs does not help.",
     "  Fix: `npx @xano/sdk routes <entry> --emit xano/routes.gen.ts` (`paths` is an accepted alias) — verbs, paths, and sockets as",
-    "  plain data importing NOTHING, still compile-checked: `routePath(\"GET blog/{slug}\", { slug })`, `routeQuery(\"GET search\", input)` (the GET query string, path params dropped),",
+    "  plain data importing NOTHING, still compile-checked: `routePath(\"GET blog/{slug}\", { slug })`, `routeUrl(path)` (the absolute URL to fetch), `routeQuery(\"GET search\", input)` (the GET query string, path params dropped),",
     "  `channelPath(\"rooms/{room_id}\", { room_id })`, `socketUrl(\"chat\", baseUrl)` (tenant base",
     "  URLs lifted to `wss://h/ws/<tenant>:<canonical>`), `mcpUrl(\"notes_mcp\", baseUrl)` (an MCP",
     "  server's address to show a user or hand a client; browser JS cannot call it). A rename is a type error, not a 404.",

@@ -376,10 +376,28 @@ export const FLAGS = {
     summary: "On a frontend with one app per site (frontend/<site>/), publish only this site's app (default: every app)",
   },
   create: { spec: "--create", summary: "Create the site on the target when it has none by that name" },
+  "with-sites": {
+    spec: "--with-sites",
+    summary:
+      "After the backend, pull each site's live code into frontend/ (as `xanosdk site pull` does): one site is frontend/, several are frontend/<site>/",
+  },
+  "no-sites": {
+    spec: "--no-sites",
+    summary: "With --from workspace: write the backend only, and leave the workspace's sites out of frontend/",
+  },
+  env: {
+    spec: "--env <dev|prod>",
+    summary: "The environment that serves the build: dev or prod",
+    values: ["dev", "prod"],
+  },
   "static-source": {
     spec: "--static-source <archive>",
     summary:
-      "Send this .zip, .tar.gz or .tgz of the app's source beside the build; the host keeps it as the build's original (the SDK never creates it)",
+      "Send this .zip, .tar.gz or .tgz of the app's source beside the build instead of the app folder the publish archives by default; the host keeps it as the build's original",
+  },
+  "no-static-source": {
+    spec: "--no-static-source",
+    summary: "Send the build alone, without the app's source (by default each app's folder is archived and kept with its build)",
   },
   "static-routing": {
     spec: "--static-routing spa|multipage",
@@ -1055,10 +1073,16 @@ export const COMMANDS = {
       "report",
       "no-secrets",
       "exclude",
+      "no-sites",
+      {
+        key: "with-sites",
+        summary:
+          "Kept for compatibility: --from workspace already pulls each site's live code into frontend/ after the backend (--no-sites skips it)",
+      },
       {
         key: "yes",
         summary:
-          "Confirm without asking what --force overwrites, or what --from replaces in an existing xano/ — required when there is no terminal",
+          "Confirm without asking what --force overwrites, what --from replaces in an existing xano/, or the sites --from workspace writes — required when there is no terminal (without it there, the sites are skipped)",
       },
       {
         key: "branch",
@@ -1216,8 +1240,10 @@ export const COMMANDS = {
       { key: "static-routing", summary: "With --static: override URL resolution (inferred from the bundle; rarely needed)" },
       {
         key: "static-source",
-        summary: "With --static: send this .zip, .tar.gz or .tgz of the app's source beside the build, kept as its original",
+        summary:
+          "With --static: send this .zip, .tar.gz or .tgz of the app's source beside the build, kept as its original (default: the app's folder, archived)",
       },
+      { key: "no-static-source", summary: "With --static: send the build alone, without the app's source" },
       {
         key: "static-env",
         summary: "With --static: public config baked in as window.<KEY> (repeatable; never secrets)",
@@ -1445,6 +1471,11 @@ export const COMMANDS = {
       "skip-roundtrip",
       "exclude",
       { key: "branch", summary: "Read this branch of the workspace instead of the live one (`workspace` only)" },
+      {
+        key: "with-sites",
+        summary:
+          "After the backend, pull each of the workspace's sites' live code into frontend/ (as `xanosdk site pull` does); an app folder already there is kept (`xanosdk site pull <site> --force` replaces it)",
+      },
       ...AUTH,
     ],
     example: "xanosdk pull release:main",
@@ -1541,6 +1572,7 @@ export const COMMANDS = {
       "site",
       "static-routing",
       "static-source",
+      "no-static-source",
       "skip-liveness",
       { key: "yes", summary: "Skip the confirmation before replacing a workspace's or tenant's frontend" },
       ...AUTH,
@@ -1549,7 +1581,7 @@ export const COMMANDS = {
   },
   site: {
     group: "Deploy",
-    display: "site <list|use>",
+    display: "site <list|use|pull|serve>",
     summary:
       "The sites (static hosts) your frontend publishes to, and the one this project names in package.json (`xanosdk.@xano/sdk.staticHost`)",
     subcommands: {
@@ -1565,6 +1597,33 @@ export const COMMANDS = {
         args: [{ name: "name", required: true }],
         flags: [{ key: "create", summary: "Create the site when the workspace has none by that name" }, SITE_ON, ...AUTH],
         example: "xanosdk site use shop --create",
+      },
+      pull: {
+        summary:
+          "Pull each site's live code into frontend/: the build it serves (Dev, else Prod), from the source kept with it — a Studio project's app folder, an app, or plain files as built files (site.mjs + site/) — else the files it serves. One site is frontend/ and names the site in package.json; several are frontend/<site>/. Lists and confirms first; never replaces an app folder without --force, never touches xano/",
+        args: [{ name: "site", required: false, variadic: true }],
+        flags: [
+          { key: "force", summary: "Replace a site's app folder that is already there" },
+          { key: "yes", summary: "Write without asking (required when there is no terminal)" },
+          SITE_ON,
+          ...AUTH,
+        ],
+        example: "xanosdk site pull shop --yes",
+      },
+      serve: {
+        summary:
+          "Serve an existing build of a site on Dev or Prod — no upload: what Studio's Promote and Rollback do. Asks before changing Prod",
+        args: [
+          { name: "site", required: true },
+          { name: "build", required: true },
+        ],
+        flags: [
+          { key: "env", summary: "The environment that serves the build: dev or prod (required)" },
+          { key: "yes", summary: "Change Prod without asking (required when there is no terminal)" },
+          SITE_ON,
+          ...AUTH,
+        ],
+        example: "xanosdk site serve shop 136 --env prod",
       },
     },
   },
@@ -1750,8 +1809,8 @@ export const COMMANDS = {
     display: "local",
     // The handles that ship with `deploy --local`: a Xano Engine has no
     // TTL and nothing reclaims it, and its binary is never on `PATH`, so these
-    // verbs are the only way to see or stop one (`impersonate local`
-    // opens one, like any other backend).
+    // verbs are the only way to see or stop one. It serves no builder, so
+    // `impersonate` refuses one.
     summary:
       "See, authenticate against and stop Xano Engines on this machine; move the " +
       "project's engine pin and manage cached engine versions",
@@ -1893,7 +1952,8 @@ export const COMMANDS = {
     // One verb for every backend a session can be minted for, so every kind
     // prints one JSON shape and bare opens what the project last deployed to.
     // The workspace is refused: it opens from the Xano dashboard as whoever is
-    // signed in, so there is no session to mint.
+    // signed in, so there is no session to mint. A Xano Engine is refused: it
+    // serves no builder.
     summary:
       "Open a backend's dashboard in the builder as a scoped session — the url carries it, so treat " +
       "it as a credential (default: the backend this project last deployed to)",
@@ -1902,10 +1962,12 @@ export const COMMANDS = {
         name: "backend",
         required: false,
         selector: {
-          accepted: ["ephemeral", "local", "tenant"],
+          accepted: ["ephemeral", "tenant"],
           role: "subject",
           default: "tracked",
           refused: {
+            local:
+              "a Xano Engine serves no builder to sign in to — work in the project's files, call its Meta API with `xanosdk local token`, or connect an agent with `xanosdk local mcp`",
             workspace:
               "your workspace opens from the Xano dashboard as whoever is signed in, so there is no session to mint",
             release: "a release is not a running backend — land it with `xanosdk deploy release:<name>` and open that",

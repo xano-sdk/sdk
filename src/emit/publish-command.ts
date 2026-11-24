@@ -75,6 +75,7 @@ import {
   type StaticEnvReport,
   type StaticPublishSummary,
   type StaticSitePublish,
+  type StaticSourceReport,
 } from "./deploy-command.js";
 import { EXIT_OUTCOME_UNKNOWN } from "./operation-registry.js";
 import { SENT_AFTERMATH } from "../util/http.js";
@@ -154,11 +155,11 @@ export interface PublishSummary {
    */
   staticEnv?: StaticEnvReport;
   /**
-   * `--static-source`: the source archive sent beside the build, and its size —
-   * `deploy --static`'s field, the same shape. Sent is not kept: a platform
-   * that predates the field ignores it. Absent when none was given.
+   * The source archive sent beside the build (`--static-source`, or the app's
+   * folder packed by default) — `deploy --static`'s field, the same shape. Sent
+   * is not kept: a platform that predates the field ignores it. Absent when none was sent.
    */
-  source?: { bytes: number };
+  source?: StaticSourceReport;
   /**
    * The site the build went to when the project named it — its `staticHost`
    * line, or the nested app's folder the build sits in. Absent for a typed
@@ -384,7 +385,7 @@ async function publishChecked(
       throw err;
     }
   }
-  const { staticUpload, publishedSite } = await import("./static-sites.js");
+  const { staticUpload, publishedSite, sourceSummary } = await import("./static-sites.js");
   const upload = staticUpload(args);
   const sites = args.staticApps?.map((a) => a.site);
   // `(host: x)` for a site other than the default one, typed or named by the
@@ -481,6 +482,11 @@ async function publishChecked(
   // The host line only: the headline already named the target, display name
   // and all, and saying it again under itself is noise.
   discloseWriteTarget({ ...destination, label: undefined });
+  // What goes beside the build(s), before the question that sends it.
+  {
+    const said = sourceSummary(args);
+    if (said !== undefined) detail(said);
+  }
 
   // The one destination shape (`backendDestinationPayload`): the parent's
   // instance and workspace, the target's actual kind, its bare name, its URL,
@@ -632,7 +638,7 @@ async function publishToLocalEngine(
   const { base, workspaceId } = resolved.target;
   const named = describeBackend(resolved);
   const where = { kind: "local", url: base, workspaceId } as const;
-  const { staticUpload } = await import("./static-sites.js");
+  const { staticUpload, sourceSummary } = await import("./static-sites.js");
   const upload = staticUpload(args);
   const sites = args.staticApps?.map((a) => a.site);
   step(
@@ -640,6 +646,10 @@ async function publishToLocalEngine(
       (sites !== undefined ? ` (sites: ${sites.join(", ")})` : upload.host !== undefined ? ` (host: ${upload.host})` : ""),
   );
   discloseWriteTarget(where);
+  {
+    const said = sourceSummary(args);
+    if (said !== undefined) detail(said);
+  }
 
   const published = await deployStaticTo(
     dir,

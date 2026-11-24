@@ -298,7 +298,26 @@ npx @xano/sdk frontend split                         # flat → frontend/<site>/
 ```
 
 Each app is built before anything is signed into or sent, so a failing build costs nothing. A
-site that does not exist yet is created on first publish. The `--json` document carries `sites`
+site that does not exist yet is created on first publish.
+
+**Each build keeps its app's source.** `publish` and `deploy --static` archive the app's folder
+(`frontend/` or `frontend/<site>/`, one archive per site) and send it beside the build, so a later
+`site pull` brings the code back rather than the built files. Only the app's folder goes, with the
+project's root `package.json` so a pull maps it back to its folder: never `xano/` or another app.
+Inside the folder it is only what git would commit (tracked, plus untracked files `.gitignore` does
+not exclude), never `node_modules`, `.git`, framework caches, symlinks, or the build output
+(`dist/`, `build/`, `out/`, the directory published). Files named like secrets stay out even when
+committed (`.env*`, `.npmrc`, `.netrc`, `.dev.vars`, `*.pem`, `*.key`, `*.p12`, `id_rsa*`,
+`*.secret*`, `secrets.json`, `credentials*.json`, `service-account*.json`, `xano.profile.json`,
+anything under `.xano/`), and the run names each one (`source.leftOut` in `--json`). The run says
+what it sends before it asks to publish.
+
+No source is sent, with warning `static.source-skipped`, when the folder is not in a git repository
+(nothing says which files are safe to share), when git cannot list it (not installed, "dubious
+ownership", no answer in time), or when the archive passes the 100 MB upload cap or what a pull
+unpacks; the build is then published alone. `--static-source <archive>` sends your own archive
+instead (one site at a time); `--no-static-source` sends none. A build outside any app folder
+(`publish ./dist` with no `frontend/`) sends none. The `--json` document carries `sites`
 (one entry per app: `site`, `dir`, `url`, `canonical`, `verified`), and its top-level `url` is the
 first app's. `frontendApps(projectDir)` from `@xano/sdk/node` returns the same answer as
 `frontend list --json`. `frontend split` moves everything in `frontend/` into `frontend/<site>/`
@@ -306,6 +325,71 @@ first app's. `frontendApps(projectDir)` from `@xano/sdk/node` returns the same a
 `frontend/` at the new folder, drops the line, then builds the moved app; if anything fails it
 puts every file back and exits non-zero naming what broke. A frontend built by the project's root
 `package.json` (the scaffold's) needs a `package.json` of its own before it can be split.
+
+**Pulling a site's live code** — a pull of the backend leaves `frontend/` alone.
+`npx @xano/sdk site pull [site…]` brings each site's
+live code down (every site of the workspace, or the ones named). `init --from workspace` does the
+same after the backend by default (`--no-sites` skips it; off a terminal without `--yes` it skips
+them with a note), and `pull --with-sites` after a refresh. A plain `pull` from the workspace only
+names a site whose live build the frontend does not hold, with the `site pull` that brings it down:
+the build is held when its description names a commit in the project's git history, or when the
+last site pull here recorded it (`.xano/sites.json`):
+
+```bash
+npx @xano/sdk site pull                    # every site; lists the plan and confirms (--yes off a terminal)
+npx @xano/sdk site pull shop --force       # only shop, replacing frontend/shop/ when it is already there
+npx @xano/sdk site pull --json             # { layout, applied, sites: [{ site, env, build, source, dir, status, note, repo }] }
+```
+
+For each site it reads the build Dev serves, else Prod's, else (a site serving nothing) its newest
+built one, and fetches the source kept with that build (the app's folder a publish sends by
+default, or a `--static-source` archive):
+
+- **A Studio or SDK project** (the whole project at that commit: `package.json`, `xano/` and every
+  app): the site's app is taken from it, `frontend/<site>/` when the project keeps one app per
+  site, or `frontend/` when it keeps one app that publishes to this site. Its backend and the other
+  apps are left out.
+- **An app** (a `package.json` with a `dev` or `build` script): kept as it is.
+- **Plain files** (a zip upload with an `index.html`): written as the app's built files, `site/`
+  beside the `site.mjs` that serves (`npm run dev`) and copies (`npm run build`) them, the same
+  shape Xano Studio writes when it brings a site in.
+- **No usable source** (an older build, a Git-synced one): the files the build serves, in the same
+  built-files shape (warning `site.built-fallback`). When those cannot be read either, nothing is
+  written for that site (`site.no-source`); a Git-synced site's report names its repository.
+
+**Layout.** One site into a project with no frontend is the flat layout: `frontend/` is the app and
+`package.json` names the site (`staticHost`), with `dev`/`build` scripts for a built-files app.
+Several are one folder per site, `frontend/<site>/`, which `frontend list` reads back. A project
+that already keeps one app per site gets more folders; a flat project gets only its own site again
+(`site.blocked` for another: `frontend split` makes room). An app folder that is already there is
+kept (`site.kept`) unless `site pull --force` replaces it, and nothing outside `frontend/`, the
+root `package.json` and `.xano/sites.json` is written: `xano/` is never touched.
+
+**Serving a build that is already there.** `npx @xano/sdk site serve <site> <build> --env dev|prod`
+puts an existing build on an environment without uploading anything: promoting Dev's build to
+Prod, or rolling Prod back to an earlier one. It asks before changing Prod (`--yes` off a
+terminal); `site list` names the build each environment serves.
+
+```bash
+npx @xano/sdk site serve shop 136 --env prod --yes
+```
+
+**From code.** `@xano/sdk/node` exports the same work, so a tool calls it in-process instead of
+running the CLI. Each takes `target: { baseUrl, workspaceId, accessToken }`:
+
+```ts
+import { listSites, pullSites, serveBuild } from "@xano/sdk/node";
+
+const target = { baseUrl: "https://x1.xano.io", workspaceId: 12, accessToken };
+const sites = await listSites({ target, projectDir });            // SiteListReport: what `site list --json` prints
+const plan = await pullSites({ target, projectDir, dryRun: true }); // SitePullReport, nothing written
+const done = await pullSites({ target, projectDir, sites: ["shop"], force: false, confirm: (p) => p.sites.length > 0 });
+const served = await serveBuild({ target, site: "shop", buildId: 136, env: "prod" }); // { canonical, previous, url }
+```
+
+`pullSites` throws `SiteNotFoundError` (exit code 8) for a site name the workspace does not have;
+`serveBuild` throws it for an unknown site and `SiteBuildError` for a build the site does not have
+(8) or one that was not built (1).
 
 **Where a build came from** — every static build the SDK uploads carries a description:
 `Published from the CLI · commit a119141`, with ` (uncommitted changes)` when the working tree
@@ -705,12 +789,13 @@ the next deploy after `local update`), so rows entered through your app do not s
 restart.
 
 **Operating on it.** After a local deploy, the engine is the backend this project
-tracks, so bare `npx @xano/sdk test run-all`, `env set`, `env pull`, `tables`, `impersonate` and
+tracks, so bare `npx @xano/sdk test run-all`, `env set`, `env pull`, `tables` and
 `status` reach it — none of them needs a Xano account. Name it explicitly as `local`,
 or `local:<name>` for another one from `npx @xano/sdk local list` (the full grammar is in
 [the CLI guide](cli.md#naming-a-backend)). `publish` puts a built frontend on it without
-re-importing the backend. One command cannot serve it and refuses it by name: `release create`
-(the cut runs on the instance — pass `--from ephemeral`).
+re-importing the backend. Two commands cannot serve it and refuse it by name: `release create`
+(the cut runs on the instance — pass `--from ephemeral`) and `impersonate` (a Xano Engine serves
+no builder: work in `xano/`, call its Meta API with `npx @xano/sdk local token`, or use its MCP server).
 
 | Command | What it does |
 |---|---|

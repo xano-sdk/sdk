@@ -433,6 +433,12 @@ export interface StaticHostRequest {
    * `source` field at all. Checked by {@link assertStaticSource}.
    */
   source?: string;
+  /**
+   * The app's source as a `.zip` already in memory (`packAppSource`, the
+   * default when no {@link source} is given), sent as `source` the same way.
+   * Ignored when {@link source} is set.
+   */
+  sourceZip?: Uint8Array;
 }
 
 export interface StaticHostResult {
@@ -644,7 +650,9 @@ export async function deployStaticHost(req: StaticHostRequest): Promise<StaticHo
   // Where the build came from, so the platform tells a build published from
   // code from one uploaded by hand. The build's `name` stays what it was.
   const description = req.description ?? staticBuildDescription(process.cwd());
-  const sourceData = req.source !== undefined && sourceKind !== undefined ? readFileSync(req.source) : undefined;
+  const sourceData =
+    req.source !== undefined && sourceKind !== undefined ? readFileSync(req.source) : req.source === undefined ? req.sourceZip : undefined;
+  const sentKind = req.source === undefined ? "zip" : sourceKind;
   const sourceBytes = sourceData?.length;
   // A fresh form per attempt: a site the project names is created and the
   // build sent again, and a body is read once.
@@ -659,8 +667,8 @@ export async function deployStaticHost(req: StaticHostRequest): Promise<StaticHo
     if (sourceData !== undefined) {
       form.append(
         "source",
-        new Blob([sourceData], { type: sourceKind === "zip" ? "application/zip" : "application/gzip" }),
-        sourceKind === "zip" ? "source.zip" : "source.tar.gz",
+        new Blob([sourceData], { type: sentKind === "zip" ? "application/zip" : "application/gzip" }),
+        sentKind === "zip" ? "source.zip" : "source.tar.gz",
       );
     }
     return form;
@@ -943,6 +951,8 @@ export interface StaticHostBuildRow {
   description: string | undefined;
   canonical: string | undefined;
   createdAt: number | string | undefined;
+  /** `ok` once the build was built and can be served; anything else (`pending`, `failed`) cannot. */
+  status: string | undefined;
 }
 
 /**
@@ -969,5 +979,130 @@ export async function listStaticHostBuilds(req: StaticHostReadTarget, name: stri
       description: textOf(i.description),
       canonical: textOf(i.canonical),
       createdAt: typeof i.created_at === "number" || typeof i.created_at === "string" ? i.created_at : undefined,
+      status: textOf(i.status),
     }));
+}
+
+/** The URL of one site's routes: `…/static_host/{name}`. */
+function siteUrl(req: StaticHostReadTarget, name: string): string {
+  return `${req.baseUrl.replace(/\/$/, "")}/api:meta/workspace/${req.workspaceId}/static_host/${encodeURIComponent(name)}`;
+}
+
+const SOURCE_TIMEOUT_MS = 120_000;
+
+/**
+ * The source archive a build was published with (`--static-source`, or the
+ * archive a dashboard upload sent): `GET …/static_host/{name}/build/{id}/source`.
+ * `undefined` when the build kept none (404, or an empty answer). Throws when
+ * the read fails otherwise, or the archive is over the upload cap.
+ */
+export async function downloadStaticBuildSource(req: StaticHostReadTarget, name: string, buildId: number): Promise<Buffer | undefined> {
+  const url = `${siteUrl(req, name)}/build/${buildId}/source`;
+  const what = `Reading the source of build ${buildId} of the site "${name}"`;
+  const res = await fetchOrExplain(
+    url,
+    { headers: { Authorization: `Bearer ${req.accessToken}` }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) },
+    what,
+    SOURCE_TIMEOUT_MS,
+  );
+  if (res.status === 404) {
+    await res.body?.cancel().catch(() => undefined);
+    return undefined;
+  }
+  if (!res.ok) throw new Error(httpFailure(what, res, await res.text().catch(() => "")));
+  const declared = Number(res.headers.get("content-length") ?? "0");
+  if (declared > STATIC_UPLOAD_MAX_BYTES) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new Error(`${what}: the archive is over the ${STATIC_UPLOAD_MAX_BYTES / (1024 * 1024)} MB cap.`);
+  }
+  const bytes = Buffer.from(await res.arrayBuffer());
+  if (bytes.length > STATIC_UPLOAD_MAX_BYTES) throw new Error(`${what}: the archive is over the ${STATIC_UPLOAD_MAX_BYTES / (1024 * 1024)} MB cap.`);
+  return bytes.length === 0 ? undefined : bytes;
+}
+
+/**
+ * The files a build serves, as the build's export answers with them
+ * (`GET …/build/{id}/multidoc?source=built`): the text, for
+ * `parseBuildExport` in `site-source.ts`. `undefined` when the export is not
+ * there to read (an older instance, a build that is not built). Throws on a
+ * transport failure.
+ */
+export async function exportStaticBuildFiles(req: StaticHostReadTarget, name: string, buildId: number): Promise<string | undefined> {
+  const url = `${siteUrl(req, name)}/build/${buildId}/multidoc?source=built`;
+  const res = await fetchOrExplain(
+    url,
+    { headers: { Authorization: `Bearer ${req.accessToken}` }, signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS) },
+    `Reading the files of build ${buildId} of the site "${name}"`,
+    SOURCE_TIMEOUT_MS,
+  );
+  const text = await res.text();
+  return res.ok ? text : undefined;
+}
+
+/**
+ * One build of a site: `GET …/static_host/{name}/build/{id}`. `undefined` when
+ * the site has no such build (404). Throws when the read fails otherwise.
+ */
+export async function getStaticHostBuild(req: StaticHostReadTarget, name: string, buildId: number): Promise<StaticHostBuildRow | undefined> {
+  const url = `${siteUrl(req, name)}/build/${buildId}`;
+  const what = `Reading build ${buildId} of the site "${name}"`;
+  const res = await fetchOrExplain(
+    url,
+    { headers: { Authorization: `Bearer ${req.accessToken}` }, signal: AbortSignal.timeout(STATIC_READ_TIMEOUT_MS) },
+    what,
+    STATIC_READ_TIMEOUT_MS,
+  );
+  const text = await res.text();
+  if (res.status === 404) return undefined;
+  if (!res.ok) throw new Error(httpFailure(what, res, text));
+  const i = (parseJsonAnswer(text, what, url) ?? {}) as Record<string, unknown>;
+  return {
+    id: typeof i.id === "number" ? i.id : buildId,
+    name: textOf(i.name),
+    description: textOf(i.description),
+    canonical: textOf(i.canonical),
+    createdAt: typeof i.created_at === "number" || typeof i.created_at === "string" ? i.created_at : undefined,
+    status: textOf(i.status),
+  };
+}
+
+/**
+ * Serve an existing build on one environment of its site:
+ * `POST …/static_host/{name}/build/{id}/env` with `{ env }`, the route the
+ * dashboard's deploy, and Xano Studio's promote and rollback, use. Returns the
+ * address the environment answers at, when the answer carries one.
+ */
+export async function serveStaticBuild(
+  req: StaticHostReadTarget,
+  name: string,
+  buildId: number,
+  env: "dev" | "prod",
+): Promise<{ url: string | undefined }> {
+  const url = `${siteUrl(req, name)}/build/${buildId}/env`;
+  const what = `Serving build ${buildId} of the site "${name}" on ${env === "prod" ? "Prod" : "Dev"}`;
+  const res = await fetchOrExplain(
+    url,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${req.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ env }),
+      signal: AbortSignal.timeout(60_000),
+    },
+    what,
+    60_000,
+  ).catch((err: unknown) => {
+    throw writeTransportFailure(err);
+  });
+  const text = await res.text().catch((err: unknown) => {
+    throw writeTransportFailure(err);
+  });
+  if (!res.ok) throw Object.assign(new Error(httpFailure(what, res, text)), { status: res.status });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = undefined;
+  }
+  const answer = parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  return { url: textOf(answer.custom_url) ?? textOf(answer.default_url) };
 }

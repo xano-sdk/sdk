@@ -392,7 +392,7 @@ export const ROUTES = ${objectLiteral(entries)} as const;
 export type RouteName = keyof typeof ROUTES;
 ${rows.length > 1 ? MANY_ROUTES : ""}
 ${rows.length > 1 ? UNION_OVERLOAD : ""}${ambiguousOverloads ? `${ambiguousOverloads}\n` : ""}${overloadsFor("routePath", rows.map((r) => ({ name: r.key, params: r.params })))}
-${implementation(ambiguousKeys.length > 0)}${rows.length > 0 ? ROUTE_QUERY : ""}${realtimeSection}${mcp.length > 0 ? renderMcp(mcp) : ""}${renderRouteInputTypes(inputs)}`;
+${implementation(ambiguousKeys.length > 0)}${rows.length > 0 ? ROUTE_URL + ROUTE_QUERY : ""}${realtimeSection}${mcp.length > 0 ? renderMcp(mcp) : ""}${renderRouteInputTypes(inputs)}`;
 }
 
 /**
@@ -513,6 +513,37 @@ function fillParams(
     }
   }
   return filled;
+}
+`;
+
+/**
+ * The emitted `routeUrl` (DEV-10114): an endpoint's ABSOLUTE URL, the backend's
+ * base URL in front of a `routePath`. A bare `/api:` path is fetched from the
+ * page's own origin, which a dev server proxies to the backend but a published
+ * static site answers itself, with its `index.html`. So the path works in a
+ * preview and breaks live. The base defaults to `XANO_HOST`, the global every
+ * static publish injects into the site; with none (a dev server that proxies)
+ * the path is returned as it is. `routePath` is unchanged.
+ */
+const ROUTE_URL = `
+/**
+ * An endpoint's absolute URL: the backend's base URL + \`path\` (what
+ * \`routePath\` returns). Fetch this, not a bare \`routePath\`: on a published
+ * static site a \`/api:\` path is the site's own, and it answers with its
+ * \`index.html\`.
+ *
+ *   fetch(routeUrl(routePath("GET notes/{id}", { id })))
+ *
+ * The base is \`baseUrl\` when given, else \`XANO_HOST\`, which every static
+ * publish injects as \`window.XANO_HOST\`. With neither (a dev server that
+ * proxies \`/api:\` to the backend), \`path\` is returned unchanged. A
+ * \`/tenant/<name>\` base keeps its prefix. An absolute \`path\` is returned as is.
+ */
+export function routeUrl(path: string, baseUrl?: string): string {
+  if (/^[a-z][a-z0-9+.-]*:\\/\\//i.test(path)) return path;
+  const injected = (globalThis as { XANO_HOST?: unknown }).XANO_HOST;
+  const base = (baseUrl ?? (typeof injected === "string" ? injected : "")).trim().replace(/\\/+$/, "");
+  return base === "" ? path : base + (path.startsWith("/") ? path : \`/\${path}\`);
 }
 `;
 

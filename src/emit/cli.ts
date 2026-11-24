@@ -40,6 +40,7 @@
 import { writeData } from "../util/secrets.js";
 import type { AiBilling } from "../deploy/local-engine-ai.js";
 import type { StaticAppBuild } from "./static-sites.js";
+import type { AppSourcePack } from "../deploy/app-source.js";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { andList } from "../util/and-list.js";
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
@@ -414,10 +415,15 @@ export interface ParsedArgs {
    * existing `.zip`, `.tar.gz` or `.tgz` of the app's source, sent beside the
    * build as the multipart field `source`. The host serves the build as without
    * it and keeps this as the build's original; a platform that predates the
-   * field ignores it. The SDK never builds the archive. Unset, the upload is
-   * the one it always was.
+   * field ignores it. Unset, the publish archives the app's own folder and
+   * sends that instead (`app-source.ts`, DEV-10124), unless `--no-static-source`.
    */
   staticSource: string | undefined;
+  /**
+   * `publish --no-static-source` / `deploy --static … --no-static-source`: send
+   * the build alone, without the app's source the publish otherwise keeps with it.
+   */
+  noStaticSource?: boolean;
   /**
    * `publish --site <name>` / `deploy --static … --site <name>`: on a project
    * whose `frontend/` holds one app per site (`frontend/<site>/`), publish only
@@ -427,6 +433,16 @@ export interface ParsedArgs {
   site?: string | undefined;
   /** `site use <name> --create`: create the site on the target when it does not have one by that name. */
   create?: boolean;
+  /**
+   * `pull --with-sites`: after the backend, pull each site's live code into
+   * `frontend/` (`site pull`). `init --from workspace` does that by default, and
+   * accepts the flag as a no-op.
+   */
+  withSites?: boolean;
+  /** `init --from workspace --no-sites`: write the backend only, not the workspace's sites. */
+  noSites?: boolean;
+  /** `site serve <site> <build> --env dev|prod`: the environment that serves the build. */
+  siteEnv?: "dev" | "prod";
   /**
    * Not parsed: filled in by `prepareStaticPlan` (`static-sites.ts`) before a
    * static publish. The site the project's `staticHost` line names, used when
@@ -439,6 +455,14 @@ export interface ParsedArgs {
    * app to publish, built, each with the site it publishes to.
    */
   staticApps?: readonly StaticAppBuild[] | undefined;
+  /**
+   * Not parsed: filled in by `prepareStaticPlan` for one build that sits in a
+   * project's app folder (`frontend` or `frontend/<site>`): that folder's
+   * source, packed, sent with the build by default. Unset with
+   * `--static-source`, `--no-static-source`, a build outside any app folder, or
+   * a source that could not be packed (said as `static.source-skipped`).
+   */
+  staticAppSource?: AppSourcePack | undefined;
   /** `--origin <origin>`: Xano control-plane OAuth host. Default: $XANO_ORIGIN, then https://app.xano.com. */
   authHost: string | undefined;
   /** `--config <path>`: explicit credential file. Default: $XANO_CONFIG, then ./.xano/auth.json. */
@@ -1106,6 +1130,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let staticSource: string | undefined;
   let site: string | undefined;
   let create = false;
+  let withSites = false;
+  let noSites = false;
+  let noStaticSource = false;
+  let siteEnv: "dev" | "prod" | undefined;
   // Null-prototype maps: a user-chosen key lands as a key. On a plain `{}`,
   // `m["__proto__"] = v` is a prototype set, not a store — the pair vanished.
   const staticEnv = Object.create(null) as Record<string, string>;
@@ -1313,6 +1341,23 @@ export function parseArgs(argv: string[]): ParsedArgs {
       reset = true;
     } else if (arg === "--keep-data") {
       keepData = true;
+    } else if ((arg === "--env" || arg.startsWith("--env=")) && command === "site" && subcommand === "serve") {
+      // `site serve`'s environment: Dev or Prod, the two a site has. Every
+      // other command refuses `--env` as the old spelling of `--on` (below).
+      const value = arg === "--env" ? valueAfter() : arg.slice("--env=".length);
+      if (value !== "dev" && value !== "prod") {
+        throw new UsageError(
+          `\`--env\` is the environment that serves the build: \`dev\` or \`prod\`${value === undefined || value === "" ? "" : `, not "${value}"`}.`,
+          { helpFor: helpTargetFor(command, subcommand) },
+        );
+      }
+      siteEnv = value;
+    } else if (arg === "--with-sites") {
+      withSites = true;
+    } else if (arg === "--no-sites") {
+      noSites = true;
+    } else if (arg === "--no-static-source") {
+      noStaticSource = true;
     } else if (arg === "--env" || arg.startsWith("--env=")) {
       // Renamed, not removed: agents arrive with cached docs, and "Unknown flag
       // --env" would send them to the did-you-mean list instead of the fix. The
@@ -2370,6 +2415,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
     staticSource,
     ...(site === undefined ? {} : { site }),
     ...(create ? { create } : {}),
+    ...(withSites ? { withSites } : {}),
+    ...(noSites ? { noSites } : {}),
+    ...(noStaticSource ? { noStaticSource } : {}),
+    ...(siteEnv === undefined ? {} : { siteEnv }),
     staticEnv,
     envVars,
     envFile,
@@ -4609,7 +4658,32 @@ async function dispatch(rawArgv: string[]): Promise<void> {
     // remedy is a command to run there.
     const first = args.positionals[0];
     const file = first !== undefined && !isKindShaped(first) && (/\.json$/i.test(first) || /[\\/]/.test(first));
-    return file ? runPullCommand(args) : atProjectRoot(args, runPullCommand);
+    if (file) return void (await runPullCommand(args));
+    if (args.withSites !== true) {
+      // After a pull from the workspace, a site whose live build the frontend
+      // does not hold is named, with the `site pull` that brings it down.
+      return atProjectRoot(args, async (a) => {
+        const pulled = await runPullCommand(a);
+        if (pulled?.kind !== "workspace") return;
+        const { hintSiteDrift } = await import("./site-command.js");
+        await hintSiteDrift(a, process.cwd());
+      });
+    }
+    // `--with-sites` (DEV-10113): the workspace's sites follow the backend.
+    // Refused up front when it cannot apply, or cannot ask, so nothing is pulled first.
+    if (first !== undefined && !/^workspace(?::|$)/.test(first)) {
+      throw new UsageError(
+        `\`--with-sites\` pulls the workspace's sites, and "${first}" is not the workspace. ` +
+          `Pull the backend with \`xanosdk pull ${first}\`, then the sites with \`xanosdk site pull\`.`,
+        { hintFor: { command: "pull" } },
+      );
+    }
+    const { refuseWithSitesOffTerminal, runWithSites } = await import("./site-command.js");
+    await refuseWithSitesOffTerminal(args, "pull");
+    return atProjectRoot(args, async (a) => {
+      await runPullCommand(a);
+      await runWithSites(a, process.cwd(), "pull");
+    });
   }
   if (command === "generate") {
     const { runGenerateCommand } = await import("./generate-command.js");

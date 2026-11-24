@@ -1852,13 +1852,13 @@ export function renderApiTs(): string {
 //
 //   import type { InferResponse } from "@xano/sdk";
 //   import type { createNoteQuery } from "../../../xano/api/create-note.js";
-//   import { ROUTES, routePath, type RouteInputs } from "../../../xano/routes.gen.js";
+//   import { ROUTES, routePath, routeUrl, type RouteInputs } from "../../../xano/routes.gen.js";
 //
 //   export type CreateNoteBody = RouteInputs["POST create_note"];
 //   export type Note = InferResponse<typeof createNoteQuery>;
 //
 //   export async function createNote(body: CreateNoteBody): Promise<Note> {
-//     const res = await fetch(XANO_HOST + routePath("POST create_note"), {
+//     const res = await fetch(routeUrl(routePath("POST create_note"), XANO_HOST), {
 //       method: ROUTES["POST create_note"].verb,
 //       headers: { "content-type": "application/json" },
 //       body: JSON.stringify(body),
@@ -1869,6 +1869,9 @@ export function renderApiTs(): string {
 //
 // Keys are "<VERB> <query name>"; path params are passed by name, e.g.
 // routePath("GET notes/{id}", { id }). A renamed endpoint is a compile error.
+// Always fetch the absolute URL, routeUrl(routePath(...), XANO_HOST): a bare
+// routePath() is a path on the page's own origin, which a dev server proxies
+// to the backend but the published site answers with its own index.html.
 
 // Types the global the deploy injects, for every file in the project: the
 // documented \`window.XANO_HOST\` reads compile anywhere. \`undefined\` in dev.

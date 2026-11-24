@@ -60,7 +60,7 @@ npx @xano/sdk deploy ./xano/index.ts --open       # …and open the deployed URL
 npx @xano/sdk deploy ./xano/index.ts --ephemeral --expires-hours 8   # the ephemeral's TTL when this deploy creates it: 1–24 hours (default: 1)
 npx @xano/sdk deploy ./xano/index.ts --ephemeral --keep-data --static ./frontend/dist --static-host docs   # publish to a named static host — merge only: a replace deletes it, and a deploy creates only `default` (create `docs` in the dashboard first)
 npx @xano/sdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-routing spa   # override URL resolution, spa|multipage (inferred from the bundle; rarely needed)
-npx @xano/sdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-source ./app-source.zip   # also send the app's source (.zip/.tar.gz/.tgz you built) beside the build; the host keeps it as the build's original
+npx @xano/sdk deploy ./xano/index.ts --ephemeral --static ./frontend/dist --static-source ./app-source.zip   # send this source archive (.zip/.tar.gz/.tgz) beside the build instead of the app folder it sends by default; the host keeps it as the build's original
 npx @xano/sdk deploy ./xano/index.ts --keep-data  # redeploy but keep table rows (merge instead of replace; seeds aren't re-written)
 npx @xano/sdk env pull --from workspace   # fill xano/.env from a running backend (default: last deployed); lists what changes and confirms over an existing file (--yes off a terminal)
 npx @xano/sdk env set STRIPE_KEY --to workspace --yes   # set ONE env var on a running backend, value piped on stdin (no deploy; never printed)
@@ -70,9 +70,13 @@ npx @xano/sdk publish ./frontend/dist             # publish a built frontend alo
 npx @xano/sdk publish ./frontend/dist --to ephemeral   # …or onto an ephemeral instead (after a local deploy, bare publish goes to the engine)
 npx @xano/sdk deploy ./xano/index.ts --static ./frontend/dist   # on the Xano Engine, the engine serves the build at http://<prefix>.localhost:<port>
 npx @xano/sdk publish ./frontend/dist --to workspace --branch v2 --yes   # …onto the workspace, refused unless branch v2 is live
-npx @xano/sdk publish ./frontend/dist --to workspace --static-source ./app-source.tar.gz --yes   # …with the app's source archive kept beside the build
+npx @xano/sdk publish ./frontend/dist --to workspace --static-source ./app-source.tar.gz --yes   # …with your own source archive kept beside the build (default: the app's folder, archived)
+npx @xano/sdk publish ./frontend/dist --no-static-source   # …the build alone, without the app's source
 npx @xano/sdk site list                    # the workspace's sites: addresses, Dev and Prod, the build each serves, which one this project names (--on <backend>)
 npx @xano/sdk site use shop --create       # name the site this project publishes to (package.json "staticHost"); --create makes it when missing
+npx @xano/sdk site pull                    # each site's live code into frontend/ (Dev's build, else Prod's): one site is frontend/, several frontend/<site>/; lists and confirms (--yes)
+npx @xano/sdk site pull shop --force       # …only shop, replacing frontend/shop/ when it is there (kept otherwise); never touches xano/
+npx @xano/sdk site serve shop 136 --env prod   # serve an existing build on Dev or Prod, no upload (promote / roll back); asks before Prod (--yes)
 npx @xano/sdk publish                      # frontend/<site>/ per site: build every app and publish each to its site (--site shop for one)
 npx @xano/sdk frontend list --json         # { layout: flat|nested|none, apps: [{ dir, site }] } — the same answer as frontendApps() in @xano/sdk/node
 npx @xano/sdk frontend split               # move a one-app frontend/ into frontend/<site>/; undone if the moved app does not build
@@ -100,7 +104,7 @@ npx @xano/sdk test run "<name>"                   # run one test by its name
 npx @xano/sdk test run-all --kind unit            # only one family (unit|workflow; default: both) — also on test list
 npx @xano/sdk test run-all --concurrency 4        # run 4 at once (default: 1); tests share the backend's database, so only when yours don't share state
 npx @xano/sdk impersonate                         # open what this project last deployed to in the builder (--guest = read-only; --url-only prints the URL; the URL is a session — treat it as a credential)
-npx @xano/sdk impersonate ephemeral:<tenant>      # …or name one: local[:<name>] or tenant:<name> (open your workspace from the Xano dashboard)
+npx @xano/sdk impersonate ephemeral:<tenant>      # …or name one: tenant:<name> (open your workspace from the Xano dashboard; a Xano Engine has no builder)
 npx @xano/sdk deploy ./xano/index.ts --ephemeral --test   # THE RELEASE FLOW, step 1: stand it up on an ephemeral and run its tests (a bare deploy goes to the Xano Engine, which release create cannot cut from)
 npx @xano/sdk release create v1                   # …2: cut a release from the ephemeral this project last deployed to (after a local deploy: --from ephemeral)
 npx @xano/sdk release create v1 --from ephemeral:e4f2-9ab1 --description "what shipped"   # …from a named source
@@ -139,7 +143,8 @@ npx @xano/sdk workspace reset-tables ./xano/index.ts --table <guid> --write   # 
 npx @xano/sdk workspace branch list               # its branches, and which one is live
 npx @xano/sdk workspace branch set-live staging   # promote a branch (also the way back after --backup-branch)
 npx @xano/sdk workspace branch delete staging --yes   # remove a non-live branch (a label padded with spaces is found by the trimmed one; one not there exits 0, alreadyGone; the live branch exits 2, SDK_BRANCH_LIVE)
-npx @xano/sdk init my-app --from workspace        # …or as a runnable project (the pull direction)
+npx @xano/sdk init my-app --from workspace        # …or as a runnable project (the pull direction), with each site's live code in frontend/ (--no-sites skips; off a terminal the sites need --yes)
+npx @xano/sdk pull --with-sites                   # refresh the backend and pull the sites too; a bare pull only names a site whose live build frontend/ does not hold
 npx @xano/sdk init my-app --from ephemeral:<tenant>   # same, from an ephemeral (the env is named inside the flag)
 npx @xano/sdk init my-app --from ./ws.json        # …or from a bundle already on disk (offline, no auth)
 

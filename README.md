@@ -38,7 +38,6 @@ npm run dev                              # 3. start the frontend, already wired 
 ✓ Xano Engine xanosdk-4f2a91 deployed
 ! New Xano Engine URL:
     http://127.0.0.1:53358                                  ← your backend, on your machine
-  Open the builder: http://127.0.0.1:53358/signin?key=…     ← the Xano editor, local too
   Pointed .env.local at this deploy (VITE_XANO_HOST)        ← the frontend, wired in
 ```
 
@@ -175,8 +174,8 @@ brings one up and deploys into it; it is where a deploy goes by default.
   too, and a SvelteKit app built with `@xano/sdk/sveltekit` renders on the server there.
 - **Pinned, like a dependency.** The first run pins the engine version in `package.json`;
   commit it and every checkout runs the same engine. Newer ones are offered, never forced.
-- **Every command reaches it.** After a local deploy, `test run-all`, `tables`, `env set`,
-  `impersonate` and `status` target the engine without a flag, and with no account.
+- **Every command reaches it.** After a local deploy, `test run-all`, `tables`, `env set`
+  and `status` target the engine without a flag, and with no account.
 - **An MCP server for your agent.** `init` connects Claude Code and Cursor to it: they read tables and
   rows, seed data, and run functions and tests. Code still changes in `xano/` and ships with a deploy.
 - **Xano AI, from your sign-in.** Signed in with `xanosdk login`, each deploy gives the engine's agents a
@@ -292,7 +291,7 @@ npx @xano/sdk routes ./xano/index.ts --emit xano/routes.gen.ts   # scaffolds run
 ```
 
 ```ts
-import { ROUTES, routePath, type RouteInputs } from "../xano/routes.gen.js"; // plain data, imports nothing
+import { ROUTES, routePath, routeUrl, type RouteInputs } from "../xano/routes.gen.js"; // plain data, imports nothing
 import type { post } from "../xano/index.js";            // the model above
 import type { InferRow } from "@xano/sdk";
 
@@ -302,7 +301,7 @@ type NewPost = RouteInputs["POST posts"];              // { title: string; body?
 type Post = InferRow<typeof post>;                     // { id: number; created_at: number; title: string; … }
 
 async function createPost(body: NewPost): Promise<Post> {
-  const res = await fetch(BASE + routePath("POST posts"), {
+  const res = await fetch(routeUrl(routePath("POST posts"), BASE), {
     method: ROUTES["POST posts"].verb, headers: { "content-type": "application/json" }, body: JSON.stringify(body),
   });
   return res.json();                                   // typed end to end
@@ -312,7 +311,8 @@ async function createPost(body: NewPost): Promise<Post> {
 - **`routePath("POST posts")`** → the endpoint path, resolved from your code (or the frozen
   `xano.lock`). Keys are `"<VERB> <name>"` and are checked at compile time; a path with
   `{param}`s takes them as a second argument, names checked too. A backend rename is a
-  compile error rather than a 404.
+  compile error rather than a 404. Fetch `routeUrl(path, base?)` (`window.XANO_HOST` by default),
+  never a bare path: the published site answers `/api:` itself.
 - **`RouteInputs["POST posts"]`** → the request-payload type, under the same keys
   (`ChannelInputs`/`MessageInputs` for realtime); `InferInput<typeof q>` is the def-side twin.
 - **`InferRow<typeof post>`** / **`InferResponse<typeof someQuery>`** → the table's row type
@@ -340,10 +340,10 @@ cd my-app
 npm run xano:deploy                          # → your workspace, running on your machine
 ```
 
-Object identities are preserved, so cross-references stay intact, and a statement this SDK
-does not model round-trips verbatim rather than breaking the pull. Then it re-exports
-the tree it wrote and diffs it against the workspace it came from (`--skip-roundtrip`
-skips this).
+Its sites' live code lands in `frontend/` (`--no-sites` skips it). Object identities are
+preserved, and a statement this SDK does not model round-trips verbatim rather than
+breaking the pull. Then it re-exports the tree it wrote and diffs it against the workspace
+it came from (`--skip-roundtrip` skips this).
 
 > ⚠️ **After a pull, `xano/` is your source**: edit it and commit it. A pull carries schema
 > only (no table rows or stored files), and deploying it is a *full replace* of the target,

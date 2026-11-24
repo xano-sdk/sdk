@@ -248,6 +248,10 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `seed.guarded-columns` | Could not read which columns are sensitive in … — the source's export does not carry …, so only `internal` and password columns were checked: … |
 | `seed.none-declared` | `--seed` was passed, but no table in this project declares seed rows — no rows will be written. |
 | `seed.password-hashes` | Seed rows land password columns as given — they must already be hashes. |
+| `site.blocked` | A site pull had nowhere to put a site: `frontend/` is one app for another site (`npx @xano/sdk frontend split` makes room), or holds one app already. |
+| `site.built-fallback` | A site's build kept no usable source, so a site pull wrote the files it serves as the app's built files (`site.mjs` + `site/`). |
+| `site.kept` | A site pull kept an app folder that was already there; `--force` replaces it. |
+| `site.no-source` | A site pull wrote nothing for a site: it serves no build, or its build kept no source and its served files could not be read. A Git-synced site's code is in its repository. |
 | `static-env.not-injected` | The deploy's frontend config was not injected into some static routes (no HTML document or `<head>`); they run with it unset. |
 | `static-env.secret-like` | A `--static-env` value looks like a secret, and every one is published in the static site's config. |
 | `static-env.unscannable-seed` | … non-public seed column… the static scan cannot search for — too short to match on, or not text at all — so they were NOT checked. |
@@ -256,6 +260,7 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `static.republish` | The import failed — republishing the frontend so the static host keeps serving. |
 | `static.routing-inferred-multipage` | Routing was inferred as multipage only because the build ships … beside index.html — the shape of a single-page app with its own … page. |
 | `static.site-line-ignored` | package.json's `staticHost` line is not a site name (lowercase letters and digits), so it was ignored and the frontend publishes to `default`. |
+| `static.source-skipped` | The app's folder was not archived as its source (not in a git repository, git could not list it, over the upload cap, too many files, or unreadable), so the build was published without it. |
 | `static.teardown` | This replace takes the frontend… at … down — a replace clears …'s static hosting, and this one publishes none. |
 | `static.teardown-unknown` | Could not read …'s static hosting, so this cannot say whether a frontend serves there — this replace takes down any that does. |
 | `static.unconfirmed-live` | Could not confirm the frontend is live within the wait window — the build uploaded and should come online shortly. |

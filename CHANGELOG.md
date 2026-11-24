@@ -8,6 +8,16 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.29 — Honest build provenance
+
+_2026-11-22_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.29)
+
+A small fix to the build provenance added in 1.0.28.
+
+- "(uncommitted changes)" counts only tracked files
+
+---
+
 ## 1.0.28 — A project names its site
 
 _2026-11-22_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.28)

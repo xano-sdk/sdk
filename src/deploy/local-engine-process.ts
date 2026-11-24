@@ -36,7 +36,6 @@
 import { spawn as nodeSpawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
-import { fetchOrExplain, httpFailureError } from "../util/http.js";
 import {
   listOverrideEntries,
   listReleaseEntries,
@@ -52,7 +51,6 @@ import {
   parseEngineListing,
   type LocalEngine,
 } from "./local-engine-handshake.js";
-import type { EngineFetch } from "./local-engine-release.js";
 import {
   clearEngineRecordsNamed,
   listEngineRecords,
@@ -747,97 +745,6 @@ export function engineVersion(opts: EngineCommandOptions): string {
     );
   }
   return result.stdout.trim();
-}
-
-/**
- * How long the engine has to mint a login link.
- *
- * Short, because the engine is on this machine and the route does nothing but
- * sign a token — anything slower than this is an engine that is not answering,
- * and the caller is a person waiting on a browser.
- */
-export const LOGIN_LINK_TIMEOUT_MS = 10_000;
-
-/** The one-time login a client holding the bearer can mint. */
-export interface EngineLoginLink {
-  /**
-   * The short-lived, single-use session token. NOT the engine's bearer — it is
-   * the same class of thing the hosted impersonate returns, so it may be shown.
-   */
-  _ti: string;
-  /** The builder url the ENGINE built for that token. Used as given, never rebuilt. */
-  url: string;
-}
-
-/** What {@link mintEngineLoginLink} takes beyond the engine itself. */
-export interface LoginLinkOptions {
-  /** Ask for a read-only session. The engine mints a different token for one. */
-  guest?: boolean;
-  /**
-   * The request seam, a parameter for the same reason the spawn seams are: on
-   * the refusal paths the assertion that matters is that it was NEVER called.
-   */
-  fetch?: EngineFetch;
-}
-
-const defaultLoginFetch: EngineFetch = (url, init) =>
-  fetchOrExplain(url, init, "open a Xano Engine", LOGIN_LINK_TIMEOUT_MS);
-
-/**
- * Mint a one-time login for an engine the enumeration just handed over.
- *
- * The bearer comes from the caller's `engine` — i.e. from the enumeration —
- * because nothing on disk holds one. So this is a point where a live token is
- * about to leave the process, and both urls it touches are gated: the endpoint
- * BEFORE the request (loopback only — an engine bound to all interfaces really
- * does report a non-loopback host, and the endpoint is a separate field from
- * the base url), and the url that comes back before anything opens it, since
- * that url carries a session.
- *
- * The engine's answer is used as given rather than reassembled from a base url
- * and a token: the engine is the thing that knows where its own builder lives,
- * and rebuilding would be this side guessing at a route it does not own.
- */
-export async function mintEngineLoginLink(
-  engine: LocalEngine,
-  opts: LoginLinkOptions = {},
-): Promise<EngineLoginLink> {
-  assertLoopbackUrl(engine.loginLinkEndpoint, "The engine's sign-in route");
-  const doFetch = opts.fetch ?? defaultLoginFetch;
-  const res = await doFetch(engine.loginLinkEndpoint, {
-    method: "POST",
-    headers: {
-      // The enumeration's bearer, on a loopback url, and nowhere else.
-      authorization: `Bearer ${engine.token}`,
-      "content-type": "application/json",
-    },
-    // A body either way: the route reads one, and `{}` is the plain session.
-    body: JSON.stringify(opts.guest === true ? { guest_read_only: true } : {}),
-  });
-  if (!res.ok) {
-    const body = redactSecrets(await res.text().catch(() => ""));
-    // 401 is the one status with a fix of its own: the engine is answering but
-    // no longer accepts this bearer, which is what a restarted engine looks
-    // like from here. The rest are reported with what the engine said.
-    if (res.status === 401) {
-      throw new Error(
-        `The engine no longer accepts the credential it reported for "${engine.name}".\n` +
-          `It was most likely restarted since it was listed — run \`xanosdk local list\` to ` +
-          `see what is running, then try again.`,
-      );
-    }
-    throw httpFailureError(`open a Xano Engine`, res, body);
-  }
-  const data = (await res.json().catch(() => ({}))) as { _ti?: unknown; url?: unknown };
-  if (typeof data._ti !== "string" || data._ti === "" || typeof data.url !== "string" || data.url === "") {
-    throw new Error(
-      `The engine did not return a one-time sign-in (\`_ti\`) and a url for "${engine.name}".\n` +
-        `That is not an engine this SDK knows how to drive — move to a current one with ` +
-        `\`xanosdk local update\`.`,
-    );
-  }
-  assertLoopbackUrl(data.url, "The sign-in the engine returned");
-  return { _ti: data._ti, url: data.url };
 }
 
 /** What a record resolved against the enumeration turned out to be. */
