@@ -80,6 +80,13 @@ export interface ArmInput {
   priorFilled: FilledMarker | undefined;
   /** Where the environment serves now. */
   url: string;
+  /**
+   * The environment runs on the project's own data (a Xano Engine on
+   * `xano/data`). Those rows are the project's, never a deploy's to replace, so
+   * it always merges — whatever `--keep-data` and the marker say. The caller
+   * refuses `--reset` before it gets here.
+   */
+  projectData?: boolean;
 }
 
 /**
@@ -90,9 +97,11 @@ export interface ArmInput {
  * that marker stamped with the URL serving now. Anything short of that
  * replaces, with the reason, so a new environment is seeded rather than left
  * empty. Without `--keep-data` there is no reason to give: replace is simply
- * what a deploy does.
+ * what a deploy does. An engine on the project's own data is the exception
+ * that always merges ({@link ArmInput.projectData}).
  */
 export function selectDeployArm(input: ArmInput): DeployArm {
+  if (input.projectData === true) return { arm: "merge" };
   if (!input.keepData) return { arm: "replace" };
   if (input.reset) return { arm: "replace", skipped: "reset" };
   if (input.created) return { arm: "replace", skipped: input.hadRecord ? "recreated" : "new" };

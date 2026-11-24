@@ -42,7 +42,8 @@
  *
  * Node-only, reached by a lazy import from the command layer.
  */
-import { rmSync } from "node:fs";
+import { realpathSync, rmSync } from "node:fs";
+import { sep } from "node:path";
 import { acquireEngine, type AcquiredEngine, type EngineFetch } from "./local-engine-release.js";
 import { readEngineEntry, RELEASE_VERSION, type EngineCacheEntry } from "./local-engine-cache.js";
 import { clampEngineAiTtl, engineAiTokenPath, ENGINE_AI_MAX_TTL_S, type EngineSourceSpec } from "./local-engine-config.js";
@@ -73,6 +74,7 @@ import {
 } from "./local-engine-state.js";
 import type { FilledMarker } from "./keep-data.js";
 import { recordDeployed } from "./deployed-state.js";
+import { PROJECT_DATA_DIR, projectDataDir, projectHasData } from "./local-data.js";
 import { ImportHttpError } from "./import.js";
 import { compareSemver, parseSemver } from "../emit/semver.js";
 
@@ -154,6 +156,15 @@ export interface ReplacedEngine {
    * snapshot, or none for a caller who opts out or may report).
    */
   telemetry?: readonly string[] | "unknown";
+  /**
+   * Set only when the binary and the telemetry were the same and the engine was
+   * restarted because the project's data changed under it: `"project"` when it
+   * now runs on the project's own `xano/data` (it ran a throwaway database
+   * before), `"throwaway"` when the project no longer has one.
+   */
+  data?: "project" | "throwaway";
+  /** Whether the engine started in its place runs on the project's own `xano/data`. */
+  onProjectData?: boolean;
 }
 
 /**
@@ -162,7 +173,16 @@ export interface ReplacedEngine {
  * {@link ReplacedEngine.telemetry} says otherwise.
  */
 export function replacedEngineLine(replaced: ReplacedEngine): string {
-  const empty = "It starts empty, so this deploy seeds it.";
+  const empty =
+    replaced.onProjectData === true
+      ? `It runs on this project's own data in ${PROJECT_DATA_DIR}, which a restart keeps.`
+      : "It starts empty, so this deploy seeds it.";
+  if (replaced.data === "project") {
+    return `Restarted Xano Engine ${replaced.name} on this project's own data in ${PROJECT_DATA_DIR} (it ran a throwaway database before).`;
+  }
+  if (replaced.data === "throwaway") {
+    return `Restarted Xano Engine ${replaced.name} on a throwaway database: this project no longer has ${PROJECT_DATA_DIR}. ${empty}`;
+  }
   if (replaced.telemetry === "unknown") {
     return (
       `Restarted Xano Engine ${replaced.name}: its record does not say which telemetry settings it was started ` +
@@ -220,6 +240,12 @@ export interface ProjectEngine {
   priorFilled: FilledMarker | undefined;
   /** Whether Xano AI is on for this engine, when {@link EnsureEngineOptions.ai} asked. */
   ai?: AiOutcome;
+  /**
+   * The project's own data directory (`xano/data`, absolute) when the engine
+   * runs on it — a persistent engine, whose rows a deploy must never replace.
+   * Absent for a throwaway engine.
+   */
+  dataDir?: string;
 }
 
 /**
@@ -274,7 +300,10 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
   // that cannot say is still an engine.
   const shownVersion = version ?? overrideVersion(entry, env, opts.run);
 
-  const { record, name, live, replaced } = reconcileLive(opts.dir, entry, shownVersion, env, opts.run);
+  // The project's own data, when it has some: the engine then runs ON it,
+  // persistent, rather than on a throwaway database (see `local-data.ts`).
+  const dataDir = projectHasData(opts.dir) ? projectDataDir(opts.dir) : undefined;
+  const { record, name, live, replaced } = reconcileLive(opts.dir, entry, shownVersion, env, opts.run, dataDir);
 
   // Before a fresh start: an engine killed outright left its helper processes
   // serving, holding their data and ports, and nothing lists them (E2E pass 26).
@@ -283,7 +312,7 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
 
   // Before any start: the gateway URL is fixed when the engine boots, and the
   // answer is what names it.
-  const ai = await engineAi(opts.ai, name, live === undefined ? undefined : { record }, aiTtlFor(live, shownVersion), env);
+  const ai = await engineAi(opts.ai, name, live === undefined ? undefined : { record }, aiTtlFor(live, shownVersion, dataDir), env);
 
   const engine =
     live ??
@@ -294,6 +323,7 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
       ...(shownVersion === undefined ? {} : { version: shownVersion }),
       ...(opts.spawn === undefined ? {} : { spawn: opts.spawn }),
       ai: wiringFor(name, ai, env),
+      ...(dataDir === undefined ? {} : { dataDir }),
     }));
 
   const reused = live !== undefined;
@@ -313,7 +343,7 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
   // the caller's; a reused one keeps its own, which may differ where neither
   // could report, and stays unknown when its record had none.
   const telemetryEnv = reused ? record?.telemetryEnv : engineTelemetryEnv(env);
-  writeRecord(opts.dir, engine, entry, shownVersion, reused && carry ? priorFilled : undefined, env, aiGatewayUrl, telemetryEnv);
+  writeRecord(opts.dir, engine, entry, shownVersion, reused && carry ? priorFilled : undefined, env, aiGatewayUrl, telemetryEnv, dataDir);
   // A DEPLOY to this engine, so the project's bare commands now follow it.
   // Here, beside the deploy's record write — never inside `writeRecord`, which
   // the `local update` restart also reaches: a restart is not a deploy,
@@ -335,6 +365,7 @@ async function ensureProjectEngineUnnoted(opts: EnsureEngineOptions): Promise<Pr
     hadRecord,
     priorFilled,
     ...(ai === undefined ? {} : { ai }),
+    ...(dataDir === undefined ? {} : { dataDir }),
   };
 }
 
@@ -379,11 +410,12 @@ const ENGINE_DEFAULT_TTL_S = 3600;
  * runs until stopped gets the day, and one of unknown version, which may stop
  * after its default hour, gets the hour.
  */
-function aiTtlFor(live: LocalEngine | undefined, version: string | undefined): number {
+function aiTtlFor(live: LocalEngine | undefined, version: string | undefined, dataDir?: string): number {
   if (live !== undefined) {
     return live.expiresAt === undefined ? ENGINE_AI_MAX_TTL_S : clampEngineAiTtl((live.expiresAt - Date.now()) / 1000);
   }
-  return engineRunsUntilStopped(version) ? ENGINE_AI_MAX_TTL_S : ENGINE_DEFAULT_TTL_S;
+  // A persistent engine has no lifetime at all, whatever its version.
+  return dataDir !== undefined || engineRunsUntilStopped(version) ? ENGINE_AI_MAX_TTL_S : ENGINE_DEFAULT_TTL_S;
 }
 
 /**
@@ -453,9 +485,10 @@ export async function restartMismatchedEngine(opts: RestartEngineOptions): Promi
   const env = opts.env ?? process.env;
   const { entry, version } = opts.acquired;
   const shownVersion = version ?? overrideVersion(entry, env, opts.run);
-  const { record, name, replaced } = reconcileLive(opts.dir, entry, shownVersion, env, opts.run);
+  const dataDir = projectHasData(opts.dir) ? projectDataDir(opts.dir) : undefined;
+  const { record, name, replaced } = reconcileLive(opts.dir, entry, shownVersion, env, opts.run, dataDir);
   if (replaced === undefined) return undefined;
-  const ai = await engineAi(opts.ai, name, undefined, aiTtlFor(undefined, shownVersion), env);
+  const ai = await engineAi(opts.ai, name, undefined, aiTtlFor(undefined, shownVersion, dataDir), env);
   const engine = await startEngine({
     entry,
     name,
@@ -463,8 +496,9 @@ export async function restartMismatchedEngine(opts: RestartEngineOptions): Promi
     ...(shownVersion === undefined ? {} : { version: shownVersion }),
     ...(opts.spawn === undefined ? {} : { spawn: opts.spawn }),
     ai: wiringFor(name, ai, env),
+    ...(dataDir === undefined ? {} : { dataDir }),
   });
-  writeRecord(opts.dir, engine, entry, shownVersion, undefined, env, ai?.gatewayUrl, engineTelemetryEnv(env));
+  writeRecord(opts.dir, engine, entry, shownVersion, undefined, env, ai?.gatewayUrl, engineTelemetryEnv(env), dataDir);
   return { ...replaced, url: engine.url, previousUrl: record?.url, ...(ai === undefined ? {} : { ai }) };
 }
 
@@ -482,15 +516,22 @@ function reconcileLive(
   shownVersion: string | undefined,
   env: NodeJS.ProcessEnv,
   run: EngineRun | undefined,
+  dataDir: string | undefined,
 ): { record: LocalEngineRecord | undefined; name: string; live: LocalEngine | undefined; replaced?: ReplacedEngine } {
   const record = getEngineRecord(dir, env);
   const name = record?.name ?? engineNameForProject(dir);
   const running = listEngines({ entry, env, ...(run === undefined ? {} : { run }) });
+  if (dataDir !== undefined) refuseDataInUse(name, dataDir, running);
   const found = reuseCandidate(name, record, running);
   if (found === undefined) return { record, name, live: undefined };
   const sameBinary = record?.engineDigest === entry.digest;
-  const telemetry = sameBinary ? telemetryChange(record?.telemetryEnv, engineTelemetryEnv(env)) : undefined;
-  if (sameBinary && telemetry === undefined) return { record, name, live: found };
+  const telemetry = sameBinary
+    ? telemetryChange(record?.telemetryEnv, engineTelemetryEnv(env), dataDir !== undefined || record?.dataDir !== undefined)
+    : undefined;
+  // The same binary with the same telemetry, but not on the data the project
+  // has now: a project that gained `xano/data` (or lost it) restarts onto it.
+  const data = sameBinary && telemetry === undefined && record?.dataDir !== dataDir ? (dataDir === undefined ? "throwaway" : "project") : undefined;
+  if (sameBinary && telemetry === undefined && data === undefined) return { record, name, live: found };
   stopMismatched(found.name, record, entry, env, run, telemetry === undefined ? undefined : "telemetry");
   return {
     record,
@@ -501,8 +542,41 @@ function reconcileLive(
       from: record?.engineVersion,
       to: shownVersion,
       ...(telemetry === undefined ? {} : { telemetry }),
+      ...(data === undefined ? {} : { data }),
+      ...(dataDir === undefined ? {} : { onProjectData: true }),
     },
   };
+}
+
+/**
+ * Refuse to start (or reuse) this project's engine on its data directory when
+ * ANOTHER engine — under any other name — already runs on it: two processes on
+ * one database is how its rows get corrupted. Read off the listing's own
+ * account of each engine's database, which names the directory.
+ */
+function refuseDataInUse(name: string, dataDir: string, running: readonly LocalEngine[]): void {
+  const spellings = pathSpellings(dataDir);
+  const holder = running.find(
+    (e) =>
+      e.name !== name &&
+      e.database !== undefined &&
+      spellings.some((dir) => e.database!.endsWith(dir) || e.database!.includes(`${dir}${sep}`)),
+  );
+  if (holder === undefined) return;
+  throw new Error(
+    `Xano Engine "${holder.name}" is already running on this project's data in ${PROJECT_DATA_DIR}, ` +
+      `and two engines on one database would damage it.\nStop it with \`xanosdk local stop ${holder.name}\`, then deploy again.`,
+  );
+}
+
+/** `dir` as given and as resolved through symlinks (macOS's `/var` is `/private/var`). */
+function pathSpellings(dir: string): string[] {
+  try {
+    const real = realpathSync(dir);
+    return real === dir ? [dir] : [dir, real];
+  } catch {
+    return [dir];
+  }
 }
 
 /**
@@ -528,12 +602,19 @@ function reconcileLive(
 function telemetryChange(
   recorded: Record<string, string> | null | undefined,
   current: Record<string, string>,
+  /**
+   * A persistent engine (on a project's `xano/data`) is compared exactly: it
+   * is not started `--ephemeral`, so the "neither could report" reading above
+   * does not describe it, and restarting it costs no rows.
+   */
+  persistent = false,
 ): readonly string[] | "unknown" | undefined {
   if (recorded === null) return "unknown";
   if (recorded === undefined) {
+    if (persistent) return Object.keys(current).length === 0 ? undefined : "unknown";
     return engineMayReport(current) || telemetryOptedOut(current) ? "unknown" : undefined;
   }
-  if (!engineMayReport(recorded) && !engineMayReport(current)) return undefined;
+  if (!persistent && !engineMayReport(recorded) && !engineMayReport(current)) return undefined;
   const names = [...new Set([...ENGINE_TELEMETRY_ENV, ...Object.keys(recorded), ...Object.keys(current)])];
   const changed = names.filter((key) => recorded[key] !== current[key]);
   return changed.length === 0 ? undefined : changed;
@@ -555,6 +636,7 @@ function writeRecord(
   env: NodeJS.ProcessEnv,
   aiGatewayUrl: string | undefined,
   telemetryEnv: Record<string, string> | null | undefined,
+  dataDir: string | undefined,
 ): void {
   setEngineRecord(
     dir,
@@ -570,6 +652,7 @@ function writeRecord(
       ...(filled === undefined ? {} : { filled }),
       ...(aiGatewayUrl === undefined ? {} : { aiGatewayUrl }),
       ...(telemetryEnv === undefined ? {} : { telemetryEnv }),
+      ...(dataDir === undefined ? {} : { dataDir }),
     },
     env,
   );
@@ -697,6 +780,11 @@ export interface UnsupportedImportContext {
    * deploy that works when the merge itself is what the engine cannot do.
    */
   resetRerun?: string | undefined;
+  /**
+   * Set on a merge into an engine on the project's own data (`xano/data`),
+   * which a deploy never replaces: there is no `--reset` to offer.
+   */
+  projectData?: boolean;
 }
 
 /**
@@ -722,6 +810,15 @@ export function explainUnsupportedEngineImport(
       `${which} does not support this import (HTTP 501): it is older than this SDK needs. Nothing was written. ` +
         `Deploy with ${newer} — \`xanosdk local update\` moves this project's pin to it, ` +
         `or pass \`--local=${newer}\` for one deploy.`,
+      { cause: err },
+    );
+  }
+  if (ctx.projectData === true) {
+    return new Error(
+      `${which} cannot apply this merge (HTTP 501): keeping the rows through this schema change is not available ` +
+        `on the Xano Engine yet. Nothing was written. This project runs on its own data in ${PROJECT_DATA_DIR}, which ` +
+        `a deploy never replaces: make the change in a way that keeps the rows (add the new shape beside the old one), ` +
+        `or move ${PROJECT_DATA_DIR} out of the project to deploy onto a throwaway engine instead.`,
       { cause: err },
     );
   }

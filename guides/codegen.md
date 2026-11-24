@@ -18,6 +18,12 @@ npx @xano/sdk init my-app --from ./ws.json          # a bundle already on disk �
 `workspace`, `ephemeral[:<name>]`, `local[:<name>]`, `tenant:<name>`, `release:<name>` —
 or a bundle path. Unlike most commands it has no default: a pull names its source.
 
+A Xano Engine **export bundle** (the `.tar.gz` a workspace downloads as at the end of a hosted
+trial) is a source too, and the one that carries the data: `init --from <bundle.tar.gz>` writes
+the code as above and puts the workspace's records, stored files and instance secrets in
+`xano/data/`, which `deploy --local` then runs the engine on
+([From a workspace exported from Xano](deploying.md#from-a-workspace-exported-from-xano)).
+
 Everything else about the project is unchanged: `--framework` (`react`, `svelte` or `none`), the
 theme flags, `--no-agents-md` and `--web` mean the same thing here as they do without `--from`.
 The flags that describe the pull itself — `--report`, `--skip-roundtrip`, `--branch`,

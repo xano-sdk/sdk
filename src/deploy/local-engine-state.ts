@@ -103,6 +103,13 @@ export interface LocalEngineRecord {
    * not an object of strings.
    */
   telemetryEnv?: Record<string, string> | null;
+  /**
+   * The data directory the engine was started on (a project's `xano/data`,
+   * absolute), for a PERSISTENT engine; absent for a throwaway one. A deploy
+   * reuses a live engine only when this matches the data the project has now,
+   * so a project that gains (or loses) `xano/data` restarts onto it.
+   */
+  dataDir?: string;
 }
 
 /** The on-disk file: one record per project path. */
@@ -165,6 +172,17 @@ function withValidTelemetryEnv(record: LocalEngineRecord): LocalEngineRecord {
 }
 
 /**
+ * A record with its data directory kept when it is non-empty text, and dropped
+ * otherwise: read as a throwaway engine, which a project with data then
+ * restarts onto its data rather than trusting.
+ */
+function withValidDataDir(record: LocalEngineRecord): LocalEngineRecord {
+  if (!("dataDir" in record) || (typeof record.dataDir === "string" && record.dataDir !== "")) return record;
+  const { dataDir: _dropped, ...rest } = record;
+  return rest;
+}
+
+/**
  * Read the file. A missing, unparseable or invalid one reads as empty, and a
  * row that is not a record is dropped rather than handed out — a bad state file
  * must never block a deploy, and is rewritten on the next write.
@@ -187,7 +205,7 @@ export function readLocalEngineState(env: NodeJS.ProcessEnv = process.env): Loca
           // is the reading that cannot merge into something unproven.
           // So is a malformed telemetry snapshot: "unknown" restarts the engine,
           // where a wrong value read as a match could keep a no from reaching it.
-          if (isRecord(value)) engines[key] = withValidTelemetryEnv(withValidFilled(value));
+          if (isRecord(value)) engines[key] = withValidDataDir(withValidTelemetryEnv(withValidFilled(value)));
         }
         return { version: 1, engines };
       }

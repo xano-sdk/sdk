@@ -877,6 +877,12 @@ export async function runInitCommand(args: ParsedArgs): Promise<void> {
         { helpFor: { command: "init" } },
       );
     }
+    // A Xano Engine export bundle (the workspace download a hosted trial ends
+    // with) is recognized by its manifest before the selector reads the value:
+    // it is a project around its own engine data, not a backend to decode.
+    const { engineBundleAt, runInitFromBundle } = await import("./init-from-bundle.js");
+    const engineBundle = await engineBundleAt(args.from);
+    if (engineBundle !== undefined) return runInitFromBundle(args, engineBundle);
     const source = resolveFromSource(args.from);
     // Only a bundle on disk: a hosted source resolves `--profile` to read it,
     // and refuses an unknown one there, and a Xano Engine refuses the flag.

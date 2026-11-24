@@ -509,6 +509,7 @@ workspace.json
 *.local
 .secrets.json
 .secrets.json.tmp-*
+xano/data/
 ${framework}
 # Ignored, on purpose: the bare \`.env\` above has no slash, so it matches at ANY
 # depth — including xano/.env, which holds the VALUES of this backend's env vars.
@@ -520,9 +521,13 @@ ${framework}
 # edits it. The \`.tmp-*\` lines cover the staging file an atomic write of
 # either leaves behind if the process dies between writing and renaming.
 #
-# Those two files are the sole exceptions inside an otherwise fully committed
-# xano/. Do not "tidy" this by ignoring xano/ wholesale — the source is the
-# review surface.
+# \`xano/data/\` is the backend's own Xano Engine data (an exported workspace's
+# records and its instance's secrets), which \`deploy --local\` runs the engine
+# on. It never leaves this machine.
+#
+# Those are the sole exceptions inside an otherwise fully committed xano/. Do
+# not "tidy" this by ignoring xano/ wholesale — the source is the review
+# surface.
 #
 # Not ignored, on purpose: xano/xano.lock pins object identity and public URLs
 # across renames and environments. Every build writes it. Commit it — ignoring
@@ -549,6 +554,7 @@ export function renderGitignoreBlock(version: string): string {
       "xano/.env.tmp-*",
       "xano/.secrets.json",
       "xano/.secrets.json.tmp-*",
+      "xano/data/",
     ],
     version,
   );

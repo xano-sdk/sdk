@@ -8,6 +8,16 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.31 — Fetch an engine ahead of time
+
+_2026-11-24_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.31)
+
+You can now download a Xano Engine ahead of time, so a later `deploy --local` runs with no network.
+
+- `local cache fetch` downloads an engine before you need it
+
+---
+
 ## 1.0.30 — Sites travel with the project
 
 _2026-11-24_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.30)

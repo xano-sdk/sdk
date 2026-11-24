@@ -13,6 +13,7 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, rmdirSync, rmSync, unlinkSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { decodeDigest } from "./decode-record.js";
+import { isEngineDataDir } from "../deploy/local-data.js";
 
 export { decodeDigest, decodeMarkerHead, decodeMarkerWith } from "./decode-record.js";
 
@@ -32,6 +33,9 @@ export function filesUnder(root: string): string[] {
   const walk = (dir: string): void => {
     for (const name of readdirSync(dir)) {
       const full = join(dir, name);
+      // The project's engine data (`xano/data`, see `local-data.ts`) is no
+      // decode's to list, replace or remove: it is skipped whole.
+      if (lstatSync(full).isDirectory() && isEngineDataDir(full)) continue;
       if (lstatSync(full).isDirectory()) walk(full);
       else out.push(relative(root, full).split(sep).join("/"));
     }

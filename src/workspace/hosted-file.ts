@@ -21,6 +21,7 @@ import {
 } from "../fields/hosted-file.js";
 import { isMissingFile } from "../util/local-file.js";
 import { repoBoundaryFrom } from "../util/project-root.js";
+import { insideEngineDataDir } from "../deploy/local-data.js";
 
 export type { HostedFileRules } from "../fields/hosted-file.js";
 
@@ -114,6 +115,14 @@ export function resolveHostedFile(ref: HostedFile, rules: HostedFileRules = {}):
   }
 
   assertInsideRepo(where, file, baseUrl);
+  // A Xano Engine data directory (a project's `xano/data`) holds an instance's
+  // secrets and records, and an archive is uploaded: nothing in one ships.
+  if (insideEngineDataDir(dirname(file))) {
+    throw new Error(
+      `${where}: "${file}" is inside a Xano Engine data directory, which holds an instance's secrets and records ` +
+        `and never ships. Copy the file out of it and point at the copy.`,
+    );
+  }
   if (bytes.length === 0) throw new Error(`${where}: "${file}" is empty.`);
   if (bytes.length > HOSTED_FILE_MAX_BYTES) {
     throw new Error(`${where}: "${file}" is ${bytes.length} bytes, over the ${HOSTED_FILE_MAX_BYTES}-byte limit for a hosted file.`);

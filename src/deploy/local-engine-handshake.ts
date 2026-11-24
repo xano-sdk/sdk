@@ -63,6 +63,13 @@ export interface LocalEngine {
    * long a Xano AI credential asked for it is worth.
    */
   expiresAt?: number;
+  /**
+   * Where the engine keeps its database, as its own listing says it (`sqlite,
+   * <dir>` for one on a data directory). Read leniently — absent or not text
+   * is undefined, never a refusal — because it is only ever compared, to tell
+   * whether ANOTHER engine already runs on a project's data directory.
+   */
+  database?: string;
 }
 
 /** The three spellings of "this machine, and nowhere else". */
@@ -206,6 +213,7 @@ function readEngine(value: unknown, source: string): LocalEngine {
     logPath: requireString(raw, "log", source),
     ...(mcpUrl === undefined ? {} : { mcpUrl }),
     ...(expiresAt === undefined ? {} : { expiresAt }),
+    ...(typeof raw.database === "string" && raw.database !== "" ? { database: raw.database } : {}),
   };
 }
 

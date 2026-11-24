@@ -352,7 +352,7 @@ it came from (`--skip-roundtrip` skips this).
 
 The other sources (`--from ephemeral:<name>`, `--from ./ws.json`), how env var names and
 values travel, the doc-site token, and how to read the decode report are in
-[Pulling an existing workspace](https://github.com/xano-sdk/sdk/blob/main/guides/codegen.md).
+[Pulling an existing workspace](https://github.com/xano-sdk/sdk/blob/main/guides/codegen.md). `--from <export>.tar.gz` (a workspace downloaded from Xano) also brings its rows: they land in the gitignored `xano/data/`, which `deploy --local` runs on and only merges into ([details](https://github.com/xano-sdk/sdk/blob/main/guides/deploying.md#running-on-your-own-data-xanodata)).
 
 ---
 

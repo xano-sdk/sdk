@@ -13,6 +13,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { addGitignoreRule, ensureGitignored, gitignoreRootFor, gitSaysIgnored, insideGitRepo } from "../auth/store.js";
 import { UsageError, type HelpTarget } from "./errors.js";
 import { workspaceEnvPathIn } from "./workspace-env.js";
+import { projectDataDir } from "../deploy/local-data.js";
 import { detail, warn } from "./ui.js";
 import { noteRunWarning } from "./output.js";
 import { displayPath, relForwardSlash } from "../util/rel-path.js";
@@ -149,6 +150,55 @@ export function ensureExportGitignored(path: string): void {
  */
 export function ensureWorkspaceEnvGitignored(dir: string): void {
   ensureSecretPathIgnored(workspaceEnvPathIn(dir), "warn");
+}
+
+/**
+ * Keep a project's engine data (`xano/data`, see `src/deploy/local-data.ts`)
+ * out of git, and say so — or say why not. It holds a hosted instance's
+ * secrets (`xano.yaml`) beside its records, so it is the one DIRECTORY rule the
+ * backend gets: `xano/` itself stays committed.
+ *
+ * Warn posture, like `xano/.env`'s: the data is already on disk when anyone
+ * asks, so a `.gitignore` failure must not fail the deploy or the `init` that
+ * found it. And an ignore rule does nothing to files git already tracks, so a
+ * tracked file under it is warned about with the command that untracks them.
+ */
+export function ensureLocalDataGitignored(dir: string): void {
+  const data = projectDataDir(dir);
+  const label = secretPathLabel(data);
+  try {
+    const rule = addGitignoreRule(data, { root: dir });
+    if (rule !== undefined) detail(`Added ${rule} to ${gitignoreLabel(data, dir)} — ${label} holds the engine's secrets and records.`);
+  } catch (err) {
+    warn(
+      `Could not update .gitignore (${err instanceof Error ? err.message : String(err)}). ` +
+        `Add ${label}/ to your ignore rules manually — it holds the engine's secrets and records.`,
+      "gitignore.update-failed",
+    );
+    return;
+  }
+  if (trackedUnder(data)) {
+    warn(
+      `git tracks files under ${label}, which holds the engine's secrets and records, so its ignore rule cannot keep ` +
+        `them out of the next commit. Untrack them (the files stay on disk): \`git rm -r --cached ${shellQuote(label)}\`.`,
+      "gitignore.data-tracked",
+    );
+  }
+}
+
+/** Whether git tracks any file under the directory `dir`. No git, no repository, or nothing tracked all answer false. */
+function trackedUnder(dir: string): boolean {
+  try {
+    const out = execFileSync("git", ["ls-files", "--", dir], {
+      cwd: dirname(dir),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: GIT_PROBE_TIMEOUT_MS,
+    });
+    return out.trim() !== "";
+  } catch {
+    return false;
+  }
 }
 
 /**

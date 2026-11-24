@@ -87,7 +87,9 @@ Printed as `! …` on stderr, and as `{ code, message }` in a `--json` document'
 | `generate.replace` | A regeneration would replace or delete files edited since the last one; each is listed before anything is touched. |
 | `gitignore.added-export` | Added … to … — … holds secrets. |
 | `gitignore.credential-tracked` | … is tracked by git, so its ignore rule cannot keep the token just written out of the next commit. |
+| `gitignore.data-tracked` | git tracks files under …, which holds the engine's secrets and records, so its ignore rule cannot keep them out of the next commit. |
 | `gitignore.update-failed` | Could not update.gitignore (…). |
+| `init.bundle-remote-files` | … not in the bundle, so the data still reads them from the hosted storage, which is deleted with the hosted instance. |
 | `init.install-failed` | The new project's dependency install (with its package manager) did not complete; the files are written, and running that install in the project is the whole repair. |
 | `init.lock-derive-failed` | xano/index.ts does not load yet, so … and … were not written: … |
 | `init.module-config-dropped` | A module's configuration could not be serialized and was left out of package.json. |

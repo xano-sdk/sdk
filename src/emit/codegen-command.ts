@@ -1069,6 +1069,16 @@ export function missingDependency(err: unknown): "install" | "tsx" | undefined {
   return tsx ? "tsx" : undefined;
 }
 
+/** What a caller wrapping {@link runInitFromCommand} is told as it runs. */
+export interface InitFromHooks {
+  /**
+   * Called once the project's files are on disk, before verification: from
+   * here on the target is a project, even if a later step fails. `init --from
+   * <bundle>` moves the engine data into it only then.
+   */
+  onWritten?: () => void;
+}
+
 /**
  * `init --from <source>`: the same project shell a bare `init` writes, with
  * `xano/` decoded from `source` instead of the empty starter.
@@ -1077,7 +1087,7 @@ export function missingDependency(err: unknown): "install" | "tsx" | undefined {
  * exactly as it does without the flag — the source identifies itself inside
  * `--from`, so it never competes for an argument position.
  */
-export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource): Promise<void> {
+export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource, hooks: InitFromHooks = {}): Promise<void> {
   // A Xano Engine selects no credential, so a `--profile` beside one would
   // pick nothing — refused rather than dropped, before anything is read.
   if (source.kind === "local") {
@@ -1269,6 +1279,7 @@ export async function runInitFromCommand(args: ParsedArgs, source: CodegenSource
     // manifest is merged into with the project winning.
     ...(existing ? { overwrite: "full" as const, mergePackageJson: "project" as const, overrideScripts } : {}),
   });
+  hooks.onWritten?.();
   reportXanoReplace(replace);
   // The scaffold wrote package.json; every later pull, diff and release reads
   // the exclusion from there.

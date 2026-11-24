@@ -34,6 +34,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { isEngineDataDir } from "../deploy/local-data.js";
 import { condenseNpmError, runNpmQuiet, sameNpmFailure } from "./npm.js";
 import { detectInstallRoot } from "./package-manager.js";
 import { MCP_CONFIGS, MCP_SERVER_NAME, mcpServerCommand, projectSdkDir } from "./invocation.js";
@@ -275,6 +276,9 @@ function clearXanoDir(targetDir: string): void {
   for (const name of readdirSync(xanoDir)) {
     if (PRESERVED_ON_REFRESH.includes(name)) continue;
     const full = join(xanoDir, name);
+    // The project's engine data (`xano/data`, see `local-data.ts`): its records
+    // and its instance's secrets, which no scaffold wrote and none may delete.
+    if (isEngineDataDir(full)) continue;
     // A symlink is removed as the link it is. `rmSync` refuses one that points
     // at a directory, and recursing into it would delete the target's files —
     // outside the directory this is allowed to replace.

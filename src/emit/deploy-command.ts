@@ -304,6 +304,12 @@ export interface DeploySummary {
      * XANOSDK_ENGINE_RELEASES_URL).
      */
     override?: LocalEngineOverride;
+    /**
+     * Present only when the engine runs on the project's own data: the
+     * absolute path of its `xano/data`. Such a deploy always merges (`data:
+     * "kept"`), keeping the rows.
+     */
+    dataDir?: string;
   };
   created?: boolean;
   /**
@@ -1468,6 +1474,29 @@ async function assertLocalEngineUsable(args: ParsedArgs, dest: DeployDestination
 }
 
 /**
+ * A `--local` deploy of a project that has its own engine data (`xano/data`,
+ * see `src/deploy/local-data.ts`): the run as a `--keep-data` merge, since
+ * those rows are the project's and a deploy never replaces them. `--reset`,
+ * which asks for exactly that replace, is refused before any work rather than
+ * quietly dropped or honored. Any other project is returned as it came.
+ */
+async function asProjectDataDeploy(args: ParsedArgs): Promise<ParsedArgs> {
+  const { PROJECT_DATA_DIR, projectHasData } = await import("../deploy/local-data.js");
+  if (!projectHasData(process.cwd())) return args;
+  if (args.reset) {
+    throw new UsageError(
+      `\`--reset\` replaces the engine's rows with the seed rows, and this project runs on its own data in ` +
+        `${PROJECT_DATA_DIR}, which a deploy never replaces — so it is refused. Every deploy here merges, keeping ` +
+        `the rows, as \`--keep-data\` does.\nTo start over from the seed rows instead, stop the engine ` +
+        `(\`xanosdk local stop\`), move ${PROJECT_DATA_DIR} out of the project, and deploy again: that runs a ` +
+        `throwaway engine and seeds it.`,
+      { hintFor: { command: "deploy" } },
+    );
+  }
+  return args.keepData ? args : { ...args, keepData: true };
+}
+
+/**
  * Send this deploy to an engine on this machine.
  *
  * Reached only once every refusal above has passed, so what is left is the
@@ -1633,7 +1662,7 @@ async function deployToLocalEngine(
   // transaction, so a failed one leaves the rows it vouched for standing, and a
   // replace that completes re-stamps it below.
   const flags = { keepData: args.keepData, reset: args.reset };
-  const { engine, reused, previousUrl, hadRecord, priorFilled, engineVersion, replaced, sweptOrphans, ai } =
+  const { engine, reused, previousUrl, hadRecord, priorFilled, engineVersion, replaced, sweptOrphans, ai, dataDir } =
     await withSpinner("Preparing the Xano Engine…", () =>
       ensureProjectEngine({
         dir,
@@ -1660,12 +1689,22 @@ async function deployToLocalEngine(
   if (replaced !== undefined) info(replacedEngineLine(replaced));
   const { aiOutcomeDocument, aiOutcomeLine } = await import("../deploy/local-engine-ai.js");
   if (ai !== undefined) info(aiOutcomeLine(ai));
+  // On the project's own data: kept out of git, and the workspace the import
+  // writes to has to be one those rows hold — never one the import creates.
+  const onProjectData = dataDir !== undefined;
+  if (onProjectData) {
+    const { ensureLocalDataGitignored } = await import("./gitignore.js");
+    ensureLocalDataGitignored(dir);
+    const { refuseMissingDataWorkspace } = await import("./init-from-bundle.js");
+    await refuseMissingDataWorkspace(engine);
+  }
   const arm = selectDeployArm({
     ...flags,
     created: !reused,
     hadRecord,
     priorFilled,
     url: engine.url,
+    projectData: onProjectData,
   });
   await refuseEnvClearedByFallbackReplace(arm);
 
@@ -1678,6 +1717,12 @@ async function deployToLocalEngine(
   // this is not a hosted instance.
   discloseWriteTarget(target);
   announceArm(arm, "local");
+  if (onProjectData) {
+    info(
+      "This project runs on its own data in xano/data, so this deploy merges into it: its schema and code " +
+        "are applied, and every row it holds is kept (no seed rows are written over them).",
+    );
+  }
 
   const bearer = { access_token: engine.token, instance: engine.url };
   let merged: KeepDataMergeResult | undefined;
@@ -1752,7 +1797,8 @@ async function deployToLocalEngine(
     const { explainUnsupportedEngineImport } = await import("../deploy/local-engine-deploy.js");
     const unsupported = explainUnsupportedEngineImport(err, engineVersion, {
       latest: await latestEngineRelease(err),
-      resetRerun: arm.arm === "merge" ? `${rerunOf(args).command} --reset` : undefined,
+      resetRerun: arm.arm === "merge" && !onProjectData ? `${rerunOf(args).command} --reset` : undefined,
+      projectData: onProjectData,
     });
     if (sent) {
       // A 501 is the engine saying it cannot do this import at all: nothing in
@@ -1806,7 +1852,10 @@ async function deployToLocalEngine(
   } else {
     detail("This engine serves no MCP server for coding agents; choose a newer engine to get one.");
   }
-  detail(`Stop it with \`xanosdk local stop ${engine.name}\``);
+  detail(
+    `Stop it with \`xanosdk local stop ${engine.name}\`` +
+      (onProjectData ? " — its rows stay in xano/data, and the next deploy runs on them again." : ""),
+  );
   // After the import, as on an ephemeral: the static host lives in the very
   // workspace the import replaces. Never fails the backend deploy.
   let staticSummary: StaticPublishSummary | undefined;
@@ -1836,6 +1885,7 @@ async function deployToLocalEngine(
       ...(engineVersion === undefined ? {} : { engineVersion }),
       pin: pin.outcome(),
       ...(choice.override === undefined ? {} : { override: choice.override }),
+      ...(dataDir === undefined ? {} : { dataDir }),
     },
     created: !reused,
     ...(ai === undefined ? {} : { ai: aiOutcomeDocument(ai) }),
@@ -2376,6 +2426,10 @@ async function runDeploy(args: ParsedArgs): Promise<void> {
   // `--to` handoff, which would otherwise claim a run that named two.
   const destination = resolveDeployDestination(args);
   await assertLocalEngineUsable(args, destination);
+  // A project with its own engine data deploys INTO it, keeping the rows: as
+  // `--keep-data` from here on, so the compile and every check below read the
+  // run as the merge it is.
+  if (destination.kind === "local") args = await asProjectDataDeploy(args);
 
   // Before the `--to` handoff, for the same reason the local refusal is:
   // below it, this flag would be carried into a release that ignores it.

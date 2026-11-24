@@ -35,7 +35,7 @@
  */
 import { spawn as nodeSpawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
-import { dirname, join, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import {
   listOverrideEntries,
   listReleaseEntries,
@@ -349,6 +349,13 @@ export interface StartEngineOptions {
   version?: string;
   /** The Xano AI wiring to start it with — see {@link EngineAiWiring}. */
   ai?: EngineAiWiring;
+  /**
+   * The data directory to run on (a project's `xano/data`, see `local-data.ts`),
+   * absolute. Absent starts a throwaway engine (`--ephemeral`). Given, the engine
+   * is PERSISTENT: `--data-dir <dir>` and neither `--ephemeral` nor `--ttl` — a
+   * persistent engine has no lifetime to lift, and keeps its rows when it stops.
+   */
+  dataDir?: string;
 }
 
 /** The first engine release that stops an `--ephemeral` engine after an hour unless given `--ttl`. */
@@ -378,6 +385,26 @@ export function engineRunsUntilStopped(version: string | undefined): boolean {
 
 function releaseParts(version: string | undefined): number[] | undefined {
   return /^v?(\d+)\.(\d+)\.(\d+)/.exec(version?.trim() ?? "")?.slice(1).map(Number);
+}
+
+/**
+ * The command line {@link startEngine} runs the engine with.
+ *
+ * A throwaway engine: `--ephemeral` for a throwaway backend, `--detach` so the
+ * launcher prints the handshake and exits while the engine keeps serving,
+ * `--name` so this project's engine is findable by the one handle everything
+ * matches on, and `--ttl 0` because a project's engine is reused across deploys
+ * and holds its data and static site: the default one-hour lifetime would
+ * delete both.
+ *
+ * On a project's own data (`dataDir`): `--data-dir` with the absolute path,
+ * `--detach` and `--name` as before, and nothing else — no `--ephemeral`, whose
+ * temporary directory would leave the project's data unused, and no `--ttl`,
+ * since a persistent engine never expires. Exported for the tests.
+ */
+export function engineStartArgs(opts: Pick<StartEngineOptions, "name" | "version" | "dataDir">): string[] {
+  if (opts.dataDir !== undefined) return ["--data-dir", resolve(opts.dataDir), "--detach", "--name", opts.name];
+  return ["--ephemeral", "--detach", "--name", opts.name, ...(engineExpiresEphemerals(opts.version) ? ["--ttl", "0"] : [])];
 }
 
 /**
@@ -430,12 +457,7 @@ export async function startEngine(opts: StartEngineOptions): Promise<LocalEngine
 
   const child = spawn(
     executable,
-    // `--ephemeral` for a throwaway backend, `--detach` so the launcher prints
-    // the handshake and exits while the engine keeps serving, `--name` so this
-    // project's engine is findable by the one handle everything matches on.
-    // `--ttl 0` because a project's engine is reused across deploys and holds
-    // its data and static site: the default one-hour lifetime would delete both.
-    ["--ephemeral", "--detach", "--name", opts.name, ...(engineExpiresEphemerals(opts.version) ? ["--ttl", "0"] : [])],
+    engineStartArgs(opts),
     {
       detached: true,
       // stdin ignored: nothing here answers a prompt, and an inherited stdin is
@@ -716,6 +738,55 @@ function readListing(result: EngineRunResult): LocalEngine[] {
     );
   }
   return parseEngineListing(result.stdout);
+}
+
+/** What {@link importEngineBundle} reports of the import the engine ran. */
+export interface EngineBundleImport {
+  /**
+   * Stored files the bundle did not carry, which the imported data still reads
+   * from the hosted storage (the engine's count; 0 when it did not say).
+   */
+  remoteFiles: number;
+}
+
+/**
+ * Unpack an export bundle into an empty data directory with the engine's own
+ * `import` verb (`import <bundle> --data-dir <dir> --json`), so the layout it
+ * leaves is the engine's, never this SDK's guess at it.
+ *
+ * The engine checks the bundle (its manifest, every entry kept inside the
+ * directory) and moves nothing into place until the whole of it unpacked, so a
+ * refusal leaves `dataDir` as it was. Its own words are the refusal, redacted
+ * like every other line of engine output this side repeats.
+ */
+export function importEngineBundle(bundle: string, dataDir: string, opts: EngineCommandOptions): EngineBundleImport {
+  const result = runVerb(["import", resolve(bundle), "--data-dir", resolve(dataDir), "--json"], opts);
+  const events = result.stdout
+    .split("\n")
+    .flatMap((line) => {
+      try {
+        const value = JSON.parse(line) as unknown;
+        return value !== null && typeof value === "object" ? [value as Record<string, unknown>] : [];
+      } catch {
+        return [];
+      }
+    });
+  if (result.status === 0) {
+    const manifest = events.find((e) => e.event === "imported")?.manifest as { files?: { remote?: unknown } } | undefined;
+    const remote = manifest?.files?.remote;
+    return { remoteFiles: typeof remote === "number" && Number.isFinite(remote) ? remote : 0 };
+  }
+  const said = events.find((e) => e.event === "error")?.message;
+  const why = redactSecrets(typeof said === "string" && said !== "" ? said : result.stderr.trim());
+  // An engine from before the verb existed reads `import` as a server mode it
+  // does not know; the fix is a newer engine, not anything about the bundle.
+  if (/unknown mode/i.test(result.stderr)) {
+    throw new Error(
+      "This Xano Engine cannot import an export bundle: it is older than the import. Use a newer one " +
+        "(`xanosdk local cache fetch` gets the latest release), then run the same command again.",
+    );
+  }
+  throw new Error(`The Xano Engine could not import ${bundle}${why === "" ? "." : `: ${why}`}`);
 }
 
 /**

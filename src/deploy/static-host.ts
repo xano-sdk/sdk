@@ -26,6 +26,7 @@
  * authoring bundle never pulls it in.
  */
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { isEngineDataDir } from "./local-data.js";
 import { join, relative, sep } from "node:path";
 import { tarGz as sharedTarGz } from "../util/tar.js";
 import {
@@ -80,6 +81,13 @@ function walkBuild(dir: string, opts: { server?: boolean }, onFile: (path: strin
   const walk = (cur: string, real: string): void => {
     if (visiting.has(real)) return; // a link back up the tree
     visiting.add(real);
+    // A Xano Engine data directory (a project's `xano/data`) holds an
+    // instance's secrets and records, so no upload ever carries one — not even
+    // a build directory pointed at the project by mistake.
+    if (isEngineDataDir(cur)) {
+      visiting.delete(real);
+      return;
+    }
     for (const ent of readdirSync(cur, { withFileTypes: true })) {
       const full = join(cur, ent.name);
       const path = relative(dir, full).split(sep).join("/");

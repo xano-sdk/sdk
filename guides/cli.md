@@ -192,7 +192,7 @@ Every command that reads, writes or opens a running backend names it with one gr
 | `local` / `local:<name>` | The engine this project deployed to, or a named one from `npx @xano/sdk local list`. Needs no Xano account |
 | `tenant:<name>` | A tenant on your instance |
 | `release:<name>` | A stored release — where a command reads one (`deploy`, `pull`, `generate`, `init --from`) |
-| a bundle path | Where a command takes a file (`deploy`, `generate`, `init --from`) |
+| a bundle path | Where a command takes a file (`deploy`, `generate`, `init --from`). `init --from` also takes a Xano Engine export bundle (`.tar.gz`): the project then runs on its data in `xano/data` ([details](deploying.md#from-a-workspace-exported-from-xano)) |
 
 The flag follows what the command does with it: **reads take `--from`** (`env pull`, `release
 create`, `init`), **writes take `--to`** (`env set`, `env unset`, `publish`, `deploy`), `test`

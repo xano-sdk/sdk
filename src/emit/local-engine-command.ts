@@ -681,7 +681,12 @@ async function runUpdate(args: ParsedArgs, opts: LocalEngineCommandOptions): Pro
         : replaced.telemetry === "unknown"
           ? " (its record did not say which telemetry settings it was started with)"
           : ` (it was started with other telemetry settings: ${replaced.telemetry.join(", ")})`;
-    info(`Restarted ${replaced.name} on ${target}${why}. It starts empty — run your deploy to seed it.`);
+    info(
+      `Restarted ${replaced.name} on ${target}${why}. ` +
+        (replaced.onProjectData === true
+          ? "It runs on this project's own data in xano/data, which the restart kept."
+          : "It starts empty — run your deploy to seed it."),
+    );
     if (replaced.ai !== undefined) info(aiOutcomeLine(replaced.ai));
     if (replaced.url !== replaced.previousUrl) {
       info("New Xano Engine URL:");

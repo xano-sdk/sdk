@@ -273,7 +273,8 @@ export const FLAGS = {
   bundle: { spec: "--bundle <path>", summary: "Use an already-exported bundle instead of an entry file" },
   reset: {
     spec: "--reset",
-    summary: "Replace the environment and re-seed it, overriding --keep-data (a deploy without --keep-data already does)",
+    summary:
+      "Replace the environment and re-seed it, overriding --keep-data (a deploy without --keep-data already does). Refused for a project that runs on its own data in xano/data, which a deploy never replaces",
   },
   "ai-billing": {
     spec: "--ai-billing <user|instance>",
@@ -284,7 +285,7 @@ export const FLAGS = {
   "keep-data": {
     spec: "--keep-data",
     summary:
-      "Keep the environment's table rows: merge into what an earlier deploy filled instead of replacing it. Seed rows are not re-written, objects removed from the project are deleted, and a new or never-filled environment is replaced and seeded as usual. --reset overrides it; --to already merges",
+      "Keep the environment's table rows: merge into what an earlier deploy filled instead of replacing it. Seed rows are not re-written, objects removed from the project are deleted, and a new or never-filled environment is replaced and seeded as usual. --reset overrides it; --to already merges. A project with its own data in xano/data always merges, as if this were passed",
   },
   // `test`'s selector. It was `--env`, which read as "an environment variable"
   // beside `--env-var`/`--backend-env-file` and named only two of the backend kinds.
@@ -1065,7 +1066,8 @@ export const COMMANDS = {
       "marketplace",
       {
         key: "from",
-        summary: "Fill xano/ by decoding an existing backend instead of writing the empty starter",
+        summary:
+          "Fill xano/ by decoding an existing backend instead of writing the empty starter. A Xano Engine export bundle (a .tar.gz downloaded from Xano) also brings its data: it lands in xano/data, which deploy --local runs the engine on",
         selector: { accepted: [...BACKEND, "release", "file"], role: "from", default: "none" },
       },
       "web",

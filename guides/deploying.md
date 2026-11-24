@@ -920,6 +920,42 @@ Nothing runs from that copy now; `cache list` shows it when it is there, and
 `npx @xano/sdk local cache clear --legacy-runtime` removes it after asking (`--yes` without a
 terminal).
 
+#### Running on your own data: `xano/data`
+
+A project can carry its own engine data in `xano/data/` — the records, stored files and
+instance secrets of a workspace exported from Xano, which
+`npx @xano/sdk init --from <bundle.tar.gz>` puts there
+([Pulling a backend into a project](#pulling-a-backend-into-a-project)). When
+`xano/data/sqlite/xano.sqlite` exists, `npx @xano/sdk deploy` (bare or `--local`) runs the engine
+**on that directory** instead of on a throwaway database:
+
+- **A persistent engine.** It is started with `--data-dir <absolute path of xano/data>`, and with
+  neither `--ephemeral` nor `--ttl`: it never expires, and stopping it (`npx @xano/sdk local stop`)
+  keeps every row. The next deploy starts it on the same data again. Reuse, `local list`,
+  `local token`, `local mcp` and `local update` work as for any project engine; a running engine
+  that is not on the project's data (one started before `xano/data` existed, or after it was
+  removed) is restarted onto what the project has now, and the deploy says so.
+- **Every deploy merges, as `--keep-data` does**, whether you pass the flag or not: the schema and
+  code are applied, every existing row is kept, and no seed rows are written over them. The
+  merge's refusals and questions are `--keep-data`'s ([Keeping your data between
+  deploys](#keeping-your-data-between-deploys)).
+- **`--reset` is refused.** It asks to replace the rows with the seed rows, which a deploy never
+  does to a project's own data. To start over from seeds, stop the engine, move `xano/data` out of
+  the project, and deploy again — that runs a throwaway engine and seeds it.
+- **The workspace must be one the data holds.** The deploy checks the engine's workspace list
+  first, and writes nothing to a workspace the data does not hold rather than create one beside it.
+  Engines released so far always sign in to workspace 1 of a data directory, and an exported
+  workspace keeps its hosted id; until an engine release opens the data's own workspace, data whose
+  workspace is not 1 is refused with that explanation.
+- **It never leaves this machine.** `xano/data/xano.yaml` holds the exported instance's secrets (so
+  its tokens and encrypted values keep working). The scaffold's `.gitignore` names `xano/data/`, a
+  deploy re-adds the rule when it is missing (and warns when git already tracks files there), and
+  nothing the SDK packs carries it: a `--static` or `publish` upload, an app's source archive, a
+  hosted file in an archive, `pull` and a re-run of `init --from` all skip a Xano Engine data
+  directory wherever it sits.
+- **One engine per data directory.** A deploy refuses to start or reuse the project's engine while
+  another engine runs on the same `xano/data`.
+
 #### Running a different engine without moving the pin
 
 To try an experimental build, or a published version the project hasn't moved to, override the
@@ -1424,6 +1460,27 @@ tree.
 object with the same key *and* the same identity, so a lock cannot pin a guid the new backend
 never had. If none of the lock's identities appear in the source, that is what pointing a
 project at an unrelated backend looks like, and the pull is refused unless you pass `--yes`.
+
+#### From a workspace exported from Xano
+
+At the end of a hosted trial each workspace downloads as a Xano Engine export bundle (a
+`.tar.gz`). `npx @xano/sdk init [dir] --from <bundle.tar.gz>` turns one into a project that runs
+on that workspace's data:
+
+```bash
+npx @xano/sdk init --from ~/Downloads/shop.tar.gz   # writes ./shop (named after the workspace)
+cd shop && npx @xano/sdk deploy --local             # the engine runs on xano/data, merging
+```
+
+It recognizes the bundle by its `manifest.json` (any other `.tar.gz` is refused, saying why),
+prints the export's notes, then has the engine's own import unpack it, starts an engine on the
+result, and writes the backend code by pulling it from that engine, as `init --from local` does.
+The engine is then stopped and the data moved into `<dir>/xano/data`, gitignored. With no `dir`
+the project is created in a new directory named after the exported workspace; `--name` still names
+the project. Nothing is written when the engine signs in to a workspace the export does not carry
+([Running on your own data](#running-on-your-own-data-xanodata)), and a project whose `xano/data`
+already holds anything is refused rather than written over. `--branch`, `--with-sites` and
+`--profile` do not apply to a bundle and are refused.
 
 ### Which side changed: the sync baseline
 

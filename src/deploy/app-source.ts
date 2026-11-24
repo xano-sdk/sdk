@@ -44,6 +44,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { MAX_ARCHIVE_FILES, MAX_UNPACKED_BYTES } from "../util/archive-read.js";
 import { ZipWriter } from "../util/zip.js";
 import { STATIC_UPLOAD_MAX_BYTES } from "./static-source.js";
+import { isEngineDataDir } from "./local-data.js";
 
 /** Folders never sent, wherever they sit: installs, VCS, and caches a build or framework writes. */
 const SKIPPED_DIRS: ReadonlySet<string> = new Set([
@@ -205,10 +206,22 @@ export function packAppSource(projectDir: string, appDir: string, opts: PackAppS
     const excluded = [...BUILD_OUTPUT_DIRS, ...(opts.exclude ?? []).map((d) => posix(relative(appAbs, isAbsolute(d) ? d : resolve(root, d))))].filter(
       (d) => d !== "" && d !== "." && !d.startsWith("../") && d !== ".." && !isAbsolute(d) && !(builtFiles && d === "site"),
     );
+    // A Xano Engine data directory (a project's `xano/data`, see `local-data.ts`)
+    // holds an instance's secrets and records: never sent, even when git lists
+    // it. Asked once per directory, since a data directory holds many files.
+    const dataDirs = new Map<string, boolean>();
+    const underDataDir = (segs: readonly string[]): boolean =>
+      segs.slice(0, -1).some((_, i) => {
+        const dir = segs.slice(0, i + 1).join("/");
+        let isData = dataDirs.get(dir);
+        if (isData === undefined) dataDirs.set(dir, (isData = isEngineDataDir(join(appAbs, ...segs.slice(0, i + 1)))));
+        return isData;
+      });
     const quietlyOut = (rel: string): boolean => {
       const segs = rel.split("/");
       if (segs.some((s) => s === ".." || s === "")) return true;
       if (segs.slice(0, -1).some((s) => SKIPPED_DIRS.has(s))) return true;
+      if (underDataDir(segs)) return true;
       if (segs.at(-1) === ".DS_Store") return true;
       return excluded.some((d) => rel === d || rel.startsWith(`${d}/`));
     };
