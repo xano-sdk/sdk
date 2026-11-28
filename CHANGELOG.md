@@ -8,6 +8,18 @@ one release and links to its full notes.
 
 ---
 
+## 1.0.32 — A downloaded workspace runs on its own data
+
+_2026-11-24_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.32)
+
+A workspace downloaded from Xano now opens as a project and runs on its own data.
+
+- `init --from <bundle>` turns a downloaded workspace into a project
+- `deploy --local` runs on `xano/data`
+- `xano/data` stays private
+
+---
+
 ## 1.0.31 — Fetch an engine ahead of time
 
 _2026-11-24_ · [release notes](https://github.com/xano-sdk/sdk/releases/tag/v1.0.31)

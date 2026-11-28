@@ -1,9 +1,12 @@
 /**
  * Turning "a version (or `latest`) and a platform" into "the one archive to
- * download, and the digest it must hash to" — by asking the release manager.
+ * download, and the digest it must hash to" — by reading the engine's release
+ * index on the CDN.
  *
- * The release manager is a public index: every published engine release, each
- * with one archive per platform it was built for and that archive's sha256.
+ * The index is a static file, `<base>/index.json` (`https://cdn.xano.com/releases/engine/index.json`):
+ * every published engine release, newest first, each with one archive per platform it was
+ * built for and that archive's sha256. Release CI writes it (DEV-10285); nothing on this path
+ * runs code, so no server outage can stop a resolution.
  * Asking it is what lets a bare `--local` work with nothing configured,
  * and what lets a project pin a version everyone on it resolves the same way.
  *
@@ -26,14 +29,14 @@ import type { EngineFetch } from "./local-engine-release.js";
 import { LOOPBACK_HOSTS } from "./local-engine-handshake.js";
 
 /**
- * Where the release manager's public API lives.
+ * The engine's folder on the release CDN: `index.json` and the versioned archives live under it.
  *
- * One hardcoded host in a published package, like the marketplace catalogue's:
+ * One hardcoded address in a published package, like the marketplace catalogue's:
  * if it ever moves, every installed copy loses version resolution at once and
  * only a release fixes it. {@link ENGINE_RELEASES_URL_ENV} is the reason that is
  * survivable — it repoints resolution without an upgrade.
  */
-export const DEFAULT_ENGINE_RELEASES_URL = "https://xo2z-4vn5-mdxv.dev.xano.io/api:engine-mirror";
+export const DEFAULT_ENGINE_RELEASES_URL = "https://cdn.xano.com/releases/engine";
 
 /**
  * The override for {@link DEFAULT_ENGINE_RELEASES_URL}. Presence with a value is
@@ -43,10 +46,10 @@ export const DEFAULT_ENGINE_RELEASES_URL = "https://xo2z-4vn5-mdxv.dev.xano.io/a
 export const ENGINE_RELEASES_URL_ENV = "XANOSDK_ENGINE_RELEASES_URL";
 
 /**
- * Whether {@link ENGINE_RELEASES_URL_ENV} names a release manager other than
+ * Whether {@link ENGINE_RELEASES_URL_ENV} names a release index other than
  * the default one.
  *
- * Another manager can publish different bytes under a version the default one
+ * Another index can publish different bytes under a version the default one
  * also has, and the engine cache and the update check are keyed by version. So
  * an engine from a custom manager is downloaded fresh on every run and staged
  * apart from `bin/<version>/`, and the deploy neither pins it nor offers
@@ -62,29 +65,20 @@ export function usesCustomReleaseManager(env: NodeJS.ProcessEnv = process.env): 
 /** Bound every lookup so a stalled index cannot hang a deploy. Same budget as the catalogue. */
 const RELEASES_TIMEOUT_MS = 30_000;
 
-/**
- * How many pages of `GET releases` `latest` reads before giving up.
- *
- * The list is newest first, so a platform missing from the newest few releases
- * is found within a page or two. The bound exists so a server that always
- * answers with a `nextPage` cannot turn one deploy into an unbounded crawl.
- */
-const MAX_LATEST_PAGES = 4;
-
-/** The only version shape the release manager matches — exactly, with the leading `v`. */
+/** The only version shape the release index uses — exactly, with the leading `v`. */
 const VERSION_PATTERN = /^v?\d+\.\d+\.\d+$/;
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 /** One release's archive for one platform — everything acquisition needs to fetch and verify it. */
 export interface EngineReleaseAsset {
-  /** Always with its leading `v` (`v0.1.4`), the spelling the release manager matches. */
+  /** Always with its leading `v` (`v0.1.4`), the spelling the release index uses. */
   version: string;
   /** The archive's own file name — the last segment of {@link downloadUrl}. */
   filename: string;
   /** Lowercase hex SHA-256 of the archive, as the release recorded it. */
   sha256: string;
-  /** Absolute `https` URL (loopback `http` only, for a local test server). Redirects to storage. */
+  /** Absolute `https` URL (loopback `http` only, for a local test server): the archive itself. */
   downloadUrl: string;
 }
 
@@ -98,7 +92,7 @@ export interface ResolveEngineReleaseOptions {
 }
 
 /**
- * `version` in the one spelling the release manager matches, or a refusal.
+ * `version` in the one spelling the release index uses, or a refusal.
  *
  * The missing `v` is added here, once, so every version this SDK stores or
  * prints carries it and `0.1.4` and `v0.1.4` can never be two cache entries or
@@ -150,7 +144,7 @@ function releasesBase(env: NodeJS.ProcessEnv): ReleasesBase {
   if (url === undefined || !isTrustedUrl(url)) {
     throw new Error(
       `${ENGINE_RELEASES_URL_ENV} must be an https URL, and is not — so no engine release was looked up.\n` +
-        `Set it to the release manager's https address, or unset it to use the default.`,
+        `Set it to the https address of an engine release folder (the one holding index.json), or unset it to use the default.`,
     );
   }
   const base = `${url.origin}${url.pathname}`.replace(/\/+$/, "");
@@ -159,7 +153,7 @@ function releasesBase(env: NodeJS.ProcessEnv): ReleasesBase {
 }
 
 /**
- * Where the release manager's address came from, so a remedy names the one in
+ * Where the release index's address came from, so a remedy names the one in
  * use — "(or XANOSDK_ENGINE_RELEASES_URL, if set)" left the reader to find out
  * whether it was (E2E pass 28).
  */
@@ -170,7 +164,7 @@ interface ReleasesBase {
   fromEnv: boolean;
 }
 
-/** The re-run line for a release manager that could not be reached. */
+/** The re-run line for a release index that could not be reached. */
 function unreachableRemedy(where: ReleasesBase): string {
   return where.fromEnv
     ? `Check the network, and ${ENGINE_RELEASES_URL_ENV} (set to ${where.display}), then re-run.`
@@ -180,7 +174,7 @@ function unreachableRemedy(where: ReleasesBase): string {
 /** The re-run line for an answer that is not a release listing. */
 function notListingRemedy(where: ReleasesBase): string {
   return where.fromEnv
-    ? `${ENGINE_RELEASES_URL_ENV} is set to ${where.display} — check it addresses the release manager's API, or unset it for the default, then re-run.`
+    ? `${ENGINE_RELEASES_URL_ENV} is set to ${where.display} — check it addresses an engine release folder (the one holding index.json), or unset it for the default, then re-run.`
     : "Re-run in a moment; if it keeps failing, the release index is down.";
 }
 
@@ -227,7 +221,7 @@ async function getJson(
         ? `it did not answer within ${Math.round(RELEASES_TIMEOUT_MS / 1000)}s`
         : describeTransportFailure(err instanceof TransportError && err.cause !== undefined ? err.cause : err);
     throw new Error(
-      `The engine release manager at ${display} could not be reached: ${reason.replace(/\.$/, "")}. Nothing was changed.\n` +
+      `The engine release index at ${display} could not be reached: ${reason.replace(/\.$/, "")}. Nothing was changed.\n` +
         unreachableRemedy(where),
       { cause: err },
     );
@@ -237,14 +231,14 @@ async function getJson(
     return { status: res.status, body: await res.json() };
   } catch {
     throw new Error(
-      `The engine release manager at ${display} answered with something that is not a release listing.\n` +
+      `The engine release index at ${display} answered with something that is not a release listing.\n` +
         notListingRemedy(where),
     );
   }
 }
 
 /**
- * A version the release manager does not publish. Exits 8, the CLI's
+ * A version the release index does not list. Exits 8, the CLI's
  * not-found code (a named thing that is not there), rather than the generic 1.
  * The literal, not the constant: this layer does not import the CLI's modules.
  */
@@ -255,7 +249,7 @@ export class EngineReleaseNotFoundError extends Error {
 
 function failed(status: number, display: string): Error {
   const err = new Error(
-    `The engine release manager at ${display} failed (HTTP ${status}).\n` +
+    `The engine release index at ${display} failed (HTTP ${status}).\n` +
       `Re-run in a moment; if it keeps failing, the release index is down.`,
   );
   // A server error is an unanswered release lookup: exit 8, as a connection
@@ -264,14 +258,51 @@ function failed(status: number, display: string): Error {
   return err;
 }
 
+/** The index's releases, newest first as the index lists them, or a refusal. */
+async function readIndex(where: ReleasesBase, fetch: EngineFetch): Promise<unknown[]> {
+  const { status, body } = await getJson(`${where.base}/index.json`, where, fetch);
+  if (body === undefined) {
+    // A missing index is a wrong address, not a missing version.
+    if (status === 404) {
+      throw new Error(
+        `The engine release index at ${where.display} has no index.json.\n` + notListingRemedy(where),
+      );
+    }
+    throw failed(status, where.display);
+  }
+  const { releases } = (body ?? {}) as { releases?: unknown };
+  if (!Array.isArray(releases)) {
+    throw new Error(
+      `The engine release index at ${where.display} answered with something that is not a release listing.\n` +
+        notListingRemedy(where),
+    );
+  }
+  return releases as unknown[];
+}
+
+/** Orders `vMAJOR.MINOR.PATCH` versions ascending; an unreadable one sorts below every other. */
+function compareVersions(a: string | undefined, b: string | undefined): number {
+  if (a === undefined || b === undefined) return a === b ? 0 : a === undefined ? -1 : 1;
+  const pa = a.slice(1).split(".").map(Number);
+  const pb = b.slice(1).split(".").map(Number);
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i]! - pb[i]!;
+  return 0;
+}
+
+/** The `version` of an index entry, normalized, or undefined when it has none worth reading. */
+function entryVersion(entry: unknown): string | undefined {
+  if (entry === null || typeof entry !== "object") return undefined;
+  const { version } = entry as { version?: unknown };
+  return typeof version === "string" && VERSION_PATTERN.test(version) ? normalizeEngineVersion(version) : undefined;
+}
+
 /**
  * The release to run on `platform` — an explicit version, or the newest
  * published release that has an archive for it — or a refusal naming why not.
  *
- * `latest` walks the release LIST rather than asking for `releases/latest`: a
- * release is published once the archives it has are stored, so the newest one
- * can lack a platform, and a first deploy on that platform should get the
- * newest release that serves it rather than a refusal.
+ * Both read the one index. `latest` walks it rather than reading `latest.json`:
+ * the newest release can lack a platform, and a first deploy on that platform
+ * should get the newest release that serves it rather than a refusal.
  *
  * Every refusal happens before anything downloads.
  */
@@ -281,25 +312,22 @@ export async function resolveEngineRelease(opts: ResolveEngineReleaseOptions): P
   const wanted =
     opts.version === undefined || opts.version === "latest" ? undefined : normalizeEngineVersion(opts.version);
   const where = releasesBase(env);
-  const { base, display } = where;
+  const { display } = where;
   const fetch: EngineFetch =
     opts.fetch ??
     ((url, init) => fetchOrExplain(url, init, "resolve the engine release", RELEASES_TIMEOUT_MS, display));
 
+  const releases = await readIndex(where, fetch);
+
   if (wanted !== undefined) {
-    const { status, body } = await getJson(
-      `${base}/releases/${encodeURIComponent(wanted)}?product=engine`,
-      where,
-      fetch,
-    );
-    if (status === 404) {
+    const entry = releases.find((r) => entryVersion(r) === wanted);
+    if (entry === undefined) {
       throw new EngineReleaseNotFoundError(
         `There is no published engine release ${wanted}.\n` +
           `Check the version, or run \`xanosdk local update\` to move to the latest one.`,
       );
     }
-    if (body === undefined) throw failed(status, display);
-    const asset = pickAsset(body, platform);
+    const asset = pickAsset(entry, platform);
     if (asset === undefined) {
       throw new Error(
         `Engine release ${wanted} has no archive for ${platform}, so nothing was downloaded.\n` +
@@ -309,22 +337,12 @@ export async function resolveEngineRelease(opts: ResolveEngineReleaseOptions): P
     return asset;
   }
 
-  for (let pageNo = 1; pageNo <= MAX_LATEST_PAGES; pageNo++) {
-    const { status, body } = await getJson(`${base}/releases?product=engine&page=${pageNo}`, where, fetch);
-    if (body === undefined) throw failed(status, display);
-    const { items, nextPage } = (body ?? {}) as { items?: unknown; nextPage?: unknown };
-    if (!Array.isArray(items)) {
-      throw new Error(
-        `The engine release manager at ${display} answered with something that is not a release listing.\n` +
-          notListingRemedy(where),
-      );
-    }
-    // Newest first, so the first release carrying this platform is the newest that does.
-    for (const item of items as unknown[]) {
-      const asset = pickAsset(item, platform);
-      if (asset !== undefined) return asset;
-    }
-    if (typeof nextPage !== "number") break;
+  // Newest first, so the first release carrying this platform is the newest that does. The
+  // index is written newest first; sorting again costs nothing and does not trust it to be.
+  const newestFirst = [...releases].sort((a, b) => compareVersions(entryVersion(b), entryVersion(a)));
+  for (const entry of newestFirst) {
+    const asset = pickAsset(entry, platform);
+    if (asset !== undefined) return asset;
   }
   throw new Error(
     `No published engine release has an archive for ${platform}, so nothing was downloaded.\n` +

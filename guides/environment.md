@@ -56,7 +56,7 @@ are what you get when the variable is unset.
 | `XANOSDK_ENGINE_OVERRIDE` | An engine to run instead of the project's pinned one, for every `deploy --local` in this shell: a version (`v0.1.8`), an `https://` URL to an engine archive (plain `http://` only from this machine), or an archive path. A value on `--local=` beats it; it never reads or moves the pin. |
 | `XANOSDK_ENGINE_TOKEN` | Bearer credential sent with an override URL's download — only to that URL's own origin, never to another host a redirect leads to. |
 | `XANOSDK_ENGINE_HOME` | Moves everything the Xano Engine writes off `~/.xanosdk/local-engine`: the engine cache, the running-engine records, and the engine's own logs and runtime data — see [where the engine keeps its data](deploying.md#where-the-engine-keeps-its-data). |
-| `XANOSDK_ENGINE_RELEASES_URL` | A different engine release service for version lookups. Its engines are fetched fresh each deploy, the pin is not read or written, and `npx @xano/sdk local update` refuses while it is set. |
+| `XANOSDK_ENGINE_RELEASES_URL` | A different engine release folder for version lookups, one holding an `index.json` like the default `https://cdn.xano.com/releases/engine`. Its engines are fetched fresh each deploy, the pin is not read or written, and `npx @xano/sdk local update` refuses while it is set. |
 
 The engine itself starts with a minimal environment, not your shell's: the platform basics
 (`PATH`, `TMPDIR`, `LANG`, `LC_ALL`, `USER`, `LOGNAME`, `SHELL`, `TERM`, and a `HOME` of its

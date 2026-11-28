@@ -965,7 +965,7 @@ pin for your own runs instead of editing `package.json`:
 - `XANOSDK_ENGINE_OVERRIDE=<value>` for every deploy in this shell, including
   `npm run xano:deploy`, which names no engine.
 
-Both take a **version** (`v0.1.8`, or `0.1.8`: that release from the release manager), an
+Both take a **version** (`v0.1.8`, or `0.1.8`: that release from the engine's release index on the CDN), an
 **`https` URL** to an engine archive, or the **path** to an engine archive on this machine. A
 value on the flag beats the variable, and the variable beats the pin. Plain `http://` is refused
 unless the host is this machine (`127.0.0.1`, `::1`, `localhost`) — the engine is a program the
@@ -986,7 +986,8 @@ unset XANOSDK_ENGINE_OVERRIDE        # next deploy is back on the pinned version
 ```
 
 `XANOSDK_ENGINE_TOKEN`, when set, is sent only to an override URL's host.
-`XANOSDK_ENGINE_RELEASES_URL` points version lookups at a different engine release service. Its
+`XANOSDK_ENGINE_RELEASES_URL` points version lookups at a different engine release folder, one
+holding an `index.json` like the default, `https://cdn.xano.com/releases/engine`. Its
 engines are downloaded fresh on every deploy and kept apart from the version cache, and the
 deploy runs its latest without reading or writing the pin or checking for updates;
 `npx @xano/sdk local update` refuses while it is set.
